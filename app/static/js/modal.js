@@ -1,17 +1,33 @@
-let onClose = null;
-
-function closeModal() {
-  const root = document.getElementById("modal-root");
-  root.innerHTML = "";
-  document.removeEventListener("keydown", keyHandler);
-  onClose?.();
-  onClose = null;
-}
+let activeModal = null;
+let isClosing = false;
 
 function keyHandler(event) {
+  if (!activeModal) return;
   if (event.key === "Escape") {
-    closeModal();
+    event.preventDefault();
+    activeModal.close("cancel");
   }
+  if (event.key === "Enter" && !event.shiftKey) {
+    const target = event.target;
+    if (target && (target.tagName === "TEXTAREA" || target.dataset.enterSubmit === "false")) return;
+    event.preventDefault();
+    activeModal.save();
+  }
+}
+
+async function closeModal(reason = "cancel") {
+  if (!activeModal || isClosing) return;
+  isClosing = true;
+  const { overlay, modal, onCancel, resolve } = activeModal;
+  if (reason === "cancel") onCancel?.();
+  overlay.classList.add("is-closing");
+  modal.classList.add("is-closing");
+  await new Promise((r) => window.setTimeout(r, 140));
+  overlay.remove();
+  document.removeEventListener("keydown", keyHandler);
+  activeModal = null;
+  isClosing = false;
+  resolve?.();
 }
 
 export function showModal({ title, content, onSave, onCancel, saveLabel = "Save", cancelLabel = "Cancel" }) {
@@ -19,7 +35,7 @@ export function showModal({ title, content, onSave, onCancel, saveLabel = "Save"
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
-    <section class="modal" role="dialog" aria-modal="true">
+    <section class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <h2>${title}</h2>
       <div class="modal-content"></div>
       <div class="modal-actions">
@@ -28,20 +44,47 @@ export function showModal({ title, content, onSave, onCancel, saveLabel = "Save"
       </div>
     </section>
   `;
+  const modal = overlay.querySelector(".modal");
   overlay.querySelector(".modal-content").append(content);
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) closeModal();
+
+  let overlayPointerDown = false;
+  overlay.addEventListener("pointerdown", (event) => {
+    overlayPointerDown = event.target === overlay;
   });
-  overlay.querySelector("[data-cancel]").addEventListener("click", () => {
-    onCancel?.();
-    closeModal();
+  overlay.addEventListener("pointerup", (event) => {
+    if (overlayPointerDown && event.target === overlay) {
+      closeModal("cancel");
+    }
+    overlayPointerDown = false;
   });
-  overlay.querySelector("[data-save]").addEventListener("click", async () => {
+
+  const save = async () => {
+    if (!activeModal || isClosing) return;
     const result = await onSave?.();
-    if (result !== false) closeModal();
+    if (result !== false) {
+      closeModal("save");
+    }
+  };
+
+  overlay.querySelector("[data-cancel]").addEventListener("click", () => {
+    closeModal("cancel");
   });
+  overlay.querySelector("[data-save]").addEventListener("click", () => {
+    save();
+  });
+
   root.innerHTML = "";
   root.append(overlay);
+  modal.focus();
   document.addEventListener("keydown", keyHandler);
-  onClose = onCancel;
+  activeModal = {
+    overlay,
+    modal,
+    onCancel,
+    save,
+    close: closeModal
+  };
+  return new Promise((resolve) => {
+    activeModal.resolve = resolve;
+  });
 }

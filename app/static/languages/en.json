@@ -24,6 +24,7 @@
     "theme": "Theme",
     "language": "Language",
     "collapsed": "Collapsed",
-    "fetchingIcon": "Loading favicon..."
+    "fetchingIcon": "Loading favicon...",
+    "faviconFailed": "Could not load favicon"
   }
 }

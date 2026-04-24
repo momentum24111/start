@@ -24,6 +24,7 @@
     "theme": "Theme",
     "language": "Sprache",
     "collapsed": "Eingeklappt",
-    "fetchingIcon": "Favicon wird geladen..."
+    "fetchingIcon": "Favicon wird geladen...",
+    "faviconFailed": "Favicon konnte nicht geladen werden"
   }
 }

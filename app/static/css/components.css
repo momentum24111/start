@@ -1,21 +1,9 @@
-:root {
-  --bg: #101418;
-  --surface: #1b232b;
-  --surface-2: #24303b;
-  --text: #f4f7fb;
-  --muted: #a6b3c0;
-  --border: #394754;
-  --primary: #4f8cff;
-  --danger: #d04848;
-}
-
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: Inter, "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -41,17 +29,40 @@ body {
   gap: 0.5rem;
 }
 
-button {
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  border-radius: 0.6rem;
+  border-radius: 4px;
   padding: 0.5rem 0.8rem;
   cursor: pointer;
+  min-height: 34px;
 }
 
-button.ghost {
-  background: transparent;
+.btn:hover {
+  border-color: var(--primary);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn--ghost {
+  background: var(--surface-2);
+}
+
+.btn__icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.btn__label {
+  line-height: 1;
 }
 
 main {
@@ -66,7 +77,7 @@ main {
 
 .category {
   border: 1px solid var(--border);
-  border-radius: 0.9rem;
+  border-radius: 4px;
   background: var(--surface);
   padding: 0.8rem;
 }
@@ -83,6 +94,11 @@ main {
   gap: 0.6rem;
   align-items: center;
   font-weight: 700;
+}
+
+.category-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .category-actions,
@@ -103,7 +119,7 @@ main {
   justify-content: space-between;
   border: 1px solid var(--border);
   background: var(--surface-2);
-  border-radius: 0.7rem;
+  border-radius: 4px;
   padding: 0.55rem;
 }
 
@@ -112,6 +128,8 @@ main {
   align-items: center;
   gap: 0.55rem;
   min-width: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
 .service-left img {
@@ -132,7 +150,7 @@ main {
   bottom: 1rem;
   width: 3rem;
   height: 3rem;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 1.4rem;
 }
 
@@ -144,7 +162,7 @@ main {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay-bg);
   display: grid;
   place-items: center;
   padding: 1rem;
@@ -152,11 +170,19 @@ main {
 
 .modal {
   width: min(640px, 100%);
-  border-radius: 0.9rem;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface);
   padding: 1rem;
   animation: modalIn 140ms ease-out;
+}
+
+.modal.is-closing {
+  animation: modalOut 140ms ease-in forwards;
+}
+
+.modal-overlay.is-closing {
+  animation: overlayOut 140ms ease-in forwards;
 }
 
 @keyframes modalIn {
@@ -170,15 +196,37 @@ main {
   }
 }
 
+@keyframes modalOut {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+}
+
+@keyframes overlayOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .form-row {
   display: grid;
-  gap: 0.3rem;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: center;
   margin-bottom: 0.7rem;
 }
 
 input,
 select {
-  border-radius: 0.5rem;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
@@ -202,6 +250,63 @@ select {
   border-color: var(--primary);
 }
 
+.icon-search {
+  position: relative;
+}
+
+.icon-search-results {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-top: 0.3rem;
+  background: var(--surface-2);
+}
+
+.icon-search-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 0.45rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 0.4rem;
+  text-align: left;
+}
+
+.icon-search-item:last-child {
+  border-bottom: 0;
+}
+
+.icon-preview,
+.inline-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.favicon-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 4px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .dragging {
   opacity: 0.5;
 }
@@ -220,5 +325,10 @@ select {
   .topbar {
     flex-wrap: wrap;
     gap: 0.7rem;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
   }
 }

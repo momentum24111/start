@@ -1,0 +1,41 @@
+---
+alwaysApply: true
+---
+
+Am Ende jeder Codeänderung musst du eine eigene Zeile ausgeben mit genau einem der beiden Werte:
+
+Backend Restart erforderlich
+
+oder
+
+Kein Backend Restart erforderlich
+
+Regel:
+
+Wenn Backend Dateien betroffen sind, insbesondere:
+
+Python Dateien
+FastAPI
+API
+SSH Logik
+Ingest Logik
+Server Logik
+
+Dann:
+
+Backend Restart erforderlich
+
+Wenn ausschließlich Frontend betroffen ist, insbesondere:
+
+HTML
+CSS
+JavaScript
+Theme Dateien
+
+Dann:
+
+Kein Backend Restart erforderlich
+
+Der Hinweis muss immer ausgegeben werden.
+Keine zusätzliche Erklärung.
+Nur diese eine Zeile.

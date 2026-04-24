@@ -1,4 +1,11 @@
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: local("IBM Plex Sans"), url("/static/assets/fonts/IBMPlexSans-Regular.woff2") format("woff2");
+  font-display: swap;
+}
+
 body {
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
   --bg: #0f141a;
   --surface: #18202a;
   --surface-2: #212c38;
@@ -7,4 +14,5 @@ body {
   --border: #334355;
   --primary: #6ea6ff;
   --danger: #ee6a6a;
+  --overlay-bg: rgba(0, 0, 0, 0.62);
 }
