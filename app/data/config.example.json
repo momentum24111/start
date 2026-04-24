@@ -1,0 +1,21 @@
+{
+  "categories": [
+    {
+      "id": "infra",
+      "name": "Infrastructure",
+      "icon": "server",
+      "color": "primary",
+      "collapsed": false,
+      "services": [
+        {
+          "id": "proxmox",
+          "name": "Proxmox",
+          "url": "https://example.local/proxmox",
+          "iconUrl": "https://example.local/favicon.ico",
+          "cachedIcon": "",
+          "openMode": "new-tab"
+        }
+      ]
+    }
+  ]
+}

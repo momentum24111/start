@@ -1,0 +1,10 @@
+body {
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --surface-2: #f0f4f8;
+  --text: #182332;
+  --muted: #516379;
+  --border: #c9d3dd;
+  --primary: #2d65d6;
+  --danger: #b52d2d;
+}

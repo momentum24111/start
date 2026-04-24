@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Start</title>
+    <link rel="stylesheet" href="/static/css/components.css" />
+    <link id="theme-link" rel="stylesheet" href="/static/themes/dark/theme.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1 id="app-title">Start</h1>
+      <div class="actions">
+        <button id="undo-btn" class="ghost hidden" type="button">Undo</button>
+        <button id="edit-btn" class="ghost" type="button">Edit</button>
+        <button id="settings-btn" type="button">Settings</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="categories" class="category-grid"></div>
+      <button id="add-category-btn" class="fab hidden" type="button">+</button>
+    </main>
+
+    <div id="modal-root"></div>
+
+    <script type="module" src="/static/js/app.js"></script>
+  </body>
+</html>

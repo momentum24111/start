@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "name": "Deutsch"
+  },
+  "ui": {
+    "undo": "Rückgängig",
+    "edit": "Bearbeiten",
+    "done": "Fertig",
+    "settings": "Einstellungen",
+    "addCategory": "Kategorie hinzufügen",
+    "addService": "Service hinzufügen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "category": "Kategorie",
+    "service": "Service",
+    "name": "Name",
+    "url": "URL",
+    "icon": "Icon",
+    "iconUrl": "Icon URL",
+    "openMode": "Öffnen in",
+    "currentTab": "Aktueller Tab",
+    "newTab": "Neuer Tab",
+    "theme": "Theme",
+    "language": "Sprache",
+    "collapsed": "Eingeklappt",
+    "fetchingIcon": "Favicon wird geladen..."
+  }
+}

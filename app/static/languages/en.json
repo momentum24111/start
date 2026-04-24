@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "name": "English"
+  },
+  "ui": {
+    "undo": "Undo",
+    "edit": "Edit",
+    "done": "Done",
+    "settings": "Settings",
+    "addCategory": "Add Category",
+    "addService": "Add Service",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "category": "Category",
+    "service": "Service",
+    "name": "Name",
+    "url": "URL",
+    "icon": "Icon",
+    "iconUrl": "Icon URL",
+    "openMode": "Open mode",
+    "currentTab": "Current tab",
+    "newTab": "New tab",
+    "theme": "Theme",
+    "language": "Language",
+    "collapsed": "Collapsed",
+    "fetchingIcon": "Loading favicon..."
+  }
+}
