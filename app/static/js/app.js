@@ -245,7 +245,7 @@ function renderService(category, service) {
   item.dataset.serviceId = service.id;
 
   const target = service.openMode === "current-tab" ? "_self" : "_blank";
-  const iconPath = service.cachedIcon || service.iconUrl || "/static/assets/icons/default.svg";
+  const iconPath = service.iconUrl || service.cachedIcon || "/static/assets/icons/default.svg";
   item.innerHTML = `
     <a class="service-left" href="${service.url}" target="${target}" rel="noreferrer">
       <img loading="lazy" src="${iconPath}" alt="" />
@@ -398,12 +398,12 @@ function openServiceModal(categoryId, service = null) {
       <label>${t("ui.iconUrl")}</label>
       <div>
         <div class="icon-url-controls">
-          <input name="iconUrl" type="url" value="${service?.iconUrl || ""}" />
+          <input name="iconUrl" value="${service?.iconUrl || ""}" />
           <button type="button" class="btn btn--ghost btn--compact" data-fetch-favicon>${t("ui.fetchFavicon")}</button>
         </div>
         <div class="favicon-row">
           <span id="favicon-spinner" class="spinner hidden"></span>
-          <img id="favicon-preview" class="icon-preview" src="${service?.cachedIcon || service?.iconUrl || "/static/assets/icons/default.svg"}" alt="" />
+          <img id="favicon-preview" class="icon-preview" src="${service?.iconUrl || service?.cachedIcon || "/static/assets/icons/default.svg"}" alt="" />
           <small id="favicon-status"></small>
         </div>
       </div>
@@ -417,6 +417,10 @@ function openServiceModal(categoryId, service = null) {
     </div>
   `;
 
+  if (service?.cachedIcon) {
+    form.dataset.cachedIcon = service.cachedIcon;
+  }
+
   showModal({
     title: isEdit ? `${t("ui.edit")} ${t("ui.service")}` : t("ui.addService"),
     content: form,
@@ -426,7 +430,7 @@ function openServiceModal(categoryId, service = null) {
       if (!form.reportValidity()) return false;
       const fd = new FormData(form);
       const iconUrl = String(fd.get("iconUrl") || "");
-      const cachedIcon = form.dataset.cachedIcon || service?.cachedIcon || "";
+      const cachedIcon = form.dataset.cachedIcon ? String(form.dataset.cachedIcon) : "";
 
       pushUndo();
       if (isEdit) {
@@ -457,6 +461,16 @@ function openServiceModal(categoryId, service = null) {
   const spinner = form.querySelector("#favicon-spinner");
   const preview = form.querySelector("#favicon-preview");
 
+  const syncIconPreviewFromField = () => {
+    const v = String(iconUrlInput.value || "").trim();
+    preview.src = v || "/static/assets/icons/default.svg";
+  };
+
+  iconUrlInput.addEventListener("input", () => {
+    delete form.dataset.cachedIcon;
+    syncIconPreviewFromField();
+  });
+
   const triggerFaviconLoad = async () => {
     const value = String(urlInput.value || "").trim();
     if (!value) return;
@@ -466,9 +480,17 @@ function openServiceModal(categoryId, service = null) {
     status.textContent = t("ui.fetchingIcon");
     try {
       const result = await api.cacheFavicon(value);
-      form.dataset.cachedIcon = result.path;
-      iconUrlInput.value = result.path;
-      preview.src = result.path;
+      const resolved = String(result.iconUrl || "").trim();
+      if (!resolved) {
+        throw new Error("Missing iconUrl");
+      }
+      iconUrlInput.value = resolved;
+      syncIconPreviewFromField();
+      if (result.path) {
+        form.dataset.cachedIcon = result.path;
+      } else {
+        delete form.dataset.cachedIcon;
+      }
       status.textContent = "";
     } catch (_) {
       status.textContent = t("ui.faviconFailed");

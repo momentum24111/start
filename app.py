@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 import uvicorn
@@ -92,14 +93,86 @@ def list_languages() -> list[dict]:
     return languages
 
 
-def normalize_icon_target(raw_url: str) -> str:
+def normalize_page_url(raw_url: str) -> str:
     parsed = urlparse(raw_url.strip())
     if not parsed.scheme:
-        raw_url = f"https://{raw_url.strip()}"
-        parsed = urlparse(raw_url)
-    if parsed.path and parsed.path != "/":
-        return raw_url
-    return f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+        return f"https://{raw_url.strip()}"
+    return raw_url.strip()
+
+
+def extract_favicon_links(html: str, base_url: str) -> list[str]:
+    candidates: list[str] = []
+    pattern = re.compile(r"<link\b[^>]*>", flags=re.IGNORECASE)
+    href_pattern = re.compile(r"""href\s*=\s*["']([^"']+)["']""", flags=re.IGNORECASE)
+    rel_pattern = re.compile(r"""rel\s*=\s*["']([^"']+)["']""", flags=re.IGNORECASE)
+
+    for tag in pattern.findall(html):
+        href_match = href_pattern.search(tag)
+        rel_match = rel_pattern.search(tag)
+        if not href_match or not rel_match:
+            continue
+        rel_value = rel_match.group(1).lower()
+        if "icon" not in rel_value:
+            continue
+        href_value = href_match.group(1).strip()
+        if not href_value:
+            continue
+        candidates.append(urljoin(base_url, href_value))
+
+    return candidates
+
+
+def is_probably_image_url(url: str) -> bool:
+    path = Path(urlparse(url).path or "")
+    return path.suffix.lower() in {".ico", ".png", ".svg", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def is_valid_image_bytes(data: bytes) -> bool:
+    """Reject HTML/text error pages saved with a fake image extension."""
+    if len(data) < 12:
+        return False
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return True
+    if len(data) >= 6 and data[:3] == b"GIF" and data[3:6] in (b"87a", b"89a"):
+        return True
+    if len(data) >= 3 and data[:2] == b"\xff\xd8":
+        return True
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return True
+    if len(data) >= 4 and data[:4] == b"\x00\x00\x01\x00":
+        return True
+    sample = data[: min(len(data), 8192)].lstrip().lower()
+    if sample.startswith(b"<svg"):
+        return True
+    if sample.startswith(b"<?xml") and b"<svg" in data[: min(len(data), 16384)].lower():
+        return True
+    return False
+
+
+async def resolve_favicon_candidates(raw_url: str) -> list[str]:
+    page_url = normalize_page_url(raw_url)
+    parsed = urlparse(page_url)
+    origin_fallback = f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+
+    # If URL already points to an image path, prioritize this direct target.
+    if is_probably_image_url(page_url):
+        return [page_url]
+
+    candidates: list[str] = []
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
+            response = await client.get(page_url, headers={"accept": "text/html,*/*"})
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            if "html" in content_type:
+                candidates.extend(extract_favicon_links(response.text, str(response.url)))
+    except Exception:
+        # Ignore HTML parsing failures and fall back to /favicon.ico.
+        pass
+
+    candidates.append(origin_fallback)
+    unique_candidates = list(dict.fromkeys(candidates))
+    return unique_candidates
 
 
 @asynccontextmanager
@@ -148,30 +221,54 @@ def get_languages() -> dict:
 
 @app.post("/api/favicon")
 async def post_favicon(payload: FaviconRequest) -> dict:
-    normalized = normalize_icon_target(payload.url)
-    file_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
-    suffix = Path(urlparse(normalized).path).suffix or ".ico"
-    if len(suffix) > 5:
-        suffix = ".ico"
-    filename = f"{file_hash}{suffix}"
-    target_file = FAVICON_CACHE_DIR / filename
+    candidates = await resolve_favicon_candidates(payload.url)
+    last_error: Exception | None = None
 
-    if target_file.exists():
-        return {"path": f"/static/assets/favicon-cache/{filename}"}
+    async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
+        for candidate_url in candidates:
+            file_hash = hashlib.sha256(candidate_url.encode("utf-8")).hexdigest()[:24]
+            suffix = Path(urlparse(candidate_url).path).suffix or ".ico"
+            if len(suffix) > 5:
+                suffix = ".ico"
+            filename = f"{file_hash}{suffix}"
+            target_file = FAVICON_CACHE_DIR / filename
 
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
-            response = await client.get(normalized)
-            response.raise_for_status()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Favicon download failed: {exc}") from exc
+            if target_file.exists():
+                cached = target_file.read_bytes()
+                if is_valid_image_bytes(cached):
+                    return {
+                        "iconUrl": candidate_url,
+                        "path": f"/static/assets/favicon-cache/{filename}",
+                    }
+                try:
+                    target_file.unlink()
+                except OSError:
+                    pass
 
-    content_type = response.headers.get("content-type", "")
-    if "image" not in content_type and not target_file.suffix:
-        raise HTTPException(status_code=400, detail="URL is not an image")
+            try:
+                response = await client.get(candidate_url)
+                response.raise_for_status()
+            except Exception as exc:
+                last_error = exc
+                continue
 
-    target_file.write_bytes(response.content)
-    return {"path": f"/static/assets/favicon-cache/{filename}"}
+            body = response.content
+            if not is_valid_image_bytes(body):
+                last_error = ValueError("Response is not a valid image")
+                continue
+
+            cache_path: str | None = None
+            try:
+                target_file.write_bytes(body)
+                cache_path = f"/static/assets/favicon-cache/{filename}"
+            except OSError as exc:
+                last_error = exc
+
+            return {"iconUrl": candidate_url, "path": cache_path}
+
+    if last_error is not None:
+        raise HTTPException(status_code=400, detail=f"Favicon download failed: {last_error}") from last_error
+    raise HTTPException(status_code=400, detail="Favicon download failed")
 
 
 @app.exception_handler(RuntimeError)
