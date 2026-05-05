@@ -39,8 +39,8 @@ export function showModal({ title, content, onSave, onCancel, saveLabel = "Save"
       <h2>${title}</h2>
       <div class="modal-content"></div>
       <div class="modal-actions">
-        <button type="button" data-cancel>${cancelLabel}</button>
-        <button type="button" data-save>${saveLabel}</button>
+        <button type="button" class="btn btn--ghost" data-cancel>${cancelLabel}</button>
+        <button type="button" class="btn" data-save>${saveLabel}</button>
       </div>
     </section>
   `;

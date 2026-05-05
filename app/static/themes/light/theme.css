@@ -5,14 +5,37 @@
 }
 
 body {
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
   --bg: #f4f7fb;
   --surface: #ffffff;
   --surface-2: #f0f4f8;
+  --surface-hover: #e6edf4;
   --text: #182332;
   --muted: #516379;
-  --border: #c9d3dd;
   --primary: #2d65d6;
   --danger: #b52d2d;
   --overlay-bg: rgba(15, 22, 32, 0.46);
+  --topbar-shadow: 0 1px 0 rgba(24, 35, 50, 0.08);
+  --control-shadow: 0 1px 8px rgba(17, 30, 45, 0.14);
+  --control-active-bg: #d5e4ff;
+  --control-active-fg: #17376f;
+  --category-bg: #ffffff;
+  --card-shadow: 0 6px 16px rgba(20, 37, 56, 0.08);
+  --card-shadow-soft: 0 2px 8px rgba(20, 37, 56, 0.08);
+  --modal-shadow: 0 12px 28px rgba(20, 37, 56, 0.2);
+  --focus-ring: 0 0 0 2px rgba(45, 101, 214, 0.55);
+  --toggle-off-bg: #c8d6e4;
+  --toggle-on-bg: #2d65d6;
+  --toggle-thumb-bg: #ffffff;
+  --category-icon-filter: invert(16%) sepia(15%) saturate(1408%) hue-rotate(173deg) brightness(93%) contrast(92%);
+  --cat-primary: #4f84f1;
+  --cat-teal: #1fa79f;
+  --cat-blue: #4c7cf0;
+  --cat-violet: #805cf0;
+  --cat-amber: #e29e2d;
+  --cat-pink: #d35ea9;
+  --cat-indigo: #5e72e7;
+  --cat-emerald: #24ae6f;
+  --cat-orange: #e47a36;
+  --cat-slate: #6e879f;
 }

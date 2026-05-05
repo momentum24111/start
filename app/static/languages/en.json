@@ -17,6 +17,7 @@
     "name": "Name",
     "url": "URL",
     "icon": "Icon",
+    "categoryColor": "Category color",
     "iconUrl": "Icon URL",
     "openMode": "Open mode",
     "currentTab": "Current tab",

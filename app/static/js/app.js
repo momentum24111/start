@@ -37,6 +37,7 @@ const ICONS = {
 const MDI_ICONS = [
   "server", "folder", "home", "wrench", "monitor", "database", "network", "shield", "cloud", "web"
 ];
+const COLOR_OPTIONS = ["primary", "teal", "blue", "violet", "amber", "pink", "indigo", "emerald", "orange", "slate"];
 
 const uid = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID().slice(0, 8);
@@ -54,8 +55,8 @@ function mdiIcon(name, extraClass = "") {
   return `<img class="${extraClass}" loading="lazy" src="${mdiPath(name)}" alt="" onerror="this.src='/static/assets/icons/default.svg';this.onerror=null;">`;
 }
 
-function button({ label, icon, dataAttr = "", variant = "", className = "" }) {
-  return `<button type="button" class="btn ${variant} ${className}" ${dataAttr}>${icon ? `<span class="btn__icon">${icon}</span>` : ""}<span class="btn__label">${label}</span></button>`;
+function button({ label = "", icon, dataAttr = "", variant = "", className = "", iconOnly = false }) {
+  return `<button type="button" class="btn ${variant} ${className} ${iconOnly ? "btn--icon" : ""}" ${dataAttr}>${icon ? `<span class="btn__icon">${icon}</span>` : ""}${iconOnly ? "" : `<span class="btn__label">${label}</span>`}</button>`;
 }
 
 async function bootstrap() {
@@ -116,17 +117,25 @@ function render() {
   document.documentElement.lang = state.settings.language || "en";
   document.title = state.settings.appTitle || "Start";
   elements.title.textContent = state.settings.appTitle || "Start";
-  elements.undo.innerHTML = `${iconSvg(ICONS.undo, "inline-icon")}<span class="btn__label">${t("ui.undo")}</span>`;
-  elements.edit.innerHTML = `${iconSvg(state.editMode ? ICONS.done : ICONS.edit, "inline-icon")}<span class="btn__label">${state.editMode ? t("ui.done") : t("ui.edit")}</span>`;
-  elements.settings.innerHTML = `${iconSvg(ICONS.settings, "inline-icon")}<span class="btn__label">${t("ui.settings")}</span>`;
-  elements.undo.classList.toggle("hidden", state.undoStack.length === 0);
-  elements.addCategory.classList.toggle("hidden", !state.editMode);
-  elements.addCategory.title = t("ui.addCategory");
-  elements.addCategory.innerHTML = `${iconSvg(ICONS.plus, "inline-icon")}<span class="btn__label">${t("ui.addCategory")}</span>`;
+  elements.undo.innerHTML = iconSvg(ICONS.undo, "inline-icon");
+  elements.edit.innerHTML = iconSvg(ICONS.edit, "inline-icon");
+  elements.settings.innerHTML = iconSvg(ICONS.settings, "inline-icon");
+  elements.undo.title = t("ui.undo");
+  elements.edit.title = t("ui.edit");
+  elements.settings.title = t("ui.settings");
+  elements.undo.setAttribute("aria-label", t("ui.undo"));
+  elements.edit.setAttribute("aria-label", t("ui.edit"));
+  elements.settings.setAttribute("aria-label", t("ui.settings"));
+  elements.edit.classList.toggle("is-active", state.editMode);
+  elements.undo.classList.toggle("hidden", !state.editMode || state.undoStack.length === 0);
+  elements.addCategory.classList.add("hidden");
   elements.categories.innerHTML = "";
 
   for (const category of state.config.categories) {
     elements.categories.append(renderCategory(category));
+  }
+  if (state.editMode) {
+    elements.categories.append(renderAddCategoryCard());
   }
 
   setupDragDrop({
@@ -139,19 +148,21 @@ function render() {
 function renderCategory(category) {
   const card = document.createElement("article");
   card.className = "category";
+  card.dataset.color = category.color || "primary";
   card.innerHTML = `
     <div class="category-header">
       <div class="category-title">
+        ${button({ icon: iconSvg(ICONS.chevron, `inline-icon collapse-arrow ${category.collapsed ? "is-collapsed" : ""}`), dataAttr: "data-toggle-collapse", variant: "btn--ghost", className: "category-collapse", iconOnly: true })}
         ${mdiIcon(category.icon || "folder", "category-icon")}
-        ${button({ label: category.name, icon: iconSvg(ICONS.chevron, "inline-icon"), dataAttr: "data-toggle-collapse", variant: "btn--ghost" })}
+        <span class="category-name">${category.name}</span>
       </div>
       <div class="category-actions ${state.editMode ? "" : "hidden"}">
-        ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-category", variant: "btn--ghost" })}
-        ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-category", variant: "btn--ghost" })}
+        ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-category", variant: "btn--ghost", className: "btn--compact" })}
+        ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-category", variant: "btn--ghost", className: "btn--compact" })}
       </div>
     </div>
     <div data-services-container data-category-id="${category.id}" class="services ${category.collapsed ? "hidden" : ""}"></div>
-    ${button({ label: t("ui.addService"), icon: iconSvg(ICONS.plus, "inline-icon"), dataAttr: "data-add-service", className: `add-service-btn ${state.editMode ? "" : "hidden"}` })}
+    ${state.editMode ? renderAddServiceTile() : ""}
   `;
 
   const servicesRoot = card.querySelector("[data-services-container]");
@@ -185,11 +196,10 @@ function renderService(category, service) {
     <a class="service-left" href="${service.url}" target="${target}" rel="noreferrer">
       <img loading="lazy" src="${iconPath}" alt="" />
       <span class="service-name">${service.name}</span>
-      <span class="btn__icon">${iconSvg(ICONS.external, "inline-icon")}</span>
     </a>
     <div class="service-actions ${state.editMode ? "" : "hidden"}">
-      ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost" })}
-      ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-service", variant: "btn--ghost" })}
+      ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost", className: "btn--compact" })}
+      ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-service", variant: "btn--ghost", className: "btn--compact" })}
     </div>
   `;
 
@@ -201,6 +211,30 @@ function renderService(category, service) {
     render();
   });
   return item;
+}
+
+function renderAddCategoryCard() {
+  const card = document.createElement("article");
+  card.className = "category category--add";
+  card.innerHTML = `
+    <button type="button" class="btn btn--ghost category-add-card" data-add-category>
+      <span class="btn__icon">${iconSvg(ICONS.plus, "inline-icon")}</span>
+      <span class="btn__label">${t("ui.addCategory")}</span>
+    </button>
+  `;
+  card.querySelector("[data-add-category]").addEventListener("click", () => openCategoryModal());
+  return card;
+}
+
+function renderAddServiceTile() {
+  return `
+    <button type="button" class="service service--add" data-add-service>
+      <span class="service-left">
+        <span class="btn__icon">${iconSvg(ICONS.plus, "inline-icon")}</span>
+        <span class="service-name">${t("ui.addService")}</span>
+      </span>
+    </button>
+  `;
 }
 
 function openCategoryModal(category = null) {
@@ -219,11 +253,20 @@ function openCategoryModal(category = null) {
       </div>
     </div>
     <div class="form-row">
+      <label>${t("ui.categoryColor")}</label>
+      <div>
+        <div class="color-options">
+          ${COLOR_OPTIONS.map((color) => `<button type="button" class="color-dot ${(category?.color || "primary") === color ? "is-active" : ""}" data-color="${color}" data-color-pick="${color}"></button>`).join("")}
+        </div>
+        <input type="hidden" name="color" value="${category?.color || "primary"}" />
+      </div>
+    </div>
+    <div class="form-row">
       <label>${t("ui.collapsed")}</label>
-      <select name="collapsed">
-        <option value="false">false</option>
-        <option value="true" ${category?.collapsed ? "selected" : ""}>true</option>
-      </select>
+      <label class="toggle-switch">
+        <input name="collapsed" type="checkbox" ${category?.collapsed ? "checked" : ""} />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
     </div>
   `;
 
@@ -239,14 +282,15 @@ function openCategoryModal(category = null) {
       if (isEdit) {
         category.name = fd.get("name");
         category.icon = fd.get("icon");
-        category.collapsed = fd.get("collapsed") === "true";
+        category.color = fd.get("color");
+        category.collapsed = form.querySelector("input[name='collapsed']").checked;
       } else {
         state.config.categories.push({
           id: uid(),
           name: fd.get("name"),
           icon: fd.get("icon"),
-          color: "primary",
-          collapsed: fd.get("collapsed") === "true",
+          color: fd.get("color"),
+          collapsed: form.querySelector("input[name='collapsed']").checked,
           services: []
         });
       }
@@ -271,6 +315,13 @@ function openCategoryModal(category = null) {
     });
   };
   input.addEventListener("input", renderIconResults);
+  form.querySelectorAll("[data-color-pick]").forEach((colorButton) => {
+    colorButton.addEventListener("click", () => {
+      form.querySelector("input[name='color']").value = colorButton.dataset.color;
+      form.querySelectorAll("[data-color-pick]").forEach((entry) => entry.classList.remove("is-active"));
+      colorButton.classList.add("is-active");
+    });
+  });
   renderIconResults();
 }
 
