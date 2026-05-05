@@ -24,6 +24,10 @@ body {
   --card-shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.15);
   --modal-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
   --focus-ring: 0 0 0 2px rgba(110, 166, 255, 0.8);
+  --drop-indicator: rgba(110, 166, 255, 0.9);
+  --placeholder-bg: rgba(110, 166, 255, 0.18);
+  --dragging-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
+  --control-icon-muted: #b7c3d3;
   --toggle-off-bg: #405266;
   --toggle-on-bg: #6ea6ff;
   --toggle-thumb-bg: #f4f8ff;

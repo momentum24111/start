@@ -25,6 +25,7 @@
     "theme": "Theme",
     "language": "Sprache",
     "collapsed": "Eingeklappt",
+    "reorder": "Verschieben",
     "fetchingIcon": "Favicon wird geladen...",
     "faviconFailed": "Favicon konnte nicht geladen werden"
   }

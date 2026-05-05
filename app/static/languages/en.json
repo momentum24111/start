@@ -25,6 +25,7 @@
     "theme": "Theme",
     "language": "Language",
     "collapsed": "Collapsed",
+    "reorder": "Reorder",
     "fetchingIcon": "Loading favicon...",
     "faviconFailed": "Could not load favicon"
   }

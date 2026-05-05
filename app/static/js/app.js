@@ -25,13 +25,13 @@ const elements = {
 
 const ICONS = {
   undo: "M12 5v4L7 4l5-5v4c5.5 0 10 4.5 10 10a10 10 0 0 1-10 10H7v-2h5a8 8 0 1 0 0-16z",
-  edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04c.39-.39.39-1.02 0-1.41l-2.5-2.5a.996.996 0 1 0-1.41 1.41l2.5 2.5c.39.39 1.03.39 1.42 0z",
+  edit: "M4 16.25V20h3.75L18.81 8.94l-3.75-3.75L4 16.25zm15.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.12 1.12 3.75 3.75 1.29-1.95z",
   done: "M9 16.2l-3.5-3.5L4 14.2 9 19l12-12-1.5-1.5z",
   settings: "M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.22-1.12.52-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a6.9 6.9 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.41 1.05.72 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.22 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z",
   trash: "M6 7h12l-1 14H7L6 7zm3-3h6l1 2H8l1-2z",
   plus: "M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z",
-  chevron: "M9.29 6.71 13.58 11 9.29 15.29 10.71 16.71 16.41 11 10.71 5.29z",
-  external: "M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3z"
+  chevron: "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z",
+  grip: "M8 7h2v2H8V7zm0 4h2v2H8v-2zm0 4h2v2H8v-2zm6-8h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"
 };
 
 const MDI_ICONS = [
@@ -141,7 +141,8 @@ function render() {
   setupDragDrop({
     root: elements.categories,
     enabled: state.editMode,
-    onMove: moveService
+    onMoveService: moveService,
+    onMoveCategory: moveCategory
   });
 }
 
@@ -151,19 +152,23 @@ function renderCategory(category) {
   card.dataset.color = category.color || "primary";
   card.innerHTML = `
     <div class="category-header">
-      <div class="category-title">
-        ${button({ icon: iconSvg(ICONS.chevron, `inline-icon collapse-arrow ${category.collapsed ? "is-collapsed" : ""}`), dataAttr: "data-toggle-collapse", variant: "btn--ghost", className: "category-collapse", iconOnly: true })}
+      <button type="button" class="category-header-main" data-toggle-collapse>
+        ${iconSvg(ICONS.chevron, `inline-icon collapse-arrow ${category.collapsed ? "is-collapsed" : ""}`)}
         ${mdiIcon(category.icon || "folder", "category-icon")}
         <span class="category-name">${category.name}</span>
-      </div>
+      </button>
       <div class="category-actions ${state.editMode ? "" : "hidden"}">
-        ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-category", variant: "btn--ghost", className: "btn--compact" })}
-        ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-category", variant: "btn--ghost", className: "btn--compact" })}
+        ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-category", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
+        ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-category", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
+        ${button({ label: t("ui.reorder"), icon: iconSvg(ICONS.grip, "inline-icon"), dataAttr: "data-drag-category", variant: "btn--ghost", className: "btn--compact drag-handle", iconOnly: true })}
       </div>
     </div>
-    <div data-services-container data-category-id="${category.id}" class="services ${category.collapsed ? "hidden" : ""}"></div>
+    <div class="category-content ${category.collapsed ? "is-collapsed" : ""}">
+      <div data-services-container data-category-id="${category.id}" class="services"></div>
+    </div>
     ${state.editMode ? renderAddServiceTile() : ""}
   `;
+  card.dataset.categoryId = category.id;
 
   const servicesRoot = card.querySelector("[data-services-container]");
   for (const service of category.services || []) servicesRoot.append(renderService(category, service));
@@ -198,8 +203,9 @@ function renderService(category, service) {
       <span class="service-name">${service.name}</span>
     </a>
     <div class="service-actions ${state.editMode ? "" : "hidden"}">
-      ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost", className: "btn--compact" })}
-      ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-service", variant: "btn--ghost", className: "btn--compact" })}
+      ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
+      ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-service", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
+      ${button({ label: t("ui.reorder"), icon: iconSvg(ICONS.grip, "inline-icon"), dataAttr: "data-drag-service", variant: "btn--ghost", className: "btn--compact drag-handle", iconOnly: true })}
     </div>
   `;
 
@@ -440,12 +446,15 @@ function openSettingsModal() {
     </div>
     <div class="form-row">
       <label>${t("ui.theme")}</label>
-      <div class="theme-options">${themeButtons}</div>
+      <div class="theme-options theme-picker">${themeButtons}</div>
       <input name="theme" value="${state.settings.theme}" hidden />
     </div>
     <div class="form-row">
       <label>${t("ui.language")}</label>
-      <select name="language">${languageOptions}</select>
+      <div class="select-wrap">
+        <select name="language">${languageOptions}</select>
+        <span class="select-chevron">${iconSvg(ICONS.chevron, "inline-icon")}</span>
+      </div>
     </div>
   `;
   form.querySelectorAll("[data-theme]").forEach((button) => {
@@ -482,11 +491,24 @@ async function moveService(fromCategoryId, serviceId, toCategoryId, beforeServic
   const source = state.config.categories.find((c) => c.id === fromCategoryId);
   const target = state.config.categories.find((c) => c.id === toCategoryId);
   if (!source || !target) return;
+  pushUndo();
   const index = source.services.findIndex((s) => s.id === serviceId);
   if (index < 0) return;
   const [entry] = source.services.splice(index, 1);
   const insertAt = beforeServiceId ? target.services.findIndex((s) => s.id === beforeServiceId) : -1;
   target.services.splice(insertAt >= 0 ? insertAt : target.services.length, 0, entry);
+  await persistConfig();
+  render();
+}
+
+async function moveCategory(categoryId, beforeCategoryId) {
+  const list = state.config.categories;
+  const from = list.findIndex((entry) => entry.id === categoryId);
+  if (from < 0) return;
+  pushUndo();
+  const [category] = list.splice(from, 1);
+  const targetIndex = beforeCategoryId ? list.findIndex((entry) => entry.id === beforeCategoryId) : -1;
+  list.splice(targetIndex >= 0 ? targetIndex : list.length, 0, category);
   await persistConfig();
   render();
 }
