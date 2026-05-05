@@ -16,5 +16,6 @@ export const api = {
   saveSettings: (settings) => request("/api/settings", { method: "PUT", headers, body: JSON.stringify(settings) }),
   getThemes: () => request("/api/themes"),
   getLanguages: () => request("/api/languages"),
-  cacheFavicon: (url) => request("/api/favicon", { method: "POST", headers, body: JSON.stringify({ url }) })
+  cacheFavicon: (url) => request("/api/favicon", { method: "POST", headers, body: JSON.stringify({ url }) }),
+  restartApp: () => request("/api/restart", { method: "POST", headers, body: "{}" })
 };

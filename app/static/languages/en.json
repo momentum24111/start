@@ -28,6 +28,14 @@
     "reorder": "Reorder",
     "fetchFavicon": "Fetch favicon",
     "fetchingIcon": "Loading favicon...",
-    "faviconFailed": "Could not load favicon"
+    "faviconFailed": "Could not load favicon",
+    "actions": "Actions",
+    "restartApp": "Restart application",
+    "restartingAppTitle": "Restart",
+    "restartingAppMessage": "The application is restarting…",
+    "restartingAppHint": "The restart runs on the server. This page will reload automatically once the interface is reachable again.",
+    "restartAppFailed": "Could not trigger restart.",
+    "restartAppTimeout": "The interface did not become reachable in time. Please reload manually or check the server.",
+    "reloadPage": "Reload page"
   }
 }

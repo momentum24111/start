@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { showModal } from "./modal.js";
+import { showModal, showStatusModal } from "./modal.js";
 import { setupDragDrop } from "./dragdrop.js";
 import { initI18n, t } from "./i18n.js";
 import { applyTheme } from "./themes.js";
@@ -45,6 +45,103 @@ const uid = () => {
   return `${Date.now().toString(36)}${randomPart}`.slice(0, 8);
 };
 const deepClone = (v) => JSON.parse(JSON.stringify(v));
+
+/** Same-origin icon paths must not be document-relative (e.g. under /photos/), or the browser resolves them against the page path. */
+function resolveServiceIconDisplaySrc(raw) {
+  const t = String(raw ?? "").trim();
+  if (!t) {
+    return new URL("/static/assets/icons/default.svg", window.location.origin).href;
+  }
+  if (/^https?:\/\//i.test(t)) {
+    return t;
+  }
+  if (t.startsWith("//")) {
+    return `${window.location.protocol}${t}`;
+  }
+  const path = t.startsWith("/") ? t : `/${t}`;
+  return new URL(path, window.location.origin).href;
+}
+
+/** Normalize app-internal cache path from API or config (always root-absolute, never document-relative). */
+function normalizeAppIconPath(raw) {
+  const t = String(raw ?? "").trim();
+  if (!t || /^https?:\/\//i.test(t) || t.startsWith("//")) {
+    return t;
+  }
+  return t.startsWith("/") ? t : `/${t}`;
+}
+
+const RESTART_POLL_MS = 2000;
+const RESTART_WAIT_MS = 120_000;
+const RESTART_OK_WITHOUT_DOWN_MS = 12_000;
+
+async function waitForAppReadyAfterRestart() {
+  const started = Date.now();
+  let sawDown = false;
+  while (Date.now() - started < RESTART_WAIT_MS) {
+    await new Promise((r) => setTimeout(r, RESTART_POLL_MS));
+    let ok = false;
+    try {
+      const res = await fetch("/api/settings", { cache: "no-store" });
+      ok = res.ok;
+    } catch {
+      sawDown = true;
+      continue;
+    }
+    if (!ok) {
+      sawDown = true;
+      continue;
+    }
+    if (sawDown || Date.now() - started >= RESTART_OK_WITHOUT_DOWN_MS) {
+      location.reload();
+      return;
+    }
+  }
+  throw new Error("restart wait timeout");
+}
+
+function restartStatusContent() {
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <div class="favicon-row">
+      <span class="spinner" aria-hidden="true"></span>
+      <div>
+        <div>${t("ui.restartingAppMessage")}</div>
+        <small>${t("ui.restartingAppHint")}</small>
+      </div>
+    </div>
+  `;
+  return body;
+}
+
+function restartErrorContent(message) {
+  const body = document.createElement("div");
+  body.innerHTML = `<p>${message}</p><button type="button" class="btn">${t("ui.reloadPage")}</button>`;
+  body.querySelector("button").addEventListener("click", () => location.reload());
+  return body;
+}
+
+async function runAppRestartFromSettings() {
+  showStatusModal({ title: t("ui.restartingAppTitle"), content: restartStatusContent() });
+  try {
+    await api.restartApp();
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    showStatusModal({
+      title: t("ui.restartingAppTitle"),
+      content: restartErrorContent(`${t("ui.restartAppFailed")} ${detail}`)
+    });
+    return;
+  }
+  try {
+    await waitForAppReadyAfterRestart();
+  } catch {
+    showStatusModal({
+      title: t("ui.restartingAppTitle"),
+      content: restartErrorContent(t("ui.restartAppTimeout"))
+    });
+  }
+}
 const mdiPath = (name) => `/static/assets/icons/mdi/${name}.svg`;
 
 function iconSvg(path, extraClass = "") {
@@ -245,7 +342,7 @@ function renderService(category, service) {
   item.dataset.serviceId = service.id;
 
   const target = service.openMode === "current-tab" ? "_self" : "_blank";
-  const iconPath = service.iconUrl || service.cachedIcon || "/static/assets/icons/default.svg";
+  const iconPath = resolveServiceIconDisplaySrc(service.iconUrl || service.cachedIcon || "");
   item.innerHTML = `
     <a class="service-left" href="${service.url}" target="${target}" rel="noreferrer">
       <img loading="lazy" src="${iconPath}" alt="" />
@@ -385,6 +482,7 @@ function openServiceModal(categoryId, service = null) {
   if (!category) return;
   const isEdit = Boolean(service);
   const form = document.createElement("form");
+  const previewImgSrc = resolveServiceIconDisplaySrc(service?.iconUrl || service?.cachedIcon || "");
   form.innerHTML = `
     <div class="form-row">
       <label>${t("ui.name")}</label>
@@ -403,7 +501,7 @@ function openServiceModal(categoryId, service = null) {
         </div>
         <div class="favicon-row">
           <span id="favicon-spinner" class="spinner hidden"></span>
-          <img id="favicon-preview" class="icon-preview" src="${service?.iconUrl || service?.cachedIcon || "/static/assets/icons/default.svg"}" alt="" />
+          <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
           <small id="favicon-status"></small>
         </div>
       </div>
@@ -418,7 +516,7 @@ function openServiceModal(categoryId, service = null) {
   `;
 
   if (service?.cachedIcon) {
-    form.dataset.cachedIcon = service.cachedIcon;
+    form.dataset.cachedIcon = normalizeAppIconPath(service.cachedIcon);
   }
 
   showModal({
@@ -463,7 +561,8 @@ function openServiceModal(categoryId, service = null) {
 
   const syncIconPreviewFromField = () => {
     const v = String(iconUrlInput.value || "").trim();
-    preview.src = v || "/static/assets/icons/default.svg";
+    const cached = form.dataset.cachedIcon ? String(form.dataset.cachedIcon).trim() : "";
+    preview.src = resolveServiceIconDisplaySrc(v || cached);
   };
 
   iconUrlInput.addEventListener("input", () => {
@@ -502,6 +601,7 @@ function openServiceModal(categoryId, service = null) {
   };
 
   fetchFaviconButton.addEventListener("click", triggerFaviconLoad);
+  syncIconPreviewFromField();
 }
 
 function openSettingsModal() {
@@ -519,8 +619,10 @@ function openSettingsModal() {
     </div>
     <div class="form-row">
       <label>${t("ui.theme")}</label>
-      <div class="theme-options theme-picker">${themeButtons}</div>
-      <input name="theme" value="${state.settings.theme}" hidden />
+      <div>
+        <div class="theme-options theme-picker">${themeButtons}</div>
+        <input name="theme" value="${state.settings.theme}" hidden />
+      </div>
     </div>
     <div class="form-row">
       <label>${t("ui.language")}</label>
@@ -529,7 +631,16 @@ function openSettingsModal() {
         <span class="select-chevron">${iconSvg(ICONS.chevron, "inline-icon")}</span>
       </div>
     </div>
+    <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
+      <label id="settings-actions-heading" for="restart-app-btn">${t("ui.actions")}</label>
+      <div>
+        <button type="button" class="btn" id="restart-app-btn" data-restart-app>${t("ui.restartApp")}</button>
+      </div>
+    </div>
   `;
+  form.querySelector("[data-restart-app]")?.addEventListener("click", () => {
+    void runAppRestartFromSettings();
+  });
   form.querySelectorAll("[data-theme]").forEach((button) => {
     button.addEventListener("click", () => {
       form.querySelector("input[name='theme']").value = button.dataset.theme;

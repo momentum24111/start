@@ -241,6 +241,8 @@ main {
 
 .modal {
   width: min(640px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   border-radius: 4px;
   border: 0;
   background: var(--surface);
@@ -273,6 +275,10 @@ main {
   gap: 0.6rem;
   align-items: center;
   margin-bottom: 0.6rem;
+}
+
+.settings-actions-block {
+  margin-top: 0.35rem;
 }
 
 input,

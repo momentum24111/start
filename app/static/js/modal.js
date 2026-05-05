@@ -21,6 +21,33 @@ function keyHandler(event) {
   }
 }
 
+export function dismissActiveModalListeners() {
+  if (activeModal) {
+    document.removeEventListener("keydown", keyHandler);
+    activeModal = null;
+  }
+  isClosing = false;
+}
+
+/** Modal ohne Aktionsleiste; kein Schließen per Esc oder Klick aufs Overlay. */
+export function showStatusModal({ title, content }) {
+  dismissActiveModalListeners();
+  const root = document.getElementById("modal-root");
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <section class="modal" role="dialog" aria-modal="true" aria-busy="true" tabindex="-1">
+      <h2>${title}</h2>
+      <div class="modal-content"></div>
+    </section>
+  `;
+  const modal = overlay.querySelector(".modal");
+  overlay.querySelector(".modal-content").append(content);
+  root.innerHTML = "";
+  root.append(overlay);
+  modal.focus();
+}
+
 async function closeModal(reason = "cancel") {
   if (!activeModal || isClosing) return;
   isClosing = true;

@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
+import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -100,26 +104,115 @@ def normalize_page_url(raw_url: str) -> str:
     return raw_url.strip()
 
 
-def extract_favicon_links(html: str, base_url: str) -> list[str]:
-    candidates: list[str] = []
+def _parse_sizes_attr(sizes_val: str) -> int:
+    """Largest edge length from a sizes attribute (e.g. '16x16 32x32')."""
+    if not sizes_val or not sizes_val.strip():
+        return 0
+    lowered = sizes_val.lower()
+    if "any" in lowered:
+        return 256
+    best = 0
+    for part in re.split(r"[\s,]+", sizes_val.strip()):
+        part = part.strip()
+        if not part:
+            continue
+        match = re.match(r"^(\d+)\s*x\s*(\d+)$", part, flags=re.IGNORECASE)
+        if match:
+            width, height = int(match.group(1)), int(match.group(2))
+            best = max(best, width, height)
+    return best
+
+
+def _infer_size_from_path(path: str) -> int:
+    path_l = path.lower()
+    for pattern in (
+        r"favicon-(\d{2,4})\.png$",
+        r"apple-icon-(\d{2,4})\.png$",
+        r"icon-(\d{2,4})\.png$",
+    ):
+        match = re.search(pattern, path_l)
+        if match:
+            return int(match.group(1))
+    return 0
+
+
+def _favicon_link_tier(rel: str, mime: str, absolute_url: str) -> int:
+    """
+    Lower tier = try earlier. PNG raster icons before Apple Touch before SVG before ICO.
+    """
+    rel_l = rel.lower()
+    mime_l = mime.lower()
+    path = (urlparse(absolute_url).path or "").lower()
+
+    if "apple-touch" in rel_l:
+        return 1
+
+    is_png = "image/png" in mime_l or path.endswith(".png")
+    is_webp = "image/webp" in mime_l or path.endswith(".webp")
+    is_jpeg = "image/jpeg" in mime_l or "image/jpg" in mime_l or path.endswith((".jpg", ".jpeg"))
+    if is_png or is_webp or is_jpeg:
+        return 0
+
+    if "mask-icon" in rel_l or "image/svg" in mime_l or path.endswith(".svg"):
+        return 2
+
+    if (
+        path.endswith(".ico")
+        or "image/x-icon" in mime_l
+        or mime_l == "image/vnd.microsoft.icon"
+    ):
+        return 3
+
+    return 3
+
+
+def extract_favicon_entries(html: str, base_url: str) -> list[dict]:
+    """Parse <link> tags into prioritized favicon entries (url, tier, size)."""
+    entries: list[dict] = []
     pattern = re.compile(r"<link\b[^>]*>", flags=re.IGNORECASE)
-    href_pattern = re.compile(r"""href\s*=\s*["']([^"']+)["']""", flags=re.IGNORECASE)
-    rel_pattern = re.compile(r"""rel\s*=\s*["']([^"']+)["']""", flags=re.IGNORECASE)
 
     for tag in pattern.findall(html):
-        href_match = href_pattern.search(tag)
-        rel_match = rel_pattern.search(tag)
+        href_match = re.search(r"""href\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
+        rel_match = re.search(r"""rel\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
         if not href_match or not rel_match:
             continue
-        rel_value = rel_match.group(1).lower()
-        if "icon" not in rel_value:
+        rel_raw = rel_match.group(1).strip()
+        if "icon" not in rel_raw.lower():
             continue
-        href_value = href_match.group(1).strip()
-        if not href_value:
+        href_raw = href_match.group(1).strip()
+        if not href_raw:
             continue
-        candidates.append(urljoin(base_url, href_value))
 
-    return candidates
+        type_match = re.search(r"""type\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
+        sizes_match = re.search(r"""sizes\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
+        mime = type_match.group(1).strip() if type_match else ""
+        sizes_val = sizes_match.group(1).strip() if sizes_match else ""
+
+        absolute = urljoin(base_url, href_raw)
+        tier = _favicon_link_tier(rel_raw, mime, absolute)
+        size = _parse_sizes_attr(sizes_val)
+        if size == 0:
+            size = _infer_size_from_path(urlparse(absolute).path or "")
+
+        entries.append({"url": absolute, "tier": tier, "size": size})
+
+    return entries
+
+
+def _merge_favicon_entries_by_url(entries: list[dict]) -> list[dict]:
+    """Keep best metadata per URL: lower tier wins, then larger declared size."""
+    merged: dict[str, dict] = {}
+    for entry in entries:
+        url = entry["url"]
+        if url not in merged:
+            merged[url] = entry
+            continue
+        current = merged[url]
+        t_cur, s_cur = current["tier"], current["size"]
+        t_new, s_new = entry["tier"], entry["size"]
+        if t_new < t_cur or (t_new == t_cur and s_new > s_cur):
+            merged[url] = entry
+    return list(merged.values())
 
 
 def is_probably_image_url(url: str) -> bool:
@@ -158,21 +251,24 @@ async def resolve_favicon_candidates(raw_url: str) -> list[str]:
     if is_probably_image_url(page_url):
         return [page_url]
 
-    candidates: list[str] = []
+    html_entries: list[dict] = []
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
             response = await client.get(page_url, headers={"accept": "text/html,*/*"})
             response.raise_for_status()
             content_type = response.headers.get("content-type", "")
             if "html" in content_type:
-                candidates.extend(extract_favicon_links(response.text, str(response.url)))
+                html_entries = extract_favicon_entries(response.text, str(response.url))
     except Exception:
-        # Ignore HTML parsing failures and fall back to /favicon.ico.
         pass
 
-    candidates.append(origin_fallback)
-    unique_candidates = list(dict.fromkeys(candidates))
-    return unique_candidates
+    merged = _merge_favicon_entries_by_url(html_entries)
+    merged.sort(key=lambda e: (e["tier"], -e["size"]))
+    candidates = [e["url"] for e in merged]
+
+    if origin_fallback not in candidates:
+        candidates.append(origin_fallback)
+    return candidates
 
 
 @asynccontextmanager
@@ -206,6 +302,18 @@ def get_settings() -> dict:
 def put_settings(payload: dict) -> dict:
     create_backup(SETTINGS_FILE)
     save_json(SETTINGS_FILE, payload)
+    return {"ok": True}
+
+
+def _exec_same_process() -> None:
+    """Prozess durch denselben Interpreter mit identischen Argumenten ersetzen."""
+    time.sleep(0.35)
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+
+@app.post("/api/restart")
+def post_restart() -> dict:
+    threading.Thread(target=_exec_same_process, daemon=True).start()
     return {"ok": True}
 
 
