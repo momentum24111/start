@@ -17,7 +17,8 @@ export function setupDragDrop({ root, enabled, onMoveService, onMoveCategory }) 
     targetCategoryId: null,
     targetContainer: null,
     touchTimer: 0,
-    placeholder: null
+    placeholder: null,
+    rafPending: false
   };
 
   const setActiveContainer = (container) => {
@@ -35,7 +36,8 @@ export function setupDragDrop({ root, enabled, onMoveService, onMoveCategory }) 
     if (!state.placeholder) return;
     if (!container) return;
     setActiveContainer(container);
-    if (target && target !== state.dragEl && target.parentElement === container) {
+    if (target && (target === state.dragEl || target === state.placeholder)) return;
+    if (target && target.parentElement === container) {
       container.insertBefore(state.placeholder, target);
       return;
     }
@@ -72,18 +74,18 @@ export function setupDragDrop({ root, enabled, onMoveService, onMoveCategory }) 
     const beforeId = state.kind === "service"
       ? beforeNode?.dataset?.serviceId || null
       : beforeNode?.dataset?.categoryId || null;
-    if (state.kind === "service") {
-      await onMoveService(state.fromCategoryId, state.dragId, state.targetCategoryId || state.fromCategoryId, beforeId);
-    } else {
-      await onMoveCategory(state.dragId, beforeId);
+    try {
+      if (state.kind === "service") {
+        await onMoveService(state.fromCategoryId, state.dragId, state.targetCategoryId || state.fromCategoryId, beforeId);
+      } else {
+        await onMoveCategory(state.dragId, beforeId);
+      }
+    } finally {
+      clearState();
     }
-    clearState();
   };
 
-  const handleTouchMove = (event) => {
-    if (!state.kind || !state.dragEl) return;
-    const touch = event.touches[0];
-    if (!touch) return;
+  const updateTouchTarget = (touch) => {
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
     if (state.kind === "service") {
       const container = target?.closest?.("[data-services-container]");
@@ -94,10 +96,21 @@ export function setupDragDrop({ root, enabled, onMoveService, onMoveCategory }) 
       placePlaceholder(serviceTarget, container);
     } else {
       const categoryTarget = closestCategory(target);
-      const container = root;
-      state.targetContainer = container;
-      placePlaceholder(categoryTarget, container);
+      state.targetContainer = root;
+      placePlaceholder(categoryTarget, root);
     }
+  };
+
+  const handleTouchMove = (event) => {
+    if (!state.kind || !state.dragEl) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    if (state.rafPending) return;
+    state.rafPending = true;
+    window.requestAnimationFrame(() => {
+      state.rafPending = false;
+      updateTouchTarget(touch);
+    });
   };
 
   const handleTouchEnd = async () => {
@@ -124,6 +137,10 @@ export function setupDragDrop({ root, enabled, onMoveService, onMoveCategory }) 
         return;
       }
       event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", state.dragId || "");
+      const container = service.closest("[data-services-container]");
+      state.targetCategoryId = container?.dataset.categoryId || state.fromCategoryId;
+      placePlaceholder(service.nextElementSibling, container);
     });
     service.addEventListener("dragend", clearState);
   });
@@ -146,6 +163,8 @@ export function setupDragDrop({ root, enabled, onMoveService, onMoveCategory }) 
         return;
       }
       event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", state.dragId || "");
+      placePlaceholder(category.nextElementSibling, root);
     });
     category.addEventListener("dragend", clearState);
   });
@@ -178,6 +197,12 @@ export function setupDragDrop({ root, enabled, onMoveService, onMoveCategory }) 
     if (!state.kind) return;
     event.preventDefault();
     await finishDrag();
+  });
+
+  root.addEventListener("dragleave", (event) => {
+    if (!state.kind) return;
+    if (event.relatedTarget && root.contains(event.relatedTarget)) return;
+    setActiveContainer(null);
   });
 
   root.addEventListener("touchmove", handleTouchMove, { passive: true });

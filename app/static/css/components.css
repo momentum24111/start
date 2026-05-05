@@ -9,6 +9,13 @@ body {
   line-height: 1.4;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
 .hidden { display: none !important; }
 
 .topbar {
@@ -106,6 +113,7 @@ main {
   text-align: left;
   cursor: pointer;
   padding: 0.1rem 0;
+  font: inherit;
 }
 
 .category-title {
@@ -122,7 +130,11 @@ main {
 }
 
 .category-collapse { background: transparent; }
-.collapse-arrow { transition: transform 160ms ease; }
+.collapse-arrow {
+  transform: rotate(0deg);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
 .collapse-arrow.is-collapsed { transform: rotate(-90deg); }
 
 .category-icon {
@@ -155,19 +167,23 @@ main {
 }
 
 .category-content {
-  display: grid;
-  grid-template-rows: 1fr;
-  transition: grid-template-rows 180ms ease, opacity 180ms ease;
+  max-height: none;
+  overflow: hidden;
+  transition: max-height 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
   opacity: 1;
+  will-change: max-height, opacity;
 }
 
 .category-content.is-collapsed {
-  grid-template-rows: 0fr;
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .category-content > .services {
   overflow: hidden;
+}
+
+.category-content[data-collapsed="true"] {
+  opacity: 0.4;
 }
 
 .service {
@@ -386,6 +402,22 @@ select {
 .toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(20px); }
 
 .favicon-row { display: flex; align-items: center; gap: 0.45rem; }
+.icon-url-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.icon-url-controls input[name="iconUrl"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.icon-url-controls [data-fetch-favicon] {
+  flex: 0 0 auto;
+}
+
 .spinner {
   width: 14px;
   height: 14px;
@@ -400,6 +432,7 @@ select {
   opacity: 0.6;
   transform: scale(0.995);
   box-shadow: var(--dragging-shadow);
+  pointer-events: none;
 }
 .drag-handle { cursor: grab; color: var(--control-icon-muted); }
 .drag-handle:active { cursor: grabbing; }

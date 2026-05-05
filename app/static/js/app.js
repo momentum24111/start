@@ -171,12 +171,16 @@ function renderCategory(category) {
   card.dataset.categoryId = category.id;
 
   const servicesRoot = card.querySelector("[data-services-container]");
+  const content = card.querySelector(".category-content");
+  const arrow = card.querySelector(".collapse-arrow");
   for (const service of category.services || []) servicesRoot.append(renderService(category, service));
+  syncCategoryContentHeight(content, category.collapsed);
 
   card.querySelector("[data-toggle-collapse]").addEventListener("click", async () => {
-    category.collapsed = !category.collapsed;
+    const nextCollapsed = !category.collapsed;
+    animateCategoryCollapse(content, arrow, nextCollapsed);
+    category.collapsed = nextCollapsed;
     await persistConfig();
-    render();
   });
   card.querySelector("[data-add-service]")?.addEventListener("click", () => openServiceModal(category.id));
   card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
@@ -187,6 +191,51 @@ function renderCategory(category) {
     render();
   });
   return card;
+}
+
+function syncCategoryContentHeight(content, collapsed) {
+  if (!content) return;
+  content.dataset.collapsed = collapsed ? "true" : "false";
+  content.classList.toggle("is-collapsed", collapsed);
+  if (collapsed) {
+    content.style.maxHeight = "0px";
+  } else {
+    content.style.maxHeight = "none";
+  }
+}
+
+function animateCategoryCollapse(content, arrow, collapsed) {
+  if (!content || !arrow) return;
+  content.classList.add("is-animating");
+  content.dataset.collapsed = collapsed ? "true" : "false";
+  content.classList.toggle("is-collapsed", collapsed);
+  arrow.classList.toggle("is-collapsed", collapsed);
+
+  if (collapsed) {
+    const fullHeight = content.scrollHeight;
+    content.style.maxHeight = `${fullHeight}px`;
+    // Force layout so the browser picks up the start height before animating.
+    content.getBoundingClientRect();
+    content.style.maxHeight = "0px";
+  } else {
+    content.style.maxHeight = "0px";
+    // Force layout so opening always starts from collapsed state.
+    content.getBoundingClientRect();
+    const fullHeight = content.scrollHeight;
+    content.style.maxHeight = `${fullHeight}px`;
+  }
+
+  const onTransitionEnd = (event) => {
+    if (event.propertyName !== "max-height") return;
+    content.classList.remove("is-animating");
+    if (!collapsed) {
+      // Keep expanded cards flexible for later content changes/responsive wrap.
+      content.style.maxHeight = "none";
+    }
+    content.removeEventListener("transitionend", onTransitionEnd);
+  };
+
+  content.addEventListener("transitionend", onTransitionEnd);
 }
 
 function renderService(category, service) {
@@ -348,7 +397,10 @@ function openServiceModal(categoryId, service = null) {
     <div class="form-row">
       <label>${t("ui.iconUrl")}</label>
       <div>
-        <input name="iconUrl" type="url" value="${service?.iconUrl || ""}" />
+        <div class="icon-url-controls">
+          <input name="iconUrl" type="url" value="${service?.iconUrl || ""}" />
+          <button type="button" class="btn btn--ghost btn--compact" data-fetch-favicon>${t("ui.fetchFavicon")}</button>
+        </div>
         <div class="favicon-row">
           <span id="favicon-spinner" class="spinner hidden"></span>
           <img id="favicon-preview" class="icon-preview" src="${service?.cachedIcon || service?.iconUrl || "/static/assets/icons/default.svg"}" alt="" />
@@ -399,36 +451,35 @@ function openServiceModal(categoryId, service = null) {
   });
 
   const iconUrlInput = form.querySelector("input[name='iconUrl']");
+  const urlInput = form.querySelector("input[name='url']");
+  const fetchFaviconButton = form.querySelector("[data-fetch-favicon]");
   const status = form.querySelector("#favicon-status");
   const spinner = form.querySelector("#favicon-spinner");
   const preview = form.querySelector("#favicon-preview");
-  let faviconTimer = 0;
 
   const triggerFaviconLoad = async () => {
-    const value = String(iconUrlInput.value || "").trim();
+    const value = String(urlInput.value || "").trim();
     if (!value) return;
+    fetchFaviconButton.disabled = true;
     state.faviconLoading = true;
     spinner.classList.remove("hidden");
     status.textContent = t("ui.fetchingIcon");
     try {
       const result = await api.cacheFavicon(value);
       form.dataset.cachedIcon = result.path;
+      iconUrlInput.value = result.path;
       preview.src = result.path;
       status.textContent = "";
     } catch (_) {
       status.textContent = t("ui.faviconFailed");
     } finally {
+      fetchFaviconButton.disabled = false;
       state.faviconLoading = false;
       spinner.classList.add("hidden");
     }
   };
 
-  iconUrlInput.addEventListener("input", () => {
-    window.clearTimeout(faviconTimer);
-    faviconTimer = window.setTimeout(() => {
-      triggerFaviconLoad();
-    }, 350);
-  });
+  fetchFaviconButton.addEventListener("click", triggerFaviconLoad);
 }
 
 function openSettingsModal() {
@@ -487,13 +538,17 @@ function openSettingsModal() {
 
 async function moveService(fromCategoryId, serviceId, toCategoryId, beforeServiceId) {
   if (!state.editMode) return;
-  if (fromCategoryId === toCategoryId && !beforeServiceId) return;
   const source = state.config.categories.find((c) => c.id === fromCategoryId);
   const target = state.config.categories.find((c) => c.id === toCategoryId);
   if (!source || !target) return;
-  pushUndo();
   const index = source.services.findIndex((s) => s.id === serviceId);
   if (index < 0) return;
+  if (fromCategoryId === toCategoryId) {
+    const currentPos = index;
+    const targetPos = beforeServiceId ? target.services.findIndex((s) => s.id === beforeServiceId) : target.services.length;
+    if (targetPos < 0 || currentPos === targetPos || currentPos + 1 === targetPos) return;
+  }
+  pushUndo();
   const [entry] = source.services.splice(index, 1);
   const insertAt = beforeServiceId ? target.services.findIndex((s) => s.id === beforeServiceId) : -1;
   target.services.splice(insertAt >= 0 ? insertAt : target.services.length, 0, entry);
@@ -505,10 +560,12 @@ async function moveCategory(categoryId, beforeCategoryId) {
   const list = state.config.categories;
   const from = list.findIndex((entry) => entry.id === categoryId);
   if (from < 0) return;
+  const targetIndex = beforeCategoryId ? list.findIndex((entry) => entry.id === beforeCategoryId) : list.length;
+  if (targetIndex < 0 || from === targetIndex || from + 1 === targetIndex) return;
   pushUndo();
   const [category] = list.splice(from, 1);
-  const targetIndex = beforeCategoryId ? list.findIndex((entry) => entry.id === beforeCategoryId) : -1;
-  list.splice(targetIndex >= 0 ? targetIndex : list.length, 0, category);
+  const insertIndex = beforeCategoryId ? list.findIndex((entry) => entry.id === beforeCategoryId) : -1;
+  list.splice(insertIndex >= 0 ? insertIndex : list.length, 0, category);
   await persistConfig();
   render();
 }
