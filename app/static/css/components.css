@@ -62,7 +62,9 @@ body {
 }
 
 .btn__label {
-  line-height: 1;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 main {
@@ -71,8 +73,10 @@ main {
 
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 420px));
   gap: 1rem;
+  justify-content: start;
+  align-items: start;
 }
 
 .category {
@@ -92,8 +96,15 @@ main {
 .category-title {
   display: flex;
   gap: 0.6rem;
-  align-items: center;
+  align-items: flex-start;
   font-weight: 700;
+  min-width: 0;
+}
+
+.category-title .btn {
+  flex: 1;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .category-icon {
@@ -110,22 +121,26 @@ main {
 .services {
   margin-top: 0.7rem;
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
   gap: 0.5rem;
+  align-items: start;
 }
 
 .service {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.45rem;
   border: 1px solid var(--border);
   background: var(--surface-2);
   border-radius: 4px;
   padding: 0.55rem;
+  min-height: 56px;
 }
 
 .service-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.55rem;
   min-width: 0;
   color: inherit;
@@ -139,9 +154,9 @@ main {
 }
 
 .service-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .fab {
@@ -313,12 +328,16 @@ select {
 
 @media (max-width: 900px) {
   .category-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   }
 }
 
 @media (max-width: 650px) {
   .category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .services {
     grid-template-columns: 1fr;
   }
 
