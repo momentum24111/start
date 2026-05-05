@@ -83,7 +83,7 @@ function wireEvents() {
   });
   elements.undo.addEventListener("click", undo);
   elements.settings.addEventListener("click", openSettingsModal);
-  elements.addCategory.addEventListener("click", () => openCategoryModal());
+  elements.addCategory?.addEventListener("click", () => openCategoryModal());
 }
 
 function pushUndo() {
@@ -173,9 +173,9 @@ function renderCategory(category) {
     await persistConfig();
     render();
   });
-  card.querySelector("[data-add-service]").addEventListener("click", () => openServiceModal(category.id));
-  card.querySelector("[data-edit-category]").addEventListener("click", () => openCategoryModal(category));
-  card.querySelector("[data-delete-category]").addEventListener("click", async () => {
+  card.querySelector("[data-add-service]")?.addEventListener("click", () => openServiceModal(category.id));
+  card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
+  card.querySelector("[data-delete-category]")?.addEventListener("click", async () => {
     pushUndo();
     state.config.categories = state.config.categories.filter((c) => c.id !== category.id);
     await persistConfig();
