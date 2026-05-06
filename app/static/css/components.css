@@ -293,6 +293,7 @@ main {
   width: min(640px, 100%);
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
+  overflow-x: hidden;
   border-radius: 4px;
   border: 0;
   background: var(--surface);
@@ -330,6 +331,8 @@ main {
   margin-bottom: 0.6rem;
 }
 .form-row.form-row--range {
+  margin-top: 0.95rem;
+  margin-bottom: 0.95rem;
   align-items: center;
 }
 .settings-form .form-row > label {
@@ -517,6 +520,7 @@ select {
   position: relative;
   width: 100%;
   overflow: visible;
+  padding-inline: 0.85rem;
   --range-percent: 50%;
 }
 
@@ -569,7 +573,7 @@ select {
 
 .range-value {
   position: absolute;
-  top: -0.35rem;
+  top: -0.5rem;
   transform: translate(-50%, -100%);
   color: var(--range-tooltip-text);
   font-size: 0.78rem;
