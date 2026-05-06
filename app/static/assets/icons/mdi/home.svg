@@ -1,3 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <path d="M12 3 3 10h2v10h5v-6h4v6h5V10h2z" fill="currentColor"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" id="mdi-home" viewBox="0 0 24 24"><path d="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" /></svg>

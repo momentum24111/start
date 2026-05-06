@@ -147,7 +147,7 @@ main {
 .category-icon {
   width: 22px;
   height: 22px;
-  filter: var(--category-icon-filter);
+  color: var(--text);
 }
 
 .category-actions,
@@ -474,8 +474,24 @@ select {
 
 .icon-preview,
 .inline-icon { width: 18px; height: 18px; }
+
+.mdi-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask-image: var(--mdi-icon-url);
+  mask-image: var(--mdi-icon-url);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
 .icon-preview--theme {
-  filter: var(--category-icon-filter);
+  color: var(--text);
 }
 
 .color-options { display: flex; flex-wrap: wrap; gap: 0.45rem; }

@@ -35,7 +35,6 @@ body {
   --range-tooltip-bg: #2e4566;
   --range-tooltip-text: #ecf2fb;
   --category-accent-strength: 15%;
-  --category-icon-filter: invert(95%) sepia(11%) saturate(292%) hue-rotate(177deg) brightness(101%) contrast(96%);
   --cat-primary: #6ea6ff;
   --cat-teal: #38b9b2;
   --cat-blue: #5f8dff;

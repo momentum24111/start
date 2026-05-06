@@ -36,39 +36,14 @@ const ICONS = {
   restart: "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
 };
 
-const MDI_ICONS = [
-  "server", "folder", "home", "wrench", "monitor", "database", "network", "shield", "cloud", "web"
-];
-const ICON_OPTION_CATALOG = [
-  { label: "server", icon: "server" }, { label: "host", icon: "server" }, { label: "node", icon: "server" }, { label: "hypervisor", icon: "server" },
-  { label: "proxmox", icon: "server" }, { label: "vm", icon: "server" }, { label: "virtual machine", icon: "server" }, { label: "compute", icon: "server" },
-  { label: "cluster", icon: "server" }, { label: "rack", icon: "server" }, { label: "container host", icon: "server" }, { label: "hardware", icon: "server" },
-  { label: "cloud", icon: "cloud" }, { label: "backup", icon: "cloud" }, { label: "sync", icon: "cloud" }, { label: "remote", icon: "cloud" },
-  { label: "saas", icon: "cloud" }, { label: "drive", icon: "cloud" }, { label: "storage cloud", icon: "cloud" }, { label: "object storage", icon: "cloud" },
-  { label: "network", icon: "network" }, { label: "lan", icon: "network" }, { label: "router", icon: "network" }, { label: "switch", icon: "network" },
-  { label: "gateway", icon: "network" }, { label: "dns", icon: "network" }, { label: "dhcp", icon: "network" }, { label: "firewall network", icon: "network" },
-  { label: "wireguard", icon: "network" }, { label: "vpn network", icon: "network" }, { label: "connection", icon: "network" }, { label: "internet", icon: "network" },
-  { label: "database", icon: "database" }, { label: "db", icon: "database" }, { label: "mysql", icon: "database" }, { label: "mariadb", icon: "database" },
-  { label: "postgres", icon: "database" }, { label: "redis", icon: "database" }, { label: "influxdb", icon: "database" }, { label: "mongodb", icon: "database" },
-  { label: "timeseries", icon: "database" }, { label: "data", icon: "database" }, { label: "analytics", icon: "database" }, { label: "warehouse", icon: "database" },
-  { label: "web", icon: "web" }, { label: "browser", icon: "web" }, { label: "website", icon: "web" }, { label: "portal", icon: "web" },
-  { label: "dashboard", icon: "web" }, { label: "grafana", icon: "web" }, { label: "search", icon: "web" }, { label: "wiki", icon: "web" },
-  { label: "docs web", icon: "web" }, { label: "mail web", icon: "web" }, { label: "calendar web", icon: "web" }, { label: "media web", icon: "web" },
-  { label: "monitor", icon: "monitor" }, { label: "monitoring", icon: "monitor" }, { label: "status", icon: "monitor" }, { label: "uptime", icon: "monitor" },
-  { label: "observability", icon: "monitor" }, { label: "metrics", icon: "monitor" }, { label: "logs", icon: "monitor" }, { label: "screen", icon: "monitor" },
-  { label: "desktop", icon: "monitor" }, { label: "kiosk", icon: "monitor" }, { label: "display", icon: "monitor" }, { label: "control panel", icon: "monitor" },
-  { label: "shield", icon: "shield" }, { label: "security", icon: "shield" }, { label: "auth", icon: "shield" }, { label: "sso", icon: "shield" },
-  { label: "identity", icon: "shield" }, { label: "password", icon: "shield" }, { label: "vault", icon: "shield" }, { label: "certificate", icon: "shield" },
-  { label: "policy", icon: "shield" }, { label: "access", icon: "shield" }, { label: "guard", icon: "shield" }, { label: "secure", icon: "shield" },
-  { label: "folder", icon: "folder" }, { label: "files", icon: "folder" }, { label: "documents", icon: "folder" }, { label: "photos", icon: "folder" },
-  { label: "video", icon: "folder" }, { label: "downloads", icon: "folder" }, { label: "media", icon: "folder" }, { label: "archive", icon: "folder" },
-  { label: "library", icon: "folder" }, { label: "share", icon: "folder" }, { label: "project", icon: "folder" }, { label: "workspace", icon: "folder" },
-  { label: "home", icon: "home" }, { label: "house", icon: "home" }, { label: "start", icon: "home" }, { label: "landing", icon: "home" },
-  { label: "main", icon: "home" }, { label: "portal home", icon: "home" }, { label: "local", icon: "home" }, { label: "family", icon: "home" },
-  { label: "wrench", icon: "wrench" }, { label: "tools", icon: "wrench" }, { label: "settings", icon: "wrench" }, { label: "admin", icon: "wrench" },
-  { label: "automation", icon: "wrench" }, { label: "ci", icon: "wrench" }, { label: "cd", icon: "wrench" }, { label: "pipeline", icon: "wrench" },
-  { label: "development", icon: "wrench" }, { label: "builder", icon: "wrench" }, { label: "ops", icon: "wrench" }, { label: "maintenance", icon: "wrench" }
-];
+const FALLBACK_MDI_ICON = "folder";
+const MDI_INDEX_PATH = "/static/assets/icons/mdi-index.json";
+const mdiRegistry = {
+  loaded: false,
+  list: [],
+  byName: new Set(),
+  searchPool: []
+};
 const COLOR_OPTIONS = ["primary", "teal", "blue", "violet", "amber", "pink", "indigo", "emerald", "orange", "slate"];
 
 const uid = () => {
@@ -204,12 +179,59 @@ async function runAppRestartFromSettings() {
 }
 const mdiPath = (name) => `/static/assets/icons/mdi/${name}.svg`;
 
-function iconSvg(path, extraClass = "") {
-  return `<svg class="${extraClass}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${path}"></path></svg>`;
+function normalizeMdiIconName(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (mdiRegistry.byName.has(normalized)) return normalized;
+  return FALLBACK_MDI_ICON;
 }
 
 function mdiIcon(name, extraClass = "") {
-  return `<img class="${extraClass}" loading="lazy" src="${mdiPath(name)}" alt="" onerror="this.src='/static/assets/icons/default.svg';this.onerror=null;">`;
+  const normalizedName = normalizeMdiIconName(name);
+  const classes = ["mdi-icon", extraClass].filter(Boolean).join(" ");
+  return `<span class="${classes}" style="--mdi-icon-url:url('${mdiPath(normalizedName)}');" aria-hidden="true"></span>`;
+}
+
+function getMdiSearchResults(query, limit = 24) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  if (!normalizedQuery) {
+    return mdiRegistry.list.slice(0, limit).map((entry) => ({ icon: entry.name, label: entry.name }));
+  }
+  const matches = [];
+  for (const entry of mdiRegistry.searchPool) {
+    if (entry.search.includes(normalizedQuery)) {
+      matches.push({ icon: entry.name, label: entry.name });
+      if (matches.length >= limit) break;
+    }
+  }
+  return matches;
+}
+
+async function loadMdiRegistry() {
+  if (mdiRegistry.loaded) return;
+  const response = await fetch(MDI_INDEX_PATH, { cache: "force-cache" });
+  if (!response.ok) {
+    throw new Error(`Failed to load local MDI index (${response.status})`);
+  }
+  const payload = await response.json();
+  const rawIcons = Array.isArray(payload?.icons) ? payload.icons : [];
+  const mapped = rawIcons
+    .map((entry) => {
+      const name = String(entry?.name || "").trim().toLowerCase();
+      if (!name) return null;
+      const keywords = Array.isArray(entry?.keywords)
+        ? entry.keywords.map((keyword) => String(keyword || "").trim().toLowerCase()).filter(Boolean)
+        : [];
+      return { name, search: [name, ...keywords].join(" ") };
+    })
+    .filter(Boolean);
+  mdiRegistry.list = mapped;
+  mdiRegistry.byName = new Set(mapped.map((entry) => entry.name));
+  mdiRegistry.searchPool = mapped;
+  mdiRegistry.loaded = true;
+}
+
+function iconSvg(path, extraClass = "") {
+  return `<svg class="${extraClass}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${path}"></path></svg>`;
 }
 
 function button({ label = "", icon, dataAttr = "", variant = "", className = "", iconOnly = false }) {
@@ -217,6 +239,7 @@ function button({ label = "", icon, dataAttr = "", variant = "", className = "",
 }
 
 async function bootstrap() {
+  await loadMdiRegistry();
   const [config, settings, themes, languages] = await Promise.all([
     api.getConfig(),
     api.getSettings(),
@@ -368,7 +391,7 @@ function renderCategory(category) {
     <div class="category-header">
       <button type="button" class="category-header-main" data-toggle-collapse>
         ${iconSvg(ICONS.chevron, `inline-icon collapse-arrow ${isCollapsed ? "is-collapsed" : ""}`)}
-        ${mdiIcon(category.icon || "folder", "category-icon")}
+        ${mdiIcon(category.icon || FALLBACK_MDI_ICON, "category-icon")}
         <span class="category-name">${category.name}</span>
       </button>
       <div class="category-actions ${state.editMode ? "" : "hidden"}">
@@ -534,8 +557,8 @@ function openCategoryModal(category = null) {
       <label>${t("ui.icon")}</label>
       <div>
         <div class="icon-input-wrap">
-          <span class="icon-input-preview" data-selected-icon-preview>${mdiIcon(category?.icon || "folder", "icon-preview icon-preview--theme")}</span>
-          <input name="icon" value="${category?.icon || "folder"}" autocomplete="off" />
+          <span class="icon-input-preview" data-selected-icon-preview>${mdiIcon(category?.icon || FALLBACK_MDI_ICON, "icon-preview icon-preview--theme")}</span>
+          <input name="icon" value="${normalizeMdiIconName(category?.icon || FALLBACK_MDI_ICON)}" autocomplete="off" />
         </div>
         <div class="icon-search-results" data-icon-results></div>
       </div>
@@ -578,16 +601,17 @@ function openCategoryModal(category = null) {
       if (!form.reportValidity()) return false;
       const fd = new FormData(form);
       pushUndo();
+      const selectedIcon = normalizeMdiIconName(fd.get("icon"));
       if (isEdit) {
         category.name = fd.get("name");
-        category.icon = fd.get("icon");
+        category.icon = selectedIcon;
         category.color = fd.get("color");
         category.collapsed = form.querySelector("input[name='collapsed']").checked;
       } else {
         state.config.categories.push({
           id: uid(),
           name: fd.get("name"),
-          icon: fd.get("icon"),
+          icon: selectedIcon,
           color: fd.get("color"),
           collapsed: form.querySelector("input[name='collapsed']").checked,
           services: []
@@ -601,19 +625,14 @@ function openCategoryModal(category = null) {
   const input = form.querySelector("input[name='icon']");
   const results = form.querySelector("[data-icon-results]");
   const selectedPreview = form.querySelector("[data-selected-icon-preview]");
-  const allSearchTokens = ICON_OPTION_CATALOG.map((entry) => ({
-    token: entry.label.toLowerCase(),
-    label: entry.label,
-    icon: entry.icon
-  }));
   const applySelectedIcon = (iconName) => {
-    input.value = iconName;
-    selectedPreview.innerHTML = mdiIcon(iconName, "icon-preview icon-preview--theme");
+    const normalizedName = normalizeMdiIconName(iconName);
+    input.value = normalizedName;
+    selectedPreview.innerHTML = mdiIcon(normalizedName, "icon-preview icon-preview--theme");
   };
   const renderIconResults = () => {
-    const query = String(input.value || "").toLowerCase();
-    const matched = query ? allSearchTokens.filter((entry) => entry.token.includes(query)) : [];
-    const filtered = matched.slice(0, 16);
+    const query = String(input.value || "");
+    const filtered = getMdiSearchResults(query, 32);
     results.classList.toggle("is-open", filtered.length > 0);
     results.innerHTML = filtered
       .map((entry) => `<button type="button" class="icon-search-item" data-icon-pick="${entry.icon}">${mdiIcon(entry.icon, "icon-preview icon-preview--theme")}<span>${entry.label}</span></button>`)
@@ -632,8 +651,8 @@ function openCategoryModal(category = null) {
     window.setTimeout(() => {
       results.classList.remove("is-open");
       results.innerHTML = "";
-      if (!MDI_ICONS.includes(input.value)) {
-        applySelectedIcon(category?.icon || "folder");
+      if (!mdiRegistry.byName.has(String(input.value || "").toLowerCase())) {
+        applySelectedIcon(category?.icon || FALLBACK_MDI_ICON);
       } else {
         applySelectedIcon(input.value);
       }
@@ -646,7 +665,7 @@ function openCategoryModal(category = null) {
       colorButton.classList.add("is-active");
     });
   });
-  applySelectedIcon(category?.icon || "folder");
+  applySelectedIcon(category?.icon || FALLBACK_MDI_ICON);
   results.classList.remove("is-open");
   results.innerHTML = "";
 }
