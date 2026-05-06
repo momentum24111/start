@@ -14,6 +14,7 @@ function keyHandler(event) {
     event.preventDefault();
     activeModal.close("cancel");
   }
+  if (activeModal.submitOnEnter === false) return;
   if (event.key === "Enter" && !event.shiftKey) {
     const target = event.target;
     if (target && (target.tagName === "TEXTAREA" || target.dataset.enterSubmit === "false")) return;
@@ -65,7 +66,20 @@ async function closeModal(reason = "cancel") {
   resolve?.();
 }
 
-export function showModal({ title, content, onSave, onCancel, saveLabel = "Save", cancelLabel = "Cancel", leadingActions = [] }) {
+export function showModal({
+  title,
+  content,
+  onSave,
+  onCancel,
+  saveLabel = "Save",
+  cancelLabel = "Cancel",
+  leadingActions = [],
+  showSave = true,
+  showCancel = true,
+  cancelVariant = "btn--ghost",
+  submitOnEnter = true,
+  modalClass = ""
+}) {
   const root = document.getElementById("modal-root");
   const overlay = document.createElement("div");
   const leadingButtons = leadingActions
@@ -79,13 +93,14 @@ export function showModal({ title, content, onSave, onCancel, saveLabel = "Save"
       <div class="modal-actions">
         <div class="modal-actions-leading">${leadingButtons}</div>
         <div class="modal-actions-trailing">
-          <button type="button" class="btn btn--ghost" data-cancel>${icon(CANCEL_ICON)}<span class="btn__label">${cancelLabel}</span></button>
-          <button type="button" class="btn" data-save>${icon(SAVE_ICON)}<span class="btn__label">${saveLabel}</span></button>
+          ${showCancel ? `<button type="button" class="btn ${cancelVariant}" data-cancel>${icon(CANCEL_ICON)}<span class="btn__label">${cancelLabel}</span></button>` : ""}
+          ${showSave ? `<button type="button" class="btn" data-save>${icon(SAVE_ICON)}<span class="btn__label">${saveLabel}</span></button>` : ""}
         </div>
       </div>
     </section>
   `;
   const modal = overlay.querySelector(".modal");
+  if (modalClass) modal.classList.add(modalClass);
   overlay.querySelector(".modal-content").append(content);
 
   let overlayPointerDown = false;
@@ -107,10 +122,10 @@ export function showModal({ title, content, onSave, onCancel, saveLabel = "Save"
     }
   };
 
-  overlay.querySelector("[data-cancel]").addEventListener("click", () => {
+  overlay.querySelector("[data-cancel]")?.addEventListener("click", () => {
     closeModal("cancel");
   });
-  overlay.querySelector("[data-save]").addEventListener("click", () => {
+  overlay.querySelector("[data-save]")?.addEventListener("click", () => {
     save();
   });
   overlay.querySelectorAll("[data-leading-action]").forEach((buttonEl) => {
@@ -134,7 +149,8 @@ export function showModal({ title, content, onSave, onCancel, saveLabel = "Save"
     modal,
     onCancel,
     save,
-    close: closeModal
+    close: closeModal,
+    submitOnEnter
   };
   return new Promise((resolve) => {
     activeModal.resolve = resolve;

@@ -303,6 +303,7 @@ function renderCategory(category) {
   const card = document.createElement("article");
   card.className = `category ${state.editMode ? "is-edit-mode" : ""}`;
   card.dataset.color = category.color || "primary";
+  card.classList.toggle("is-collapsed", isCollapsed);
   card.innerHTML = `
     <div class="category-header">
       <button type="button" class="category-header-main" data-toggle-collapse>
@@ -328,12 +329,23 @@ function renderCategory(category) {
   for (const service of category.services || []) servicesRoot.append(renderService(category, service));
   syncCategoryContentHeight(content, isCollapsed);
 
-  card.querySelector("[data-toggle-collapse]").addEventListener("click", async () => {
+  const toggleCollapse = async () => {
     if (state.editMode) return;
     const nextCollapsed = !category.collapsed;
     animateCategoryCollapse(content, arrow, nextCollapsed);
     category.collapsed = nextCollapsed;
+    card.classList.toggle("is-collapsed", nextCollapsed);
     await persistConfig();
+  };
+  card.querySelector("[data-toggle-collapse]").addEventListener("click", async (event) => {
+    event.stopPropagation();
+    await toggleCollapse();
+  });
+  card.addEventListener("click", async (event) => {
+    if (!category.collapsed || state.editMode) return;
+    const interactive = event.target.closest("button, a, input, select, textarea, .service, .category-actions");
+    if (interactive) return;
+    await toggleCollapse();
   });
   card.querySelector("[data-add-service]")?.addEventListener("click", () => openServiceModal(category.id));
   card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
@@ -550,20 +562,20 @@ function openServiceModal(categoryId, service = null) {
       <div>
         <div class="icon-url-controls">
           <input name="iconUrl" value="${service?.iconUrl || ""}" />
+          <div class="icon-preview-box">
+            <span id="favicon-spinner" class="spinner hidden" aria-hidden="true"></span>
+            <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
+          </div>
           <button type="button" class="btn btn--ghost btn--compact" data-fetch-favicon>${t("ui.fetchFavicon")}</button>
         </div>
-        <div class="favicon-row">
-          <span id="favicon-spinner" class="spinner hidden"></span>
-          <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
-          <small id="favicon-status"></small>
-        </div>
+        <small id="favicon-status"></small>
       </div>
     </div>
     <div class="form-row">
       <label>${t("ui.openMode")}</label>
       <select name="openMode">
-        <option value="new-tab" ${service?.openMode !== "current-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
-        <option value="current-tab" ${service?.openMode === "current-tab" ? "selected" : ""}>${t("ui.currentTab")}</option>
+        <option value="current-tab" ${service?.openMode !== "new-tab" ? "selected" : ""}>${t("ui.currentTab")}</option>
+        <option value="new-tab" ${service?.openMode === "new-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
       </select>
     </div>
   `;
@@ -678,7 +690,9 @@ function openServiceModal(categoryId, service = null) {
 
 function openSettingsModal() {
   const form = document.createElement("form");
+  form.className = "settings-form";
   const currentStrength = normalizeCategoryAccentStrength(state.settings.categoryAccentStrength);
+  const currentStrengthPercent = `${currentStrength}%`;
   const themeButtons = state.themes
     .map((theme) => `<button type="button" class="theme-option ${state.settings.theme === theme ? "active" : ""}" data-theme="${theme}">${theme}</button>`)
     .join("");
@@ -706,55 +720,86 @@ function openSettingsModal() {
     </div>
     <div class="form-row">
       <label>${t("ui.categoryAccentStrength")}</label>
-      <div>
+      <div class="range-control" style="--range-percent:${currentStrengthPercent}">
         <input name="categoryAccentStrength" type="range" min="0" max="100" step="5" value="${currentStrength}" />
-        <small data-category-accent-strength-value>${currentStrength}%</small>
+        <small class="range-value" data-category-accent-strength-value style="left:${currentStrengthPercent}">${currentStrengthPercent}</small>
       </div>
     </div>
     <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
       <label id="settings-actions-heading" for="restart-app-btn">${t("ui.actions")}</label>
       <div>
-        <button type="button" class="btn" id="restart-app-btn" data-restart-app><span class="btn__icon">${iconSvg(ICONS.restart, "inline-icon")}</span><span class="btn__label">${t("ui.restartApp")}</span></button>
+        <button type="button" class="btn btn--ghost" id="restart-app-btn" data-restart-app><span class="btn__icon">${iconSvg(ICONS.restart, "inline-icon")}</span><span class="btn__label">${t("ui.restartApp")}</span></button>
       </div>
     </div>
   `;
   form.querySelector("[data-restart-app]")?.addEventListener("click", () => {
     void runAppRestartFromSettings();
   });
+  let persistTimer = null;
+  let persistChain = Promise.resolve();
+  const scheduleSettingsPersist = (delayMs = 250) => {
+    if (persistTimer) window.clearTimeout(persistTimer);
+    persistTimer = window.setTimeout(() => {
+      const snapshot = deepClone(state.settings);
+      persistChain = persistChain
+        .then(async () => {
+          await api.saveSettings(snapshot);
+          const fresh = await api.getSettings();
+          state.settings = {
+            ...state.settings,
+            ...fresh,
+            categoryAccentStrength: normalizeCategoryAccentStrength(fresh?.categoryAccentStrength)
+          };
+          applyTheme(state.settings.theme);
+          applyCategoryAccentStrength(state.settings.categoryAccentStrength);
+          await initI18n(state.settings.language);
+          render();
+        })
+        .catch(() => {});
+    }, delayMs);
+  };
+  form.querySelector("input[name='appTitle']")?.addEventListener("input", (event) => {
+    state.settings.appTitle = event.target.value || "Start";
+    render();
+    scheduleSettingsPersist();
+  });
+  form.querySelector("select[name='language']")?.addEventListener("change", (event) => {
+    state.settings.language = event.target.value;
+    scheduleSettingsPersist(0);
+  });
   form.querySelectorAll("[data-theme]").forEach((button) => {
     button.addEventListener("click", () => {
       form.querySelector("input[name='theme']").value = button.dataset.theme;
       form.querySelectorAll("[data-theme]").forEach((b) => b.classList.remove("active"));
       button.classList.add("active");
+      state.settings.theme = button.dataset.theme;
+      applyTheme(state.settings.theme);
+      scheduleSettingsPersist(0);
     });
   });
   const categoryAccentStrengthInput = form.querySelector("input[name='categoryAccentStrength']");
   const categoryAccentStrengthValue = form.querySelector("[data-category-accent-strength-value]");
   categoryAccentStrengthInput?.addEventListener("input", () => {
     const normalized = normalizeCategoryAccentStrength(categoryAccentStrengthInput.value);
+    const normalizedPercent = `${normalized}%`;
+    const rangeControl = categoryAccentStrengthInput.closest(".range-control");
     categoryAccentStrengthInput.value = String(normalized);
-    categoryAccentStrengthValue.textContent = `${normalized}%`;
+    if (rangeControl) rangeControl.style.setProperty("--range-percent", normalizedPercent);
+    categoryAccentStrengthValue.textContent = normalizedPercent;
+    categoryAccentStrengthValue.style.left = normalizedPercent;
+    state.settings.categoryAccentStrength = normalized;
+    applyCategoryAccentStrength(normalized);
+    scheduleSettingsPersist();
   });
 
   showModal({
     title: t("ui.settings"),
     content: form,
-    saveLabel: t("ui.save"),
-    cancelLabel: t("ui.cancel"),
-    onSave: async () => {
-      if (!form.reportValidity()) return false;
-      const fd = new FormData(form);
-      pushUndo();
-      state.settings.appTitle = fd.get("appTitle");
-      state.settings.theme = fd.get("theme");
-      state.settings.language = fd.get("language");
-      state.settings.categoryAccentStrength = normalizeCategoryAccentStrength(fd.get("categoryAccentStrength"));
-      await persistSettings();
-      applyTheme(state.settings.theme);
-      applyCategoryAccentStrength(state.settings.categoryAccentStrength);
-      await initI18n(state.settings.language);
-      render();
-    }
+    cancelLabel: t("ui.close"),
+    showSave: false,
+    cancelVariant: "",
+    submitOnEnter: false,
+    modalClass: "modal--settings"
   });
 }
 
