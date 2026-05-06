@@ -266,18 +266,12 @@ async function undo() {
 
 function render() {
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
-  document.documentElement.lang = state.settings.language || "en";
-  document.title = state.settings.appTitle || "Start";
-  elements.title.textContent = state.settings.appTitle || "Start";
+  updateDocumentLanguage();
+  updateAppTitleUI();
   elements.undo.innerHTML = iconSvg(ICONS.undo, "inline-icon");
   elements.edit.innerHTML = iconSvg(ICONS.edit, "inline-icon");
   elements.settings.innerHTML = iconSvg(ICONS.settings, "inline-icon");
-  elements.undo.title = t("ui.undo");
-  elements.edit.title = t("ui.edit");
-  elements.settings.title = t("ui.settings");
-  elements.undo.setAttribute("aria-label", t("ui.undo"));
-  elements.edit.setAttribute("aria-label", t("ui.edit"));
-  elements.settings.setAttribute("aria-label", t("ui.settings"));
+  updateTopbarActionTexts();
   elements.edit.classList.toggle("is-active", state.editMode);
   elements.undo.classList.toggle("hidden", !state.editMode || state.undoStack.length === 0);
   elements.addCategory.classList.add("hidden");
@@ -295,6 +289,36 @@ function render() {
     enabled: state.editMode,
     onMoveService: moveService,
     onMoveCategory: moveCategory
+  });
+}
+
+function updateDocumentLanguage() {
+  document.documentElement.lang = state.settings.language || "en";
+}
+
+function updateAppTitleUI() {
+  const title = state.settings.appTitle || "Start";
+  document.title = title;
+  elements.title.textContent = title;
+}
+
+function updateTopbarActionTexts() {
+  elements.undo.title = t("ui.undo");
+  elements.edit.title = t("ui.edit");
+  elements.settings.title = t("ui.settings");
+  elements.undo.setAttribute("aria-label", t("ui.undo"));
+  elements.edit.setAttribute("aria-label", t("ui.edit"));
+  elements.settings.setAttribute("aria-label", t("ui.settings"));
+}
+
+function refreshStaticLocalizedTexts() {
+  updateDocumentLanguage();
+  updateTopbarActionTexts();
+  document.querySelectorAll("[data-add-service] .service-name").forEach((entry) => {
+    entry.textContent = t("ui.addService");
+  });
+  document.querySelectorAll("[data-add-category] .btn__label").forEach((entry) => {
+    entry.textContent = t("ui.addCategory");
   });
 }
 
@@ -744,27 +768,19 @@ function openSettingsModal() {
       persistChain = persistChain
         .then(async () => {
           await api.saveSettings(snapshot);
-          const fresh = await api.getSettings();
-          state.settings = {
-            ...state.settings,
-            ...fresh,
-            categoryAccentStrength: normalizeCategoryAccentStrength(fresh?.categoryAccentStrength)
-          };
-          applyTheme(state.settings.theme);
-          applyCategoryAccentStrength(state.settings.categoryAccentStrength);
-          await initI18n(state.settings.language);
-          render();
         })
         .catch(() => {});
     }, delayMs);
   };
   form.querySelector("input[name='appTitle']")?.addEventListener("input", (event) => {
     state.settings.appTitle = event.target.value || "Start";
-    render();
+    updateAppTitleUI();
     scheduleSettingsPersist();
   });
-  form.querySelector("select[name='language']")?.addEventListener("change", (event) => {
+  form.querySelector("select[name='language']")?.addEventListener("change", async (event) => {
     state.settings.language = event.target.value;
+    await initI18n(state.settings.language);
+    refreshStaticLocalizedTexts();
     scheduleSettingsPersist(0);
   });
   form.querySelectorAll("[data-theme]").forEach((button) => {
@@ -779,6 +795,8 @@ function openSettingsModal() {
   });
   const categoryAccentStrengthInput = form.querySelector("input[name='categoryAccentStrength']");
   const categoryAccentStrengthValue = form.querySelector("[data-category-accent-strength-value]");
+  const showRangeTooltip = () => categoryAccentStrengthValue.classList.add("is-visible");
+  const hideRangeTooltip = () => categoryAccentStrengthValue.classList.remove("is-visible");
   categoryAccentStrengthInput?.addEventListener("input", () => {
     const normalized = normalizeCategoryAccentStrength(categoryAccentStrengthInput.value);
     const normalizedPercent = `${normalized}%`;
@@ -791,6 +809,12 @@ function openSettingsModal() {
     applyCategoryAccentStrength(normalized);
     scheduleSettingsPersist();
   });
+  categoryAccentStrengthInput?.addEventListener("pointerdown", showRangeTooltip);
+  categoryAccentStrengthInput?.addEventListener("pointerup", hideRangeTooltip);
+  categoryAccentStrengthInput?.addEventListener("pointercancel", hideRangeTooltip);
+  categoryAccentStrengthInput?.addEventListener("blur", hideRangeTooltip);
+  categoryAccentStrengthInput?.addEventListener("keydown", showRangeTooltip);
+  categoryAccentStrengthInput?.addEventListener("keyup", hideRangeTooltip);
 
   showModal({
     title: t("ui.settings"),

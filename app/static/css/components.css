@@ -280,6 +280,7 @@ main {
 .modal-overlay {
   position: fixed;
   inset: 0;
+  z-index: 1000;
   background: var(--overlay-bg);
   display: grid;
   place-items: center;
@@ -569,6 +570,12 @@ select {
   font-size: 0.78rem;
   line-height: 1;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.range-value.is-visible {
+  opacity: 1;
 }
 
 .spinner {
