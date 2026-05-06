@@ -232,10 +232,12 @@ function pushUndo() {
 
 async function persistConfig() {
   await api.saveConfig(state.config);
+  state.config = await api.getConfig();
 }
 
 async function persistSettings() {
   await api.saveSettings(state.settings);
+  state.settings = await api.getSettings();
 }
 
 async function undo() {

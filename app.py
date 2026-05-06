@@ -43,6 +43,8 @@ RUNTIME_STATE: dict = {
     "last_written_file": None,
     "last_written_at": None,
     "last_write_context": None,
+    "last_config_put_summary": None,
+    "last_settings_put_summary": None,
 }
 
 
@@ -308,6 +310,19 @@ def get_config() -> dict:
 
 @app.put("/api/config")
 def put_config(payload: dict) -> dict:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    categories = payload.get("categories", []) if isinstance(payload, dict) else []
+    service_count = 0
+    for entry in categories if isinstance(categories, list) else []:
+        if isinstance(entry, dict):
+            service_count += len(entry.get("services", []) or [])
+    RUNTIME_STATE["last_config_put_summary"] = {
+        "at": _timestamp_now(),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "bytes": len(encoded),
+        "category_count": len(categories) if isinstance(categories, list) else 0,
+        "service_count": service_count,
+    }
     create_backup(CONFIG_FILE)
     save_json(CONFIG_FILE, payload, context="api:put_config")
     return {"ok": True}
@@ -320,6 +335,13 @@ def get_settings() -> dict:
 
 @app.put("/api/settings")
 def put_settings(payload: dict) -> dict:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    RUNTIME_STATE["last_settings_put_summary"] = {
+        "at": _timestamp_now(),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "bytes": len(encoded),
+        "keys": sorted(payload.keys()) if isinstance(payload, dict) else [],
+    }
     create_backup(SETTINGS_FILE)
     save_json(SETTINGS_FILE, payload, context="api:put_settings")
     return {"ok": True}
