@@ -486,10 +486,20 @@ select {
   height: 14px;
   border: 2px solid var(--toggle-off-bg);
   border-top-color: var(--primary);
-  border-radius: 4px;
+  border-radius: 999px;
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.restart-status {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.restart-status p {
+  margin: 0;
+}
 
 .dragging {
   opacity: 0.6;

@@ -31,14 +31,15 @@ export function dismissActiveModalListeners() {
 }
 
 /** Modal ohne Aktionsleiste; kein Schließen per Esc oder Klick aufs Overlay. */
-export function showStatusModal({ title, content }) {
+export function showStatusModal({ title = "", content }) {
   dismissActiveModalListeners();
   const root = document.getElementById("modal-root");
   const overlay = document.createElement("div");
+  const titleMarkup = title ? `<h2>${title}</h2>` : "";
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
     <section class="modal" role="dialog" aria-modal="true" aria-busy="true" tabindex="-1">
-      <h2>${title}</h2>
+      ${titleMarkup}
       <div class="modal-content"></div>
     </section>
   `;

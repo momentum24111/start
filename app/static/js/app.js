@@ -128,12 +128,9 @@ async function waitForAppReadyAfterRestart() {
 function restartStatusContent() {
   const body = document.createElement("div");
   body.innerHTML = `
-    <div class="favicon-row">
+    <div class="restart-status">
       <span class="spinner" aria-hidden="true"></span>
-      <div>
-        <div>${t("ui.restartingAppMessage")}</div>
-        <small>${t("ui.restartingAppHint")}</small>
-      </div>
+      <p>${t("ui.restartingAppMessage")}</p>
     </div>
   `;
   return body;
@@ -147,13 +144,12 @@ function restartErrorContent(message) {
 }
 
 async function runAppRestartFromSettings() {
-  showStatusModal({ title: t("ui.restartingAppTitle"), content: restartStatusContent() });
+  showStatusModal({ content: restartStatusContent() });
   try {
     await api.restartApp();
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     showStatusModal({
-      title: t("ui.restartingAppTitle"),
       content: restartErrorContent(`${t("ui.restartAppFailed")} ${detail}`)
     });
     return;
@@ -162,7 +158,6 @@ async function runAppRestartFromSettings() {
     await waitForAppReadyAfterRestart();
   } catch {
     showStatusModal({
-      title: t("ui.restartingAppTitle"),
       content: restartErrorContent(t("ui.restartAppTimeout"))
     });
   }
