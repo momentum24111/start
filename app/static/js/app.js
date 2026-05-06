@@ -1,6 +1,5 @@
 import { api } from "./api.js";
 import { showModal, showStatusModal } from "./modal.js";
-import { setupDragDrop } from "./dragdrop.js";
 import { initI18n, t } from "./i18n.js";
 import { applyTheme } from "./themes.js";
 
@@ -32,7 +31,8 @@ const ICONS = {
   trash: "M6 7h12l-1 14H7L6 7zm3-3h6l1 2H8l1-2z",
   plus: "M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z",
   chevron: "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z",
-  grip: "M8 7h2v2H8V7zm0 4h2v2H8v-2zm0 4h2v2H8v-2zm6-8h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z",
+  arrowLeft: "M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z",
+  arrowRight: "m8.59 16.59 1.41 1.41L16 12 10 6 8.59 7.41 13.17 12z",
   restart: "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
 };
 
@@ -283,13 +283,6 @@ function render() {
   if (state.editMode) {
     elements.categories.append(renderAddCategoryCard());
   }
-
-  setupDragDrop({
-    root: elements.categories,
-    enabled: state.editMode,
-    onMoveService: moveService,
-    onMoveCategory: moveCategory
-  });
 }
 
 function updateDocumentLanguage() {
@@ -322,7 +315,23 @@ function refreshStaticLocalizedTexts() {
   });
 }
 
+function refreshSettingsModalTexts(form) {
+  if (!form) return;
+  const modalTitle = form.closest(".modal")?.querySelector("h2");
+  if (modalTitle) modalTitle.textContent = t("ui.settings");
+  form.querySelector("[data-settings-name-label]")?.replaceChildren(t("ui.name"));
+  form.querySelector("[data-settings-theme-label]")?.replaceChildren(t("ui.theme"));
+  form.querySelector("[data-settings-language-label]")?.replaceChildren(t("ui.language"));
+  form.querySelector("[data-settings-accent-label]")?.replaceChildren(t("ui.categoryAccentStrength"));
+  form.querySelector("[data-settings-actions-label]")?.replaceChildren(t("ui.actions"));
+  form.querySelector("[data-settings-restart-label]")?.replaceChildren(t("ui.restartApp"));
+  form.closest(".modal")?.querySelector("[data-cancel] .btn__label")?.replaceChildren(t("ui.close"));
+}
+
 function renderCategory(category) {
+  const categoryIndex = state.config.categories.findIndex((entry) => entry.id === category.id);
+  const canMoveLeft = categoryIndex > 0;
+  const canMoveRight = categoryIndex >= 0 && categoryIndex < state.config.categories.length - 1;
   const isCollapsed = state.editMode ? false : Boolean(category.collapsed);
   const card = document.createElement("article");
   card.className = `category ${state.editMode ? "is-edit-mode" : ""}`;
@@ -337,7 +346,8 @@ function renderCategory(category) {
       </button>
       <div class="category-actions ${state.editMode ? "" : "hidden"}">
         ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-category", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
-        ${button({ label: t("ui.reorder"), icon: iconSvg(ICONS.grip, "inline-icon"), dataAttr: "data-drag-category", variant: "btn--ghost", className: "btn--compact drag-handle", iconOnly: true })}
+        ${button({ label: t("ui.moveLeft"), icon: iconSvg(ICONS.arrowLeft, "inline-icon"), dataAttr: `data-move-category-left ${canMoveLeft ? "" : "disabled"}`, variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
+        ${button({ label: t("ui.moveRight"), icon: iconSvg(ICONS.arrowRight, "inline-icon"), dataAttr: `data-move-category-right ${canMoveRight ? "" : "disabled"}`, variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
       </div>
     </div>
     <div class="category-content ${isCollapsed ? "is-collapsed" : ""}">
@@ -373,6 +383,12 @@ function renderCategory(category) {
   });
   card.querySelector("[data-add-service]")?.addEventListener("click", () => openServiceModal(category.id));
   card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
+  card.querySelector("[data-move-category-left]")?.addEventListener("click", () => {
+    void swapCategoryByStep(category.id, -1);
+  });
+  card.querySelector("[data-move-category-right]")?.addEventListener("click", () => {
+    void swapCategoryByStep(category.id, 1);
+  });
   return card;
 }
 
@@ -422,6 +438,10 @@ function animateCategoryCollapse(content, arrow, collapsed) {
 }
 
 function renderService(category, service) {
+  const services = category.services || [];
+  const serviceIndex = services.findIndex((entry) => entry.id === service.id);
+  const canMoveLeft = serviceIndex > 0;
+  const canMoveRight = serviceIndex >= 0 && serviceIndex < services.length - 1;
   const item = document.createElement("div");
   item.className = `service ${state.editMode ? "is-edit-mode" : ""}`;
   item.dataset.categoryId = category.id;
@@ -436,11 +456,18 @@ function renderService(category, service) {
     </a>
     <div class="service-actions ${state.editMode ? "" : "hidden"}">
       ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
-      ${button({ label: t("ui.reorder"), icon: iconSvg(ICONS.grip, "inline-icon"), dataAttr: "data-drag-service", variant: "btn--ghost", className: "btn--compact drag-handle", iconOnly: true })}
+      ${button({ label: t("ui.moveLeft"), icon: iconSvg(ICONS.arrowLeft, "inline-icon"), dataAttr: `data-move-service-left ${canMoveLeft ? "" : "disabled"}`, variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
+      ${button({ label: t("ui.moveRight"), icon: iconSvg(ICONS.arrowRight, "inline-icon"), dataAttr: `data-move-service-right ${canMoveRight ? "" : "disabled"}`, variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
     </div>
   `;
 
   item.querySelector("[data-edit-service]").addEventListener("click", () => openServiceModal(category.id, service));
+  item.querySelector("[data-move-service-left]")?.addEventListener("click", () => {
+    void swapServiceByStep(category.id, service.id, -1);
+  });
+  item.querySelector("[data-move-service-right]")?.addEventListener("click", () => {
+    void swapServiceByStep(category.id, service.id, 1);
+  });
   return item;
 }
 
@@ -687,7 +714,7 @@ function openServiceModal(categoryId, service = null) {
     fetchFaviconButton.disabled = true;
     state.faviconLoading = true;
     spinner.classList.remove("hidden");
-    status.textContent = t("ui.fetchingIcon");
+    status.textContent = "";
     try {
       const result = await api.cacheFavicon(value);
       const path = normalizeAppIconPath(String(result.path || "").trim());
@@ -725,34 +752,34 @@ function openSettingsModal() {
     .join("");
   form.innerHTML = `
     <div class="form-row">
-      <label>${t("ui.name")}</label>
+      <label data-settings-name-label>${t("ui.name")}</label>
       <input name="appTitle" value="${state.settings.appTitle || "Start"}" />
     </div>
     <div class="form-row">
-      <label>${t("ui.theme")}</label>
+      <label data-settings-theme-label>${t("ui.theme")}</label>
       <div>
         <div class="theme-options theme-picker">${themeButtons}</div>
         <input name="theme" value="${state.settings.theme}" hidden />
       </div>
     </div>
     <div class="form-row">
-      <label>${t("ui.language")}</label>
+      <label data-settings-language-label>${t("ui.language")}</label>
       <div class="select-wrap">
         <select name="language">${languageOptions}</select>
         <span class="select-chevron">${iconSvg(ICONS.chevron, "inline-icon")}</span>
       </div>
     </div>
-    <div class="form-row">
-      <label>${t("ui.categoryAccentStrength")}</label>
+    <div class="form-row form-row--range">
+      <label data-settings-accent-label>${t("ui.categoryAccentStrength")}</label>
       <div class="range-control" style="--range-percent:${currentStrengthPercent}">
         <input name="categoryAccentStrength" type="range" min="0" max="100" step="5" value="${currentStrength}" />
         <small class="range-value" data-category-accent-strength-value style="left:${currentStrengthPercent}">${currentStrengthPercent}</small>
       </div>
     </div>
     <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
-      <label id="settings-actions-heading" for="restart-app-btn">${t("ui.actions")}</label>
+      <label id="settings-actions-heading" data-settings-actions-label for="restart-app-btn">${t("ui.actions")}</label>
       <div>
-        <button type="button" class="btn btn--ghost" id="restart-app-btn" data-restart-app><span class="btn__icon">${iconSvg(ICONS.restart, "inline-icon")}</span><span class="btn__label">${t("ui.restartApp")}</span></button>
+        <button type="button" class="btn btn--ghost" id="restart-app-btn" data-restart-app><span class="btn__icon">${iconSvg(ICONS.restart, "inline-icon")}</span><span class="btn__label" data-settings-restart-label>${t("ui.restartApp")}</span></button>
       </div>
     </div>
   `;
@@ -781,6 +808,7 @@ function openSettingsModal() {
     state.settings.language = event.target.value;
     await initI18n(state.settings.language);
     refreshStaticLocalizedTexts();
+    refreshSettingsModalTexts(form);
     scheduleSettingsPersist(0);
   });
   form.querySelectorAll("[data-theme]").forEach((button) => {
@@ -827,38 +855,67 @@ function openSettingsModal() {
   });
 }
 
-async function moveService(fromCategoryId, serviceId, toCategoryId, beforeServiceId) {
-  if (!state.editMode) return;
-  const source = state.config.categories.find((c) => c.id === fromCategoryId);
-  const target = state.config.categories.find((c) => c.id === toCategoryId);
-  if (!source || !target) return;
-  const index = source.services.findIndex((s) => s.id === serviceId);
-  if (index < 0) return;
-  if (fromCategoryId === toCategoryId) {
-    const currentPos = index;
-    const targetPos = beforeServiceId ? target.services.findIndex((s) => s.id === beforeServiceId) : target.services.length;
-    if (targetPos < 0 || currentPos === targetPos || currentPos + 1 === targetPos) return;
-  }
-  pushUndo();
-  const [entry] = source.services.splice(index, 1);
-  const insertAt = beforeServiceId ? target.services.findIndex((s) => s.id === beforeServiceId) : -1;
-  target.services.splice(insertAt >= 0 ? insertAt : target.services.length, 0, entry);
-  await persistConfig();
-  render();
+function captureElementPositions(selector, keyBuilder) {
+  const map = new Map();
+  document.querySelectorAll(selector).forEach((element) => {
+    const key = keyBuilder(element);
+    if (!key) return;
+    map.set(key, element.getBoundingClientRect());
+  });
+  return map;
 }
 
-async function moveCategory(categoryId, beforeCategoryId) {
+function animatePositionChanges(selector, keyBuilder) {
+  const before = captureElementPositions(selector, keyBuilder);
+  render();
+  const after = captureElementPositions(selector, keyBuilder);
+  for (const [key, oldRect] of before) {
+    const nextRect = after.get(key);
+    if (!nextRect) continue;
+    const element = [...document.querySelectorAll(selector)].find((entry) => keyBuilder(entry) === key);
+    if (!element) continue;
+    const deltaX = oldRect.left - nextRect.left;
+    const deltaY = oldRect.top - nextRect.top;
+    if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) continue;
+    element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+    element.classList.add("is-swap-animating");
+    element.getBoundingClientRect();
+    element.style.transform = "";
+    const clear = () => {
+      element.classList.remove("is-swap-animating");
+      element.removeEventListener("transitionend", clear);
+    };
+    element.addEventListener("transitionend", clear);
+  }
+}
+
+async function swapCategoryByStep(categoryId, step) {
+  if (!state.editMode) return;
   const list = state.config.categories;
   const from = list.findIndex((entry) => entry.id === categoryId);
-  if (from < 0) return;
-  const targetIndex = beforeCategoryId ? list.findIndex((entry) => entry.id === beforeCategoryId) : list.length;
-  if (targetIndex < 0 || from === targetIndex || from + 1 === targetIndex) return;
+  const to = from + step;
+  if (from < 0 || to < 0 || to >= list.length) return;
   pushUndo();
-  const [category] = list.splice(from, 1);
-  const insertIndex = beforeCategoryId ? list.findIndex((entry) => entry.id === beforeCategoryId) : -1;
-  list.splice(insertIndex >= 0 ? insertIndex : list.length, 0, category);
+  [list[from], list[to]] = [list[to], list[from]];
   await persistConfig();
-  render();
+  animatePositionChanges(".category[data-category-id]", (element) => `category-${element.dataset.categoryId}`);
+}
+
+async function swapServiceByStep(categoryId, serviceId, step) {
+  if (!state.editMode) return;
+  const category = state.config.categories.find((entry) => entry.id === categoryId);
+  if (!category) return;
+  const list = category.services || [];
+  const from = list.findIndex((entry) => entry.id === serviceId);
+  const to = from + step;
+  if (from < 0 || to < 0 || to >= list.length) return;
+  pushUndo();
+  [list[from], list[to]] = [list[to], list[from]];
+  await persistConfig();
+  animatePositionChanges(
+    `.category[data-category-id="${categoryId}"] .service[data-service-id]`,
+    (element) => `service-${categoryId}-${element.dataset.serviceId}`
+  );
 }
 
 bootstrap().catch((error) => {
