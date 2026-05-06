@@ -869,23 +869,43 @@ function animatePositionChanges(selector, keyBuilder) {
   const before = captureElementPositions(selector, keyBuilder);
   render();
   const after = captureElementPositions(selector, keyBuilder);
+  const afterElements = new Map();
+  document.querySelectorAll(selector).forEach((entry) => {
+    const key = keyBuilder(entry);
+    if (!key) return;
+    afterElements.set(key, entry);
+  });
   for (const [key, oldRect] of before) {
     const nextRect = after.get(key);
     if (!nextRect) continue;
-    const element = [...document.querySelectorAll(selector)].find((entry) => keyBuilder(entry) === key);
+    const element = afterElements.get(key);
     if (!element) continue;
     const deltaX = oldRect.left - nextRect.left;
     const deltaY = oldRect.top - nextRect.top;
     if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) continue;
-    element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
     element.classList.add("is-swap-animating");
+    const keyframes = [
+      { transform: `translate(${deltaX}px, ${deltaY}px)` },
+      { transform: "translate(0px, 0px)" }
+    ];
+    const timing = { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+    if (typeof element.animate === "function") {
+      const animation = element.animate(keyframes, timing);
+      animation.addEventListener("finish", () => {
+        element.classList.remove("is-swap-animating");
+      });
+      animation.addEventListener("cancel", () => {
+        element.classList.remove("is-swap-animating");
+      });
+      continue;
+    }
+    element.style.transform = keyframes[0].transform;
     element.getBoundingClientRect();
-    element.style.transform = "";
-    const clear = () => {
+    element.style.transform = keyframes[1].transform;
+    window.setTimeout(() => {
       element.classList.remove("is-swap-animating");
-      element.removeEventListener("transitionend", clear);
-    };
-    element.addEventListener("transitionend", clear);
+      element.style.transform = "";
+    }, timing.duration + 30);
   }
 }
 
