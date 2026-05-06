@@ -2,8 +2,20 @@ let dictionary = {};
 let fallback = {};
 
 export async function initI18n(code = "en") {
-  fallback = await fetch("/static/languages/en.json").then((r) => r.json());
-  dictionary = code === "en" ? fallback : await fetch(`/static/languages/${code}.json`).then((r) => r.json()).catch(() => fallback);
+  fallback = await fetch("/static/languages/en.json", { cache: "no-store" }).then((r) => r.json());
+  if (code === "en") {
+    dictionary = fallback;
+    return;
+  }
+  const raw = await fetch(`/static/languages/${code}.json`, { cache: "no-store" })
+    .then((r) => r.json())
+    .catch(() => fallback);
+  dictionary = {
+    ...fallback,
+    ...raw,
+    meta: raw.meta ?? fallback.meta,
+    ui: { ...(fallback.ui || {}), ...(raw.ui || {}) }
+  };
 }
 
 export function t(path) {

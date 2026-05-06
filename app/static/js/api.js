@@ -1,7 +1,7 @@
 const headers = { "Content-Type": "application/json" };
 
 async function request(path, options = {}) {
-  const response = await fetch(path, options);
+  const response = await fetch(path, { cache: "no-store", ...options });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.detail || `Request failed: ${response.status}`);

@@ -345,8 +345,8 @@ async def post_favicon(payload: FaviconRequest) -> dict:
                 cached = target_file.read_bytes()
                 if is_valid_image_bytes(cached):
                     return {
-                        "iconUrl": candidate_url,
                         "path": f"/static/assets/favicon-cache/{filename}",
+                        "sourceUrl": candidate_url,
                     }
                 try:
                     target_file.unlink()
@@ -365,14 +365,16 @@ async def post_favicon(payload: FaviconRequest) -> dict:
                 last_error = ValueError("Response is not a valid image")
                 continue
 
-            cache_path: str | None = None
             try:
                 target_file.write_bytes(body)
-                cache_path = f"/static/assets/favicon-cache/{filename}"
             except OSError as exc:
                 last_error = exc
+                continue
 
-            return {"iconUrl": candidate_url, "path": cache_path}
+            return {
+                "path": f"/static/assets/favicon-cache/{filename}",
+                "sourceUrl": candidate_url,
+            }
 
     if last_error is not None:
         raise HTTPException(status_code=400, detail=f"Favicon download failed: {last_error}") from last_error

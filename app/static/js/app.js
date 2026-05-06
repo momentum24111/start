@@ -8,6 +8,7 @@ const state = {
   config: { categories: [] },
   settings: { appTitle: "Start", theme: "dark", language: "en" },
   editMode: false,
+  editModeCollapsedSnapshot: null,
   undoStack: [],
   themes: [],
   languages: [],
@@ -31,7 +32,8 @@ const ICONS = {
   trash: "M6 7h12l-1 14H7L6 7zm3-3h6l1 2H8l1-2z",
   plus: "M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z",
   chevron: "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z",
-  grip: "M8 7h2v2H8V7zm0 4h2v2H8v-2zm0 4h2v2H8v-2zm6-8h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"
+  grip: "M8 7h2v2H8V7zm0 4h2v2H8v-2zm0 4h2v2H8v-2zm6-8h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z",
+  restart: "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
 };
 
 const MDI_ICONS = [
@@ -69,6 +71,29 @@ function normalizeAppIconPath(raw) {
     return t;
   }
   return t.startsWith("/") ? t : `/${t}`;
+}
+
+function isProbablyExternalIconHref(raw) {
+  const t = String(raw ?? "").trim();
+  return /^https?:\/\//i.test(t) || t.startsWith("//");
+}
+
+/** Never use cross-origin http(s) as <img src> (CORP / NotSameOrigin). Same-origin paths or default only. */
+function resolveIconSrcForImgTag(raw) {
+  if (isProbablyExternalIconHref(raw)) {
+    return resolveServiceIconDisplaySrc("");
+  }
+  return resolveServiceIconDisplaySrc(raw);
+}
+
+function serviceStoredIconSrcForDisplay(service) {
+  if (!service) return resolveIconSrcForImgTag("");
+  const c = service.cachedIcon ? normalizeAppIconPath(String(service.cachedIcon)) : "";
+  const u = service.iconUrl ? String(service.iconUrl).trim() : "";
+  let rawForImg = "";
+  if (u && !isProbablyExternalIconHref(u)) rawForImg = normalizeAppIconPath(u);
+  else if (c && !isProbablyExternalIconHref(c)) rawForImg = c;
+  return resolveIconSrcForImgTag(rawForImg);
 }
 
 const RESTART_POLL_MS = 2000;
@@ -175,7 +200,21 @@ async function bootstrap() {
 
 function wireEvents() {
   elements.edit.addEventListener("click", () => {
-    state.editMode = !state.editMode;
+    const nextEditMode = !state.editMode;
+    if (nextEditMode && !state.editModeCollapsedSnapshot) {
+      state.editModeCollapsedSnapshot = Object.fromEntries(
+        (state.config.categories || []).map((category) => [category.id, Boolean(category.collapsed)])
+      );
+    }
+    if (!nextEditMode && state.editModeCollapsedSnapshot) {
+      for (const category of state.config.categories || []) {
+        if (Object.hasOwn(state.editModeCollapsedSnapshot, category.id)) {
+          category.collapsed = Boolean(state.editModeCollapsedSnapshot[category.id]);
+        }
+      }
+      state.editModeCollapsedSnapshot = null;
+    }
+    state.editMode = nextEditMode;
     render();
   });
   elements.undo.addEventListener("click", undo);
@@ -244,23 +283,23 @@ function render() {
 }
 
 function renderCategory(category) {
+  const isCollapsed = state.editMode ? false : Boolean(category.collapsed);
   const card = document.createElement("article");
-  card.className = "category";
+  card.className = `category ${state.editMode ? "is-edit-mode" : ""}`;
   card.dataset.color = category.color || "primary";
   card.innerHTML = `
     <div class="category-header">
       <button type="button" class="category-header-main" data-toggle-collapse>
-        ${iconSvg(ICONS.chevron, `inline-icon collapse-arrow ${category.collapsed ? "is-collapsed" : ""}`)}
+        ${iconSvg(ICONS.chevron, `inline-icon collapse-arrow ${isCollapsed ? "is-collapsed" : ""}`)}
         ${mdiIcon(category.icon || "folder", "category-icon")}
         <span class="category-name">${category.name}</span>
       </button>
       <div class="category-actions ${state.editMode ? "" : "hidden"}">
         ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-category", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
-        ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-category", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
         ${button({ label: t("ui.reorder"), icon: iconSvg(ICONS.grip, "inline-icon"), dataAttr: "data-drag-category", variant: "btn--ghost", className: "btn--compact drag-handle", iconOnly: true })}
       </div>
     </div>
-    <div class="category-content ${category.collapsed ? "is-collapsed" : ""}">
+    <div class="category-content ${isCollapsed ? "is-collapsed" : ""}">
       <div data-services-container data-category-id="${category.id}" class="services"></div>
     </div>
     ${state.editMode ? renderAddServiceTile() : ""}
@@ -271,9 +310,10 @@ function renderCategory(category) {
   const content = card.querySelector(".category-content");
   const arrow = card.querySelector(".collapse-arrow");
   for (const service of category.services || []) servicesRoot.append(renderService(category, service));
-  syncCategoryContentHeight(content, category.collapsed);
+  syncCategoryContentHeight(content, isCollapsed);
 
   card.querySelector("[data-toggle-collapse]").addEventListener("click", async () => {
+    if (state.editMode) return;
     const nextCollapsed = !category.collapsed;
     animateCategoryCollapse(content, arrow, nextCollapsed);
     category.collapsed = nextCollapsed;
@@ -281,12 +321,6 @@ function renderCategory(category) {
   });
   card.querySelector("[data-add-service]")?.addEventListener("click", () => openServiceModal(category.id));
   card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
-  card.querySelector("[data-delete-category]")?.addEventListener("click", async () => {
-    pushUndo();
-    state.config.categories = state.config.categories.filter((c) => c.id !== category.id);
-    await persistConfig();
-    render();
-  });
   return card;
 }
 
@@ -337,12 +371,12 @@ function animateCategoryCollapse(content, arrow, collapsed) {
 
 function renderService(category, service) {
   const item = document.createElement("div");
-  item.className = "service";
+  item.className = `service ${state.editMode ? "is-edit-mode" : ""}`;
   item.dataset.categoryId = category.id;
   item.dataset.serviceId = service.id;
 
   const target = service.openMode === "current-tab" ? "_self" : "_blank";
-  const iconPath = resolveServiceIconDisplaySrc(service.iconUrl || service.cachedIcon || "");
+  const iconPath = serviceStoredIconSrcForDisplay(service);
   item.innerHTML = `
     <a class="service-left" href="${service.url}" target="${target}" rel="noreferrer">
       <img loading="lazy" src="${iconPath}" alt="" />
@@ -350,18 +384,11 @@ function renderService(category, service) {
     </a>
     <div class="service-actions ${state.editMode ? "" : "hidden"}">
       ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
-      ${button({ label: t("ui.delete"), icon: iconSvg(ICONS.trash, "inline-icon"), dataAttr: "data-delete-service", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
       ${button({ label: t("ui.reorder"), icon: iconSvg(ICONS.grip, "inline-icon"), dataAttr: "data-drag-service", variant: "btn--ghost", className: "btn--compact drag-handle", iconOnly: true })}
     </div>
   `;
 
   item.querySelector("[data-edit-service]").addEventListener("click", () => openServiceModal(category.id, service));
-  item.querySelector("[data-delete-service]").addEventListener("click", async () => {
-    pushUndo();
-    category.services = category.services.filter((s) => s.id !== service.id);
-    await persistConfig();
-    render();
-  });
   return item;
 }
 
@@ -427,6 +454,16 @@ function openCategoryModal(category = null) {
     content: form,
     saveLabel: t("ui.save"),
     cancelLabel: t("ui.cancel"),
+    leadingActions: isEdit ? [{
+      label: t("ui.delete"),
+      icon: ICONS.trash,
+      onClick: async () => {
+        pushUndo();
+        state.config.categories = state.config.categories.filter((c) => c.id !== category.id);
+        await persistConfig();
+        render();
+      }
+    }] : [],
     onSave: async () => {
       if (!form.reportValidity()) return false;
       const fd = new FormData(form);
@@ -482,7 +519,7 @@ function openServiceModal(categoryId, service = null) {
   if (!category) return;
   const isEdit = Boolean(service);
   const form = document.createElement("form");
-  const previewImgSrc = resolveServiceIconDisplaySrc(service?.iconUrl || service?.cachedIcon || "");
+  const previewImgSrc = service ? serviceStoredIconSrcForDisplay(service) : resolveIconSrcForImgTag("");
   form.innerHTML = `
     <div class="form-row">
       <label>${t("ui.name")}</label>
@@ -524,11 +561,24 @@ function openServiceModal(categoryId, service = null) {
     content: form,
     saveLabel: t("ui.save"),
     cancelLabel: t("ui.cancel"),
+    leadingActions: isEdit ? [{
+      label: t("ui.delete"),
+      icon: ICONS.trash,
+      onClick: async () => {
+        pushUndo();
+        category.services = category.services.filter((s) => s.id !== service.id);
+        await persistConfig();
+        render();
+      }
+    }] : [],
     onSave: async () => {
       if (!form.reportValidity()) return false;
       const fd = new FormData(form);
-      const iconUrl = String(fd.get("iconUrl") || "");
-      const cachedIcon = form.dataset.cachedIcon ? String(form.dataset.cachedIcon) : "";
+      const iconUrl = String(fd.get("iconUrl") || "").trim();
+      let cachedIcon = form.dataset.cachedIcon ? normalizeAppIconPath(String(form.dataset.cachedIcon)) : "";
+      if (iconUrl.startsWith("/static/assets/favicon-cache/")) {
+        cachedIcon = "";
+      }
 
       pushUndo();
       if (isEdit) {
@@ -561,8 +611,17 @@ function openServiceModal(categoryId, service = null) {
 
   const syncIconPreviewFromField = () => {
     const v = String(iconUrlInput.value || "").trim();
-    const cached = form.dataset.cachedIcon ? String(form.dataset.cachedIcon).trim() : "";
-    preview.src = resolveServiceIconDisplaySrc(v || cached);
+    const cached = form.dataset.cachedIcon ? normalizeAppIconPath(String(form.dataset.cachedIcon)) : "";
+    const vOk = v && !isProbablyExternalIconHref(v);
+    const cOk = cached && !isProbablyExternalIconHref(cached);
+    const vExt = v && isProbablyExternalIconHref(v);
+
+    let rawForImg = "";
+    if (vOk) rawForImg = normalizeAppIconPath(v);
+    else if (vExt && cOk) rawForImg = cached;
+    else if (cOk) rawForImg = cached;
+
+    preview.src = resolveIconSrcForImgTag(rawForImg);
   };
 
   iconUrlInput.addEventListener("input", () => {
@@ -579,20 +638,17 @@ function openServiceModal(categoryId, service = null) {
     status.textContent = t("ui.fetchingIcon");
     try {
       const result = await api.cacheFavicon(value);
-      const resolved = String(result.iconUrl || "").trim();
-      if (!resolved) {
-        throw new Error("Missing iconUrl");
+      const path = normalizeAppIconPath(String(result.path || "").trim());
+      if (!path.startsWith("/static/assets/favicon-cache/")) {
+        throw new Error("Missing cache path");
       }
-      iconUrlInput.value = resolved;
+      iconUrlInput.value = path;
+      delete form.dataset.cachedIcon;
       syncIconPreviewFromField();
-      if (result.path) {
-        form.dataset.cachedIcon = result.path;
-      } else {
-        delete form.dataset.cachedIcon;
-      }
       status.textContent = "";
     } catch (_) {
       status.textContent = t("ui.faviconFailed");
+      preview.src = resolveServiceIconDisplaySrc("");
     } finally {
       fetchFaviconButton.disabled = false;
       state.faviconLoading = false;
@@ -634,7 +690,7 @@ function openSettingsModal() {
     <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
       <label id="settings-actions-heading" for="restart-app-btn">${t("ui.actions")}</label>
       <div>
-        <button type="button" class="btn" id="restart-app-btn" data-restart-app>${t("ui.restartApp")}</button>
+        <button type="button" class="btn" id="restart-app-btn" data-restart-app><span class="btn__icon">${iconSvg(ICONS.restart, "inline-icon")}</span><span class="btn__label">${t("ui.restartApp")}</span></button>
       </div>
     </div>
   `;
