@@ -39,18 +39,36 @@ const ICONS = {
 const MDI_ICONS = [
   "server", "folder", "home", "wrench", "monitor", "database", "network", "shield", "cloud", "web"
 ];
-const ICON_SEARCH_ALIASES = {
-  server: ["host", "machine", "node", "nas", "vm"],
-  folder: ["files", "storage", "directory", "share"],
-  home: ["house", "start", "dashboard", "main"],
-  wrench: ["tools", "settings", "maintenance", "admin"],
-  monitor: ["screen", "display", "desktop", "client"],
-  database: ["db", "sql", "postgres", "mariadb", "mysql"],
-  network: ["lan", "router", "switch", "connection"],
-  shield: ["security", "firewall", "auth", "vpn"],
-  cloud: ["internet", "remote", "saas", "backup"],
-  web: ["browser", "site", "http", "www"]
-};
+const ICON_OPTION_CATALOG = [
+  { label: "server", icon: "server" }, { label: "host", icon: "server" }, { label: "node", icon: "server" }, { label: "hypervisor", icon: "server" },
+  { label: "proxmox", icon: "server" }, { label: "vm", icon: "server" }, { label: "virtual machine", icon: "server" }, { label: "compute", icon: "server" },
+  { label: "cluster", icon: "server" }, { label: "rack", icon: "server" }, { label: "container host", icon: "server" }, { label: "hardware", icon: "server" },
+  { label: "cloud", icon: "cloud" }, { label: "backup", icon: "cloud" }, { label: "sync", icon: "cloud" }, { label: "remote", icon: "cloud" },
+  { label: "saas", icon: "cloud" }, { label: "drive", icon: "cloud" }, { label: "storage cloud", icon: "cloud" }, { label: "object storage", icon: "cloud" },
+  { label: "network", icon: "network" }, { label: "lan", icon: "network" }, { label: "router", icon: "network" }, { label: "switch", icon: "network" },
+  { label: "gateway", icon: "network" }, { label: "dns", icon: "network" }, { label: "dhcp", icon: "network" }, { label: "firewall network", icon: "network" },
+  { label: "wireguard", icon: "network" }, { label: "vpn network", icon: "network" }, { label: "connection", icon: "network" }, { label: "internet", icon: "network" },
+  { label: "database", icon: "database" }, { label: "db", icon: "database" }, { label: "mysql", icon: "database" }, { label: "mariadb", icon: "database" },
+  { label: "postgres", icon: "database" }, { label: "redis", icon: "database" }, { label: "influxdb", icon: "database" }, { label: "mongodb", icon: "database" },
+  { label: "timeseries", icon: "database" }, { label: "data", icon: "database" }, { label: "analytics", icon: "database" }, { label: "warehouse", icon: "database" },
+  { label: "web", icon: "web" }, { label: "browser", icon: "web" }, { label: "website", icon: "web" }, { label: "portal", icon: "web" },
+  { label: "dashboard", icon: "web" }, { label: "grafana", icon: "web" }, { label: "search", icon: "web" }, { label: "wiki", icon: "web" },
+  { label: "docs web", icon: "web" }, { label: "mail web", icon: "web" }, { label: "calendar web", icon: "web" }, { label: "media web", icon: "web" },
+  { label: "monitor", icon: "monitor" }, { label: "monitoring", icon: "monitor" }, { label: "status", icon: "monitor" }, { label: "uptime", icon: "monitor" },
+  { label: "observability", icon: "monitor" }, { label: "metrics", icon: "monitor" }, { label: "logs", icon: "monitor" }, { label: "screen", icon: "monitor" },
+  { label: "desktop", icon: "monitor" }, { label: "kiosk", icon: "monitor" }, { label: "display", icon: "monitor" }, { label: "control panel", icon: "monitor" },
+  { label: "shield", icon: "shield" }, { label: "security", icon: "shield" }, { label: "auth", icon: "shield" }, { label: "sso", icon: "shield" },
+  { label: "identity", icon: "shield" }, { label: "password", icon: "shield" }, { label: "vault", icon: "shield" }, { label: "certificate", icon: "shield" },
+  { label: "policy", icon: "shield" }, { label: "access", icon: "shield" }, { label: "guard", icon: "shield" }, { label: "secure", icon: "shield" },
+  { label: "folder", icon: "folder" }, { label: "files", icon: "folder" }, { label: "documents", icon: "folder" }, { label: "photos", icon: "folder" },
+  { label: "video", icon: "folder" }, { label: "downloads", icon: "folder" }, { label: "media", icon: "folder" }, { label: "archive", icon: "folder" },
+  { label: "library", icon: "folder" }, { label: "share", icon: "folder" }, { label: "project", icon: "folder" }, { label: "workspace", icon: "folder" },
+  { label: "home", icon: "home" }, { label: "house", icon: "home" }, { label: "start", icon: "home" }, { label: "landing", icon: "home" },
+  { label: "main", icon: "home" }, { label: "portal home", icon: "home" }, { label: "local", icon: "home" }, { label: "family", icon: "home" },
+  { label: "wrench", icon: "wrench" }, { label: "tools", icon: "wrench" }, { label: "settings", icon: "wrench" }, { label: "admin", icon: "wrench" },
+  { label: "automation", icon: "wrench" }, { label: "ci", icon: "wrench" }, { label: "cd", icon: "wrench" }, { label: "pipeline", icon: "wrench" },
+  { label: "development", icon: "wrench" }, { label: "builder", icon: "wrench" }, { label: "ops", icon: "wrench" }, { label: "maintenance", icon: "wrench" }
+];
 const COLOR_OPTIONS = ["primary", "teal", "blue", "violet", "amber", "pink", "indigo", "emerald", "orange", "slate"];
 
 const uid = () => {
@@ -555,6 +573,7 @@ function openCategoryModal(category = null) {
         render();
       }
     }] : [],
+    modalClass: "modal--category",
     onSave: async () => {
       if (!form.reportValidity()) return false;
       const fd = new FormData(form);
@@ -582,24 +601,22 @@ function openCategoryModal(category = null) {
   const input = form.querySelector("input[name='icon']");
   const results = form.querySelector("[data-icon-results]");
   const selectedPreview = form.querySelector("[data-selected-icon-preview]");
-  const allSearchTokens = MDI_ICONS.flatMap((icon) => {
-    const aliases = ICON_SEARCH_ALIASES[icon] || [];
-    const tokens = [icon, ...aliases];
-    return tokens.map((token) => ({ token: token.toLowerCase(), icon }));
-  });
+  const allSearchTokens = ICON_OPTION_CATALOG.map((entry) => ({
+    token: entry.label.toLowerCase(),
+    label: entry.label,
+    icon: entry.icon
+  }));
   const applySelectedIcon = (iconName) => {
     input.value = iconName;
     selectedPreview.innerHTML = mdiIcon(iconName, "icon-preview icon-preview--theme");
   };
   const renderIconResults = () => {
     const query = String(input.value || "").toLowerCase();
-    const matched = query
-      ? allSearchTokens.filter((entry) => entry.token.includes(query)).map((entry) => entry.icon)
-      : MDI_ICONS;
-    const filtered = [...new Set(matched)].slice(0, 10);
+    const matched = query ? allSearchTokens.filter((entry) => entry.token.includes(query)) : [];
+    const filtered = matched.slice(0, 16);
     results.classList.toggle("is-open", filtered.length > 0);
     results.innerHTML = filtered
-      .map((name) => `<button type="button" class="icon-search-item" data-icon-pick="${name}">${mdiIcon(name, "icon-preview icon-preview--theme")}<span>${name}</span></button>`)
+      .map((entry) => `<button type="button" class="icon-search-item" data-icon-pick="${entry.icon}">${mdiIcon(entry.icon, "icon-preview icon-preview--theme")}<span>${entry.label}</span></button>`)
       .join("");
     results.querySelectorAll("[data-icon-pick]").forEach((buttonEl) => {
       buttonEl.addEventListener("click", () => {
@@ -630,7 +647,8 @@ function openCategoryModal(category = null) {
     });
   });
   applySelectedIcon(category?.icon || "folder");
-  renderIconResults();
+  results.classList.remove("is-open");
+  results.innerHTML = "";
 }
 
 function openServiceModal(categoryId, service = null) {

@@ -213,7 +213,11 @@ main {
   color: var(--text);
 }
 .service--add {
-  padding: 0.5rem 0.55rem;
+  padding: 0;
+}
+.service--add .service-left {
+  min-height: 58px;
+  padding: 0.5rem 0.55rem 0.5rem 0.75rem;
 }
 
 .service-left {
@@ -303,6 +307,9 @@ main {
 }
 .modal.modal--settings {
   width: min(820px, 100%);
+}
+.modal.modal--category {
+  overflow: visible;
 }
 
 .modal.is-closing { animation: modalOut 140ms ease-in forwards; }
@@ -441,7 +448,7 @@ select {
   right: 0;
   top: calc(100% + 0.25rem);
   z-index: 20;
-  max-height: 180px;
+  max-height: min(260px, 45vh);
   overflow: auto;
   border: 0;
   border-radius: 4px;
