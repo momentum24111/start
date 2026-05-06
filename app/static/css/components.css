@@ -176,7 +176,7 @@ main {
 .services {
   margin-top: 0.5rem;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 0.45rem;
   align-items: start;
 }
@@ -410,14 +410,47 @@ select {
 }
 
 .icon-search { position: relative; }
+.icon-search > div { position: relative; }
+
+.icon-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+}
+
+.icon-input-wrap input[name="icon"] {
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+}
+
+.icon-input-preview {
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 20px;
+}
 
 .icon-search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  z-index: 20;
   max-height: 180px;
   overflow: auto;
   border: 0;
   border-radius: 4px;
-  margin-top: 0.2rem;
+  display: none;
   background: var(--surface-2);
+  box-shadow: var(--modal-shadow);
+}
+.icon-search-results.is-open {
+  display: block;
 }
 
 .icon-search-item {
@@ -434,6 +467,9 @@ select {
 
 .icon-preview,
 .inline-icon { width: 18px; height: 18px; }
+.icon-preview--theme {
+  filter: var(--category-icon-filter);
+}
 
 .color-options { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .color-dot {
@@ -520,7 +556,6 @@ select {
   position: relative;
   width: 100%;
   overflow: visible;
-  padding-inline: 0.85rem;
   --range-percent: 50%;
 }
 

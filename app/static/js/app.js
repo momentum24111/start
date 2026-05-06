@@ -39,6 +39,18 @@ const ICONS = {
 const MDI_ICONS = [
   "server", "folder", "home", "wrench", "monitor", "database", "network", "shield", "cloud", "web"
 ];
+const ICON_SEARCH_ALIASES = {
+  server: ["host", "machine", "node", "nas", "vm"],
+  folder: ["files", "storage", "directory", "share"],
+  home: ["house", "start", "dashboard", "main"],
+  wrench: ["tools", "settings", "maintenance", "admin"],
+  monitor: ["screen", "display", "desktop", "client"],
+  database: ["db", "sql", "postgres", "mariadb", "mysql"],
+  network: ["lan", "router", "switch", "connection"],
+  shield: ["security", "firewall", "auth", "vpn"],
+  cloud: ["internet", "remote", "saas", "backup"],
+  web: ["browser", "site", "http", "www"]
+};
 const COLOR_OPTIONS = ["primary", "teal", "blue", "violet", "amber", "pink", "indigo", "emerald", "orange", "slate"];
 
 const uid = () => {
@@ -506,7 +518,10 @@ function openCategoryModal(category = null) {
     <div class="form-row icon-search">
       <label>${t("ui.icon")}</label>
       <div>
-        <input name="icon" value="${category?.icon || "folder"}" autocomplete="off" />
+        <div class="icon-input-wrap">
+          <span class="icon-input-preview" data-selected-icon-preview>${mdiIcon(category?.icon || "folder", "icon-preview icon-preview--theme")}</span>
+          <input name="icon" value="${category?.icon || "folder"}" autocomplete="off" />
+        </div>
         <div class="icon-search-results" data-icon-results></div>
       </div>
     </div>
@@ -569,20 +584,47 @@ function openCategoryModal(category = null) {
 
   const input = form.querySelector("input[name='icon']");
   const results = form.querySelector("[data-icon-results]");
+  const selectedPreview = form.querySelector("[data-selected-icon-preview]");
+  const allSearchTokens = MDI_ICONS.flatMap((icon) => {
+    const aliases = ICON_SEARCH_ALIASES[icon] || [];
+    const tokens = [icon, ...aliases];
+    return tokens.map((token) => ({ token: token.toLowerCase(), icon }));
+  });
+  const applySelectedIcon = (iconName) => {
+    input.value = iconName;
+    selectedPreview.innerHTML = mdiIcon(iconName, "icon-preview icon-preview--theme");
+  };
   const renderIconResults = () => {
     const query = String(input.value || "").toLowerCase();
-    const filtered = MDI_ICONS.filter((name) => name.includes(query)).slice(0, 8);
+    const matched = query
+      ? allSearchTokens.filter((entry) => entry.token.includes(query)).map((entry) => entry.icon)
+      : MDI_ICONS;
+    const filtered = [...new Set(matched)].slice(0, 10);
+    results.classList.toggle("is-open", filtered.length > 0);
     results.innerHTML = filtered
-      .map((name) => `<button type="button" class="icon-search-item" data-icon-pick="${name}">${mdiIcon(name, "icon-preview")}<span>${name}</span></button>`)
+      .map((name) => `<button type="button" class="icon-search-item" data-icon-pick="${name}">${mdiIcon(name, "icon-preview icon-preview--theme")}<span>${name}</span></button>`)
       .join("");
     results.querySelectorAll("[data-icon-pick]").forEach((buttonEl) => {
       buttonEl.addEventListener("click", () => {
-        input.value = buttonEl.dataset.iconPick;
-        renderIconResults();
+        applySelectedIcon(buttonEl.dataset.iconPick);
+        results.classList.remove("is-open");
+        results.innerHTML = "";
       });
     });
   };
+  input.addEventListener("focus", renderIconResults);
   input.addEventListener("input", renderIconResults);
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      results.classList.remove("is-open");
+      results.innerHTML = "";
+      if (!MDI_ICONS.includes(input.value)) {
+        applySelectedIcon(category?.icon || "folder");
+      } else {
+        applySelectedIcon(input.value);
+      }
+    }, 120);
+  });
   form.querySelectorAll("[data-color-pick]").forEach((colorButton) => {
     colorButton.addEventListener("click", () => {
       form.querySelector("input[name='color']").value = colorButton.dataset.color;
@@ -590,6 +632,7 @@ function openCategoryModal(category = null) {
       colorButton.classList.add("is-active");
     });
   });
+  applySelectedIcon(category?.icon || "folder");
   renderIconResults();
 }
 
@@ -823,6 +866,18 @@ function openSettingsModal() {
   });
   const categoryAccentStrengthInput = form.querySelector("input[name='categoryAccentStrength']");
   const categoryAccentStrengthValue = form.querySelector("[data-category-accent-strength-value]");
+  const positionRangeTooltip = () => {
+    if (!categoryAccentStrengthInput || !categoryAccentStrengthValue) return;
+    const min = Number(categoryAccentStrengthInput.min || 0);
+    const max = Number(categoryAccentStrengthInput.max || 100);
+    const value = Number(categoryAccentStrengthInput.value || min);
+    const range = max - min;
+    const ratio = range > 0 ? (value - min) / range : 0;
+    const inputWidth = categoryAccentStrengthInput.clientWidth;
+    const thumbSize = 18;
+    const x = (thumbSize / 2) + (Math.min(1, Math.max(0, ratio)) * Math.max(0, inputWidth - thumbSize));
+    categoryAccentStrengthValue.style.left = `${x}px`;
+  };
   const showRangeTooltip = () => categoryAccentStrengthValue.classList.add("is-visible");
   const hideRangeTooltip = () => categoryAccentStrengthValue.classList.remove("is-visible");
   categoryAccentStrengthInput?.addEventListener("input", () => {
@@ -832,17 +887,26 @@ function openSettingsModal() {
     categoryAccentStrengthInput.value = String(normalized);
     if (rangeControl) rangeControl.style.setProperty("--range-percent", normalizedPercent);
     categoryAccentStrengthValue.textContent = normalizedPercent;
-    categoryAccentStrengthValue.style.left = normalizedPercent;
+    positionRangeTooltip();
     state.settings.categoryAccentStrength = normalized;
     applyCategoryAccentStrength(normalized);
     scheduleSettingsPersist();
   });
-  categoryAccentStrengthInput?.addEventListener("pointerdown", showRangeTooltip);
+  categoryAccentStrengthInput?.addEventListener("pointerdown", () => {
+    positionRangeTooltip();
+    showRangeTooltip();
+  });
   categoryAccentStrengthInput?.addEventListener("pointerup", hideRangeTooltip);
   categoryAccentStrengthInput?.addEventListener("pointercancel", hideRangeTooltip);
   categoryAccentStrengthInput?.addEventListener("blur", hideRangeTooltip);
-  categoryAccentStrengthInput?.addEventListener("keydown", showRangeTooltip);
+  categoryAccentStrengthInput?.addEventListener("keydown", () => {
+    positionRangeTooltip();
+    showRangeTooltip();
+  });
   categoryAccentStrengthInput?.addEventListener("keyup", hideRangeTooltip);
+  const resizeHandler = () => positionRangeTooltip();
+  window.addEventListener("resize", resizeHandler);
+  positionRangeTooltip();
 
   showModal({
     title: t("ui.settings"),
@@ -851,7 +915,10 @@ function openSettingsModal() {
     showSave: false,
     cancelVariant: "",
     submitOnEnter: false,
-    modalClass: "modal--settings"
+    modalClass: "modal--settings",
+    onCancel: () => {
+      window.removeEventListener("resize", resizeHandler);
+    }
   });
 }
 
