@@ -92,9 +92,6 @@ function isProbablyExternalIconHref(raw) {
 
 /** Never use cross-origin http(s) as <img src> (CORP / NotSameOrigin). Same-origin paths or default only. */
 function resolveIconSrcForImgTag(raw) {
-  if (isProbablyExternalIconHref(raw)) {
-    return resolveServiceIconDisplaySrc("");
-  }
   return resolveServiceIconDisplaySrc(raw);
 }
 
@@ -103,8 +100,8 @@ function serviceStoredIconSrcForDisplay(service) {
   const c = service.cachedIcon ? normalizeAppIconPath(String(service.cachedIcon)) : "";
   const u = service.iconUrl ? String(service.iconUrl).trim() : "";
   let rawForImg = "";
-  if (u && !isProbablyExternalIconHref(u)) rawForImg = normalizeAppIconPath(u);
-  else if (c && !isProbablyExternalIconHref(c)) rawForImg = c;
+  if (u) rawForImg = isProbablyExternalIconHref(u) ? u : normalizeAppIconPath(u);
+  else if (c) rawForImg = isProbablyExternalIconHref(c) ? c : normalizeAppIconPath(c);
   return resolveIconSrcForImgTag(rawForImg);
 }
 
@@ -734,21 +731,28 @@ function openServiceModal(categoryId, service = null) {
   const syncIconPreviewFromField = () => {
     const v = String(iconUrlInput.value || "").trim();
     const cached = form.dataset.cachedIcon ? normalizeAppIconPath(String(form.dataset.cachedIcon)) : "";
-    const vOk = v && !isProbablyExternalIconHref(v);
-    const cOk = cached && !isProbablyExternalIconHref(cached);
-    const vExt = v && isProbablyExternalIconHref(v);
-
     let rawForImg = "";
-    if (vOk) rawForImg = normalizeAppIconPath(v);
-    else if (vExt && cOk) rawForImg = cached;
-    else if (cOk) rawForImg = cached;
-
+    if (v) rawForImg = isProbablyExternalIconHref(v) ? v : normalizeAppIconPath(v);
+    else if (cached) rawForImg = cached;
     preview.src = resolveIconSrcForImgTag(rawForImg);
   };
 
   iconUrlInput.addEventListener("input", () => {
     delete form.dataset.cachedIcon;
+    status.textContent = "";
     syncIconPreviewFromField();
+  });
+
+  preview.addEventListener("error", () => {
+    const manualValue = String(iconUrlInput.value || "").trim();
+    if (manualValue) {
+      status.textContent = t("ui.faviconFailed");
+      return;
+    }
+    preview.src = resolveServiceIconDisplaySrc("");
+  });
+  preview.addEventListener("load", () => {
+    status.textContent = "";
   });
 
   const triggerFaviconLoad = async () => {
