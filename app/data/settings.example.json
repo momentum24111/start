@@ -1,5 +1,6 @@
 {
   "appTitle": "Start",
   "theme": "dark",
-  "language": "en"
+  "language": "en",
+  "categoryAccentStrength": 15
 }

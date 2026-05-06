@@ -75,7 +75,7 @@ main {
 .category {
   border: 0;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--category-accent, var(--cat-primary)) 15%, var(--category-bg));
+  background: color-mix(in srgb, var(--category-accent, var(--cat-primary)) var(--category-accent-strength), var(--category-bg));
   padding: 0.75rem;
   box-shadow: var(--card-shadow);
   display: grid;

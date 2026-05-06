@@ -31,6 +31,7 @@ body {
   --toggle-off-bg: #c8d6e4;
   --toggle-on-bg: #2d65d6;
   --toggle-thumb-bg: #ffffff;
+  --category-accent-strength: 15%;
   --category-icon-filter: invert(16%) sepia(15%) saturate(1408%) hue-rotate(173deg) brightness(93%) contrast(92%);
   --cat-primary: #4f84f1;
   --cat-teal: #1fa79f;

@@ -6,7 +6,7 @@ import { applyTheme } from "./themes.js";
 
 const state = {
   config: { categories: [] },
-  settings: { appTitle: "Start", theme: "dark", language: "en" },
+  settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15 },
   editMode: false,
   editModeCollapsedSnapshot: null,
   undoStack: [],
@@ -99,6 +99,19 @@ function serviceStoredIconSrcForDisplay(service) {
 const RESTART_POLL_MS = 2000;
 const RESTART_WAIT_MS = 120_000;
 const RESTART_OK_WITHOUT_DOWN_MS = 12_000;
+const DEFAULT_CATEGORY_ACCENT_STRENGTH = 15;
+
+function normalizeCategoryAccentStrength(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_CATEGORY_ACCENT_STRENGTH;
+  const clamped = Math.min(100, Math.max(0, parsed));
+  return Math.round(clamped / 5) * 5;
+}
+
+function applyCategoryAccentStrength(strength) {
+  const normalized = normalizeCategoryAccentStrength(strength);
+  document.body.style.setProperty("--category-accent-strength", `${normalized}%`);
+}
 
 async function waitForAppReadyAfterRestart() {
   const started = Date.now();
@@ -184,11 +197,16 @@ async function bootstrap() {
     api.getLanguages()
   ]);
   state.config = config;
-  state.settings = settings;
+  state.settings = {
+    ...state.settings,
+    ...settings,
+    categoryAccentStrength: normalizeCategoryAccentStrength(settings?.categoryAccentStrength)
+  };
   state.themes = themes.themes;
   state.languages = languages.languages;
   await initI18n(state.settings.language);
   applyTheme(state.settings.theme);
+  applyCategoryAccentStrength(state.settings.categoryAccentStrength);
   wireEvents();
   render();
 }
@@ -247,6 +265,7 @@ async function undo() {
 }
 
 function render() {
+  applyCategoryAccentStrength(state.settings.categoryAccentStrength);
   document.documentElement.lang = state.settings.language || "en";
   document.title = state.settings.appTitle || "Start";
   elements.title.textContent = state.settings.appTitle || "Start";
@@ -659,6 +678,7 @@ function openServiceModal(categoryId, service = null) {
 
 function openSettingsModal() {
   const form = document.createElement("form");
+  const currentStrength = normalizeCategoryAccentStrength(state.settings.categoryAccentStrength);
   const themeButtons = state.themes
     .map((theme) => `<button type="button" class="theme-option ${state.settings.theme === theme ? "active" : ""}" data-theme="${theme}">${theme}</button>`)
     .join("");
@@ -684,6 +704,13 @@ function openSettingsModal() {
         <span class="select-chevron">${iconSvg(ICONS.chevron, "inline-icon")}</span>
       </div>
     </div>
+    <div class="form-row">
+      <label>${t("ui.categoryAccentStrength")}</label>
+      <div>
+        <input name="categoryAccentStrength" type="range" min="0" max="100" step="5" value="${currentStrength}" />
+        <small data-category-accent-strength-value>${currentStrength}%</small>
+      </div>
+    </div>
     <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
       <label id="settings-actions-heading" for="restart-app-btn">${t("ui.actions")}</label>
       <div>
@@ -701,6 +728,13 @@ function openSettingsModal() {
       button.classList.add("active");
     });
   });
+  const categoryAccentStrengthInput = form.querySelector("input[name='categoryAccentStrength']");
+  const categoryAccentStrengthValue = form.querySelector("[data-category-accent-strength-value]");
+  categoryAccentStrengthInput?.addEventListener("input", () => {
+    const normalized = normalizeCategoryAccentStrength(categoryAccentStrengthInput.value);
+    categoryAccentStrengthInput.value = String(normalized);
+    categoryAccentStrengthValue.textContent = `${normalized}%`;
+  });
 
   showModal({
     title: t("ui.settings"),
@@ -714,8 +748,10 @@ function openSettingsModal() {
       state.settings.appTitle = fd.get("appTitle");
       state.settings.theme = fd.get("theme");
       state.settings.language = fd.get("language");
+      state.settings.categoryAccentStrength = normalizeCategoryAccentStrength(fd.get("categoryAccentStrength"));
       await persistSettings();
       applyTheme(state.settings.theme);
+      applyCategoryAccentStrength(state.settings.categoryAccentStrength);
       await initI18n(state.settings.language);
       render();
     }
