@@ -7,6 +7,37 @@ body {
   font-family: var(--font-family);
   font-size: 0.98rem;
   line-height: 1.4;
+  --element-scale: 1;
+  --size-grid-min: calc(260px * var(--element-scale));
+  --size-gap-main: calc(1rem * var(--element-scale));
+  --size-gap-grid: calc(0.9rem * var(--element-scale));
+  --size-gap-services: calc(0.45rem * var(--element-scale));
+  --size-gap-card: calc(0.5rem * var(--element-scale));
+  --size-gap-inline: calc(0.5rem * var(--element-scale));
+  --size-category-padding: calc(0.75rem * var(--element-scale));
+  --size-category-header-height: calc(36px * var(--element-scale));
+  --size-service-height: calc(58px * var(--element-scale));
+  --size-service-icon: calc(34px * var(--element-scale));
+  --size-category-icon: calc(22px * var(--element-scale));
+  --size-control-height: calc(38px * var(--element-scale));
+  --size-control-height-compact: calc(32px * var(--element-scale));
+  --size-control-icon-only: calc(36px * var(--element-scale));
+  --size-inline-icon: calc(18px * var(--element-scale));
+  --size-service-font: calc(1rem * var(--element-scale));
+  --size-service-pad-y: calc(0.5rem * var(--element-scale));
+  --size-service-pad-x-right: calc(0.55rem * var(--element-scale));
+  --size-service-pad-x-left: calc(0.75rem * var(--element-scale));
+  --size-edit-overlay-width: calc(8.9rem * var(--element-scale));
+  --size-edit-overlay-fade: calc(2.4rem * var(--element-scale));
+  --size-service-actions-right: calc(0.55rem * var(--element-scale));
+}
+
+body[data-element-size="small"] {
+  --element-scale: 0.88;
+}
+
+body[data-element-size="large"] {
+  --element-scale: 1.14;
 }
 
 button,
@@ -36,14 +67,14 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: calc(0.45rem * var(--element-scale));
   border: 0;
   background: var(--surface);
   color: var(--text);
   border-radius: 4px;
-  padding: 0.5rem 0.8rem;
+  padding: calc(0.5rem * var(--element-scale)) calc(0.8rem * var(--element-scale));
   cursor: pointer;
-  min-height: 38px;
+  min-height: var(--size-control-height);
   font: inherit;
   transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
@@ -51,14 +82,14 @@ textarea {
 .btn:hover { background: var(--surface-hover); box-shadow: var(--control-shadow); }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn--ghost { background: var(--surface-2); }
-.btn--icon { width: 36px; min-width: 36px; padding: 0; }
-.btn--compact { min-height: 32px; padding-inline: 0.55rem; }
+.btn--icon { width: var(--size-control-icon-only); min-width: var(--size-control-icon-only); padding: 0; }
+.btn--compact { min-height: var(--size-control-height-compact); padding-inline: calc(0.55rem * var(--element-scale)); }
 .btn.is-active { background: var(--control-active-bg); color: var(--control-active-fg); }
-.btn__icon { display: inline-flex; width: 18px; height: 18px; }
+.btn__icon { display: inline-flex; width: var(--size-inline-icon); height: var(--size-inline-icon); }
 .btn__label { line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
 
 main {
-  padding: 1rem;
+  padding: var(--size-gap-main);
   max-width: 1720px;
   margin: 0 auto;
 }
@@ -66,8 +97,8 @@ main {
 
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-grid-min)), 1fr));
+  gap: var(--size-gap-grid);
   justify-content: center;
   align-items: start;
 }
@@ -77,10 +108,10 @@ main {
   border-radius: 4px;
   --category-surface: color-mix(in srgb, var(--category-accent, var(--cat-primary)) var(--category-accent-strength), var(--category-bg));
   background: var(--category-surface);
-  padding: 0.75rem;
+  padding: var(--size-category-padding);
   box-shadow: var(--card-shadow);
   display: grid;
-  gap: 0.5rem;
+  gap: var(--size-gap-card);
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
@@ -101,7 +132,7 @@ main {
   justify-content: space-between;
   gap: 0.4rem;
   position: relative;
-  min-height: 36px;
+  min-height: var(--size-category-header-height);
 }
 
 .category-header-main {
@@ -109,10 +140,10 @@ main {
   background: transparent;
   color: inherit;
   width: 100%;
-  min-height: 36px;
+  min-height: var(--size-category-header-height);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--size-gap-inline);
   text-align: left;
   cursor: pointer;
   padding: 0.1rem 0;
@@ -145,8 +176,8 @@ main {
 .collapse-arrow.is-collapsed { transform: rotate(-90deg); }
 
 .category-icon {
-  width: 22px;
-  height: 22px;
+  width: var(--size-category-icon);
+  height: var(--size-category-icon);
   color: var(--text);
 }
 
@@ -174,10 +205,10 @@ main {
 }
 
 .services {
-  margin-top: 0.5rem;
+  margin-top: var(--size-gap-card);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-grid-min)), 1fr));
+  gap: var(--size-gap-services);
   align-items: start;
 }
 
@@ -201,7 +232,7 @@ main {
   background: var(--surface-2);
   border-radius: 4px;
   padding: 0;
-  min-height: 58px;
+  min-height: var(--size-service-height);
   box-shadow: var(--card-shadow-soft);
   transition: transform 120ms ease, box-shadow 120ms ease;
   position: relative;
@@ -216,25 +247,25 @@ main {
   padding: 0;
 }
 .service--add .service-left {
-  min-height: 58px;
-  padding: 0.5rem 0.55rem 0.5rem 0.75rem;
+  min-height: var(--size-service-height);
+  padding: var(--size-service-pad-y) var(--size-service-pad-x-right) var(--size-service-pad-y) var(--size-service-pad-x-left);
 }
 
 .service-left {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--size-gap-inline);
   width: 100%;
-  min-height: 58px;
-  padding: 0.5rem 0.55rem 0.5rem 0.75rem;
+  min-height: var(--size-service-height);
+  padding: var(--size-service-pad-y) var(--size-service-pad-x-right) var(--size-service-pad-y) var(--size-service-pad-x-left);
   min-width: 0;
   color: inherit;
   text-decoration: none;
 }
 
 .service-left img {
-  width: 34px;
-  height: 34px;
+  width: var(--size-service-icon);
+  height: var(--size-service-icon);
   border-radius: 4px;
   flex: 0 0 auto;
   display: block;
@@ -246,14 +277,14 @@ main {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.25;
-  font-size: 1rem;
+  font-size: var(--size-service-font);
   font-weight: 500;
 }
 
 .service-actions {
   position: absolute;
   top: 50%;
-  right: 0.55rem;
+  right: var(--size-service-actions-right);
   transform: translateY(-50%);
   z-index: 2;
 }
@@ -261,7 +292,7 @@ main {
 .category.is-edit-mode .category-header-main,
 .service.is-edit-mode .service-left {
   position: relative;
-  padding-right: 8.9rem;
+  padding-right: var(--size-edit-overlay-width);
 }
 
 .category.is-edit-mode .category-header-main::after,
@@ -269,8 +300,8 @@ main {
   content: "";
   position: absolute;
   top: 0;
-  right: 8.9rem;
-  width: 2.4rem;
+  right: var(--size-edit-overlay-width);
+  width: var(--size-edit-overlay-fade);
   height: 100%;
   pointer-events: none;
 }
@@ -392,8 +423,15 @@ select {
 .theme-option.active { background: var(--control-active-bg); color: var(--control-active-fg); }
 
 .theme-picker .theme-option {
-  min-height: 42px;
+  min-height: calc(42px * var(--element-scale));
   min-width: 0;
+}
+
+.element-size-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .theme-option.active { box-shadow: var(--focus-ring); }
@@ -473,7 +511,7 @@ select {
 }
 
 .icon-preview,
-.inline-icon { width: 18px; height: 18px; }
+.inline-icon { width: var(--size-inline-icon); height: var(--size-inline-icon); }
 
 .mdi-icon {
   display: inline-block;
@@ -551,7 +589,7 @@ select {
 
 .icon-url-controls [data-fetch-favicon] {
   flex: 0 0 auto;
-  min-height: 38px;
+  min-height: var(--size-control-height);
 }
 
 .icon-preview-box {
@@ -687,7 +725,7 @@ select {
 }
 
 @media (max-width: 900px) {
-  .category-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+  .category-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(280px * var(--element-scale))), 1fr)); }
 }
 
 @media (max-width: 650px) {

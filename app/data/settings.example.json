@@ -2,5 +2,6 @@
   "appTitle": "Start",
   "theme": "dark",
   "language": "en",
-  "categoryAccentStrength": 15
+  "categoryAccentStrength": 15,
+  "elementSize": "medium"
 }

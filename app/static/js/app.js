@@ -5,7 +5,7 @@ import { applyTheme } from "./themes.js";
 
 const state = {
   config: { categories: [] },
-  settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15 },
+  settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15, elementSize: "medium" },
   editMode: false,
   editModeCollapsedSnapshot: null,
   undoStack: [],
@@ -102,6 +102,8 @@ const RESTART_POLL_MS = 2000;
 const RESTART_WAIT_MS = 120_000;
 const RESTART_OK_WITHOUT_DOWN_MS = 12_000;
 const DEFAULT_CATEGORY_ACCENT_STRENGTH = 15;
+const ELEMENT_SIZE_OPTIONS = ["small", "medium", "large"];
+const DEFAULT_ELEMENT_SIZE = "medium";
 
 function normalizeCategoryAccentStrength(value) {
   const parsed = Number(value);
@@ -113,6 +115,16 @@ function normalizeCategoryAccentStrength(value) {
 function applyCategoryAccentStrength(strength) {
   const normalized = normalizeCategoryAccentStrength(strength);
   document.body.style.setProperty("--category-accent-strength", `${normalized}%`);
+}
+
+function normalizeElementSize(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ELEMENT_SIZE_OPTIONS.includes(normalized) ? normalized : DEFAULT_ELEMENT_SIZE;
+}
+
+function applyElementSize(size) {
+  const normalized = normalizeElementSize(size);
+  document.body.dataset.elementSize = normalized;
 }
 
 async function waitForAppReadyAfterRestart() {
@@ -250,13 +262,15 @@ async function bootstrap() {
   state.settings = {
     ...state.settings,
     ...settings,
-    categoryAccentStrength: normalizeCategoryAccentStrength(settings?.categoryAccentStrength)
+    categoryAccentStrength: normalizeCategoryAccentStrength(settings?.categoryAccentStrength),
+    elementSize: normalizeElementSize(settings?.elementSize)
   };
   state.themes = themes.themes;
   state.languages = languages.languages;
   await initI18n(state.settings.language);
   applyTheme(state.settings.theme);
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
+  applyElementSize(state.settings.elementSize);
   wireEvents();
   render();
 }
@@ -316,6 +330,7 @@ async function undo() {
 
 function render() {
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
+  applyElementSize(state.settings.elementSize);
   updateDocumentLanguage();
   updateAppTitleUI();
   elements.undo.innerHTML = iconSvg(ICONS.undo, "inline-icon");
@@ -373,6 +388,11 @@ function refreshSettingsModalTexts(form) {
   form.querySelector("[data-settings-theme-label]")?.replaceChildren(t("ui.theme"));
   form.querySelector("[data-settings-language-label]")?.replaceChildren(t("ui.language"));
   form.querySelector("[data-settings-accent-label]")?.replaceChildren(t("ui.categoryAccentStrength"));
+  form.querySelector("[data-settings-element-size-label]")?.replaceChildren(t("ui.elementSize"));
+  form.querySelectorAll("[data-element-size]").forEach((entry) => {
+    const size = normalizeElementSize(entry.dataset.elementSize);
+    entry.textContent = t(`ui.size${size.charAt(0).toUpperCase()}${size.slice(1)}`);
+  });
   form.querySelector("[data-settings-actions-label]")?.replaceChildren(t("ui.actions"));
   form.querySelector("[data-settings-restart-label]")?.replaceChildren(t("ui.restartApp"));
   form.closest(".modal")?.querySelector("[data-cancel] .btn__label")?.replaceChildren(t("ui.close"));
@@ -828,6 +848,7 @@ function openSettingsModal() {
   form.className = "settings-form";
   const currentStrength = normalizeCategoryAccentStrength(state.settings.categoryAccentStrength);
   const currentStrengthPercent = `${currentStrength}%`;
+  const currentElementSize = normalizeElementSize(state.settings.elementSize);
   const themeButtons = state.themes
     .map((theme) => `<button type="button" class="theme-option ${state.settings.theme === theme ? "active" : ""}" data-theme="${theme}">${theme}</button>`)
     .join("");
@@ -858,6 +879,12 @@ function openSettingsModal() {
       <div class="range-control" style="--range-percent:${currentStrengthPercent}">
         <input name="categoryAccentStrength" type="range" min="0" max="100" step="5" value="${currentStrength}" />
         <small class="range-value" data-category-accent-strength-value style="left:${currentStrengthPercent}">${currentStrengthPercent}</small>
+      </div>
+    </div>
+    <div class="form-row">
+      <label data-settings-element-size-label>${t("ui.elementSize")}</label>
+      <div class="element-size-options">
+        ${ELEMENT_SIZE_OPTIONS.map((size) => `<button type="button" class="theme-option ${currentElementSize === size ? "active" : ""}" data-element-size="${size}">${t(`ui.size${size.charAt(0).toUpperCase()}${size.slice(1)}`)}</button>`).join("")}
       </div>
     </div>
     <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
@@ -902,6 +929,16 @@ function openSettingsModal() {
       button.classList.add("active");
       state.settings.theme = button.dataset.theme;
       applyTheme(state.settings.theme);
+      scheduleSettingsPersist(0);
+    });
+  });
+  form.querySelectorAll("[data-element-size]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextSize = normalizeElementSize(button.dataset.elementSize);
+      state.settings.elementSize = nextSize;
+      applyElementSize(nextSize);
+      form.querySelectorAll("[data-element-size]").forEach((b) => b.classList.remove("active"));
+      button.classList.add("active");
       scheduleSettingsPersist(0);
     });
   });
