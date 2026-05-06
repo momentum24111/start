@@ -36,6 +36,15 @@ SETTINGS_EXAMPLE = DATA_DIR / "settings.example.json"
 CONFIG_FILE = DATA_DIR / "config.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 
+RUNTIME_STATE: dict = {
+    "last_loaded_file": None,
+    "last_loaded_at": None,
+    "last_load_context": None,
+    "last_written_file": None,
+    "last_written_at": None,
+    "last_write_context": None,
+}
+
 
 class FaviconRequest(BaseModel):
     url: str = Field(min_length=3, max_length=4096)
@@ -59,14 +68,25 @@ def ensure_bootstrap() -> None:
     ensure_file(SETTINGS_FILE, SETTINGS_EXAMPLE)
 
 
-def load_json(path: Path) -> dict:
+def _timestamp_now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def load_json(path: Path, *, context: str = "unknown") -> dict:
     with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+        data = json.load(file)
+    RUNTIME_STATE["last_loaded_file"] = str(path.resolve())
+    RUNTIME_STATE["last_loaded_at"] = _timestamp_now()
+    RUNTIME_STATE["last_load_context"] = context
+    return data
 
 
-def save_json(path: Path, data: dict) -> None:
+def save_json(path: Path, data: dict, *, context: str = "unknown") -> None:
     with path.open("w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=2)
+    RUNTIME_STATE["last_written_file"] = str(path.resolve())
+    RUNTIME_STATE["last_written_at"] = _timestamp_now()
+    RUNTIME_STATE["last_write_context"] = context
 
 
 def create_backup(path: Path) -> Path:
@@ -87,7 +107,7 @@ def list_themes() -> list[str]:
 def list_languages() -> list[dict]:
     languages: list[dict] = []
     for file in sorted(LANGUAGES_DIR.glob("*.json")):
-        content = load_json(file)
+        content = load_json(file, context="list_languages")
         languages.append(
             {
                 "code": file.stem,
@@ -283,26 +303,56 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 @app.get("/api/config")
 def get_config() -> dict:
-    return load_json(CONFIG_FILE)
+    return load_json(CONFIG_FILE, context="api:get_config")
 
 
 @app.put("/api/config")
 def put_config(payload: dict) -> dict:
     create_backup(CONFIG_FILE)
-    save_json(CONFIG_FILE, payload)
+    save_json(CONFIG_FILE, payload, context="api:put_config")
     return {"ok": True}
 
 
 @app.get("/api/settings")
 def get_settings() -> dict:
-    return load_json(SETTINGS_FILE)
+    return load_json(SETTINGS_FILE, context="api:get_settings")
 
 
 @app.put("/api/settings")
 def put_settings(payload: dict) -> dict:
     create_backup(SETTINGS_FILE)
-    save_json(SETTINGS_FILE, payload)
+    save_json(SETTINGS_FILE, payload, context="api:put_settings")
     return {"ok": True}
+
+
+@app.get("/api/debug/storage")
+def get_debug_storage() -> dict:
+    return {
+        "runtime": {
+            "pid": os.getpid(),
+            "cwd": str(Path.cwd().resolve()),
+            "base_dir": str(BASE_DIR.resolve()),
+            "argv": list(sys.argv),
+            "python_executable": sys.executable,
+        },
+        "paths": {
+            "config_file": str(CONFIG_FILE.resolve()),
+            "settings_file": str(SETTINGS_FILE.resolve()),
+            "config_example": str(CONFIG_EXAMPLE.resolve()),
+            "settings_example": str(SETTINGS_EXAMPLE.resolve()),
+        },
+        "last_io": dict(RUNTIME_STATE),
+        "files": {
+            "config_exists": CONFIG_FILE.exists(),
+            "settings_exists": SETTINGS_FILE.exists(),
+            "config_mtime": datetime.fromtimestamp(CONFIG_FILE.stat().st_mtime).isoformat(timespec="seconds")
+            if CONFIG_FILE.exists()
+            else None,
+            "settings_mtime": datetime.fromtimestamp(SETTINGS_FILE.stat().st_mtime).isoformat(timespec="seconds")
+            if SETTINGS_FILE.exists()
+            else None,
+        },
+    }
 
 
 def _exec_same_process() -> None:
