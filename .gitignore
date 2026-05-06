@@ -1,9 +1,16 @@
 __pycache__/
 *.pyc
+
 .env
+.env.*
+
 venv/
 .venv/
+
 app/data/config.json
 app/data/settings.json
 app/data/backups/
 app/static/assets/favicon-cache/
+
+.DS_Store
+Thumbs.db

@@ -31,7 +31,9 @@ body {
   --size-service-pad-y: calc(0.5rem * var(--element-scale));
   --size-service-pad-x-right: calc(0.55rem * var(--element-scale));
   --size-service-pad-x-left: calc(0.75rem * var(--element-scale));
+  --size-edit-actions-inset: calc(0.35rem * var(--element-scale));
   --size-edit-overlay-width: calc(8.9rem * var(--element-scale));
+  --size-edit-reserved-width: calc(var(--size-edit-overlay-width) + var(--size-edit-actions-inset));
   --size-edit-overlay-fade: calc(2.4rem * var(--element-scale));
   --size-service-actions-right: calc(0.55rem * var(--element-scale));
 }
@@ -117,6 +119,7 @@ main {
   display: grid;
   gap: var(--size-gap-card);
   transition: transform 120ms ease, box-shadow 120ms ease;
+  overflow: hidden;
 }
 
 .category[data-color="primary"] { --category-accent: var(--cat-primary); }
@@ -137,6 +140,7 @@ main {
   gap: var(--size-gap-header);
   position: relative;
   min-height: var(--size-category-header-height);
+  overflow: hidden;
 }
 
 .category-header-main {
@@ -144,6 +148,7 @@ main {
   background: transparent;
   color: inherit;
   width: 100%;
+  min-width: 0;
   min-height: var(--size-category-header-height);
   display: flex;
   align-items: center;
@@ -192,9 +197,13 @@ main {
 .category-actions {
   position: absolute;
   top: 50%;
-  right: 0;
+  right: var(--size-edit-actions-inset);
   transform: translateY(-50%);
   z-index: 2;
+  max-width: var(--size-edit-overlay-width);
+  overflow: hidden;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
 }
 
 .category-actions .btn,
@@ -241,6 +250,7 @@ main {
   box-shadow: var(--card-shadow-soft);
   transition: transform 120ms ease, box-shadow 120ms ease;
   position: relative;
+  overflow: hidden;
 }
 
 .service--add { width: 100%; text-align: left; cursor: pointer; }
@@ -289,15 +299,19 @@ main {
 .service-actions {
   position: absolute;
   top: 50%;
-  right: var(--size-service-actions-right);
+  right: var(--size-edit-actions-inset);
   transform: translateY(-50%);
   z-index: 2;
+  max-width: var(--size-edit-overlay-width);
+  overflow: hidden;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
 }
 
 .category.is-edit-mode .category-header-main,
 .service.is-edit-mode .service-left {
   position: relative;
-  padding-right: var(--size-edit-overlay-width);
+  padding-right: var(--size-edit-reserved-width);
 }
 
 .category.is-edit-mode .category-header-main::after,
@@ -305,10 +319,15 @@ main {
   content: "";
   position: absolute;
   top: 0;
-  right: var(--size-edit-overlay-width);
+  right: var(--size-edit-reserved-width);
   width: var(--size-edit-overlay-fade);
   height: 100%;
   pointer-events: none;
+}
+
+.category-actions .btn,
+.service-actions .btn {
+  flex: 0 0 auto;
 }
 
 .category.is-edit-mode .category-header-main::after {
