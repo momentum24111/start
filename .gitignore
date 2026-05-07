@@ -7,6 +7,8 @@ __pycache__/
 venv/
 .venv/
 
+Prompt für ChatGPT.txt
+
 app/data/config.json
 app/data/settings.json
 app/data/backups/
