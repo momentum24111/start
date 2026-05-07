@@ -836,6 +836,11 @@ function renderAddServiceTile() {
   `;
 }
 
+function syncEditModeCollapsedSnapshot(categoryId, collapsed) {
+  if (!state.editModeCollapsedSnapshot || !categoryId) return;
+  state.editModeCollapsedSnapshot[categoryId] = Boolean(collapsed);
+}
+
 function openCategoryModal(category = null) {
   const isEdit = Boolean(category);
   const form = document.createElement("form");
@@ -946,10 +951,12 @@ function openCategoryModal(category = null) {
         return false;
       }
       if (isEdit) {
+        const nextCollapsed = form.querySelector("input[name='collapsed']").checked;
         category.name = fd.get("name");
         category.icon = selectedIcon;
         category.color = fd.get("color");
-        category.collapsed = form.querySelector("input[name='collapsed']").checked;
+        category.collapsed = nextCollapsed;
+        syncEditModeCollapsedSnapshot(category.id, nextCollapsed);
         category.slots = normalizeCategorySlots(fd.get("slots"));
         if (isIframeCategory) {
           category.type = "iframe";
@@ -958,26 +965,24 @@ function openCategoryModal(category = null) {
         }
       } else {
         const typeForNew = normalizeCategoryType(fd.get("type") || DEFAULT_CATEGORY_TYPE);
+        const createdCategory = {
+          id: uid(),
+          name: fd.get("name"),
+          icon: selectedIcon,
+          color: fd.get("color"),
+          collapsed: form.querySelector("input[name='collapsed']").checked,
+          slots: normalizeCategorySlots(fd.get("slots"))
+        };
         if (typeForNew === "iframe") {
           state.config.categories.push({
-            id: uid(),
-            name: fd.get("name"),
-            icon: selectedIcon,
-            color: fd.get("color"),
-            collapsed: form.querySelector("input[name='collapsed']").checked,
-            slots: normalizeCategorySlots(fd.get("slots")),
+            ...createdCategory,
             type: "iframe",
             iframeUrl: iframeUrlValue,
             services: []
           });
         } else {
           state.config.categories.push({
-            id: uid(),
-            name: fd.get("name"),
-            icon: selectedIcon,
-            color: fd.get("color"),
-            collapsed: form.querySelector("input[name='collapsed']").checked,
-            slots: normalizeCategorySlots(fd.get("slots")),
+            ...createdCategory,
             type: "service-list",
             iframeUrl: "",
             services: []
