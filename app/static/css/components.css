@@ -31,6 +31,7 @@ body {
   --size-service-pad-y: calc(0.5rem * var(--element-scale));
   --size-service-pad-x-right: calc(0.55rem * var(--element-scale));
   --size-service-pad-x-left: calc(0.75rem * var(--element-scale));
+  --size-iframe-height: clamp(calc(220px * var(--element-scale)), 35vh, calc(520px * var(--element-scale)));
   --size-edit-actions-inset: calc(0.35rem * var(--element-scale));
   --size-edit-overlay-width: calc(8.9rem * var(--element-scale));
   --size-edit-reserved-width: calc(var(--size-edit-overlay-width) + var(--size-edit-actions-inset));
@@ -240,6 +241,21 @@ main {
 
 .category-content > .services {
   overflow: hidden;
+}
+
+.category-iframe {
+  margin-top: var(--size-gap-card);
+  border-radius: 4px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.category-iframe__frame {
+  display: block;
+  width: 100%;
+  height: var(--size-iframe-height);
+  border: 0;
+  background: transparent;
 }
 
 .service {

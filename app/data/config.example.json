@@ -6,6 +6,8 @@
       "icon": "server",
       "color": "primary",
       "collapsed": false,
+      "type": "service-list",
+      "iframeUrl": "",
       "services": [
         {
           "id": "proxmox",

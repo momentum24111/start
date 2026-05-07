@@ -106,6 +106,8 @@ const ELEMENT_SIZE_OPTIONS = ["small", "medium", "large"];
 const DEFAULT_ELEMENT_SIZE = "medium";
 const CATEGORY_SLOT_OPTIONS = [1, 2, 3];
 const DEFAULT_CATEGORY_SLOTS = 1;
+const CATEGORY_TYPE_OPTIONS = ["service-list", "iframe"];
+const DEFAULT_CATEGORY_TYPE = "service-list";
 const SHORTCUT_VALID_KEY_REGEX = /^(?:[A-Z0-9]|F[1-9]|F1[0-2])$/;
 const RESERVED_SHORTCUTS = new Set([
   "Ctrl+T",
@@ -301,13 +303,40 @@ function normalizeCategorySlots(value) {
   return CATEGORY_SLOT_OPTIONS.includes(parsed) ? parsed : DEFAULT_CATEGORY_SLOTS;
 }
 
+function normalizeCategoryType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return CATEGORY_TYPE_OPTIONS.includes(normalized) ? normalized : DEFAULT_CATEGORY_TYPE;
+}
+
+function normalizeIframeUrl(value) {
+  return String(value || "").trim();
+}
+
+function isValidIframeUrl(value) {
+  const v = normalizeIframeUrl(value);
+  if (!v) return false;
+  if (v.startsWith("//")) return true;
+  if (v.startsWith("/")) return true;
+  return /^https?:\/\//i.test(v);
+}
+
+function resolveIframeSrc(raw) {
+  const v = normalizeIframeUrl(raw);
+  if (!v) return "";
+  if (v.startsWith("//")) return `${window.location.protocol}${v}`;
+  if (v.startsWith("/")) return new URL(v, window.location.origin).href;
+  return v;
+}
+
 function normalizeConfig(config) {
   const normalizedConfig = config && typeof config === "object" ? config : { categories: [] };
   const categories = Array.isArray(normalizedConfig.categories) ? normalizedConfig.categories : [];
   normalizedConfig.categories = categories.map((category) => ({
     ...category,
+    type: normalizeCategoryType(category?.type),
+    iframeUrl: normalizeIframeUrl(category?.iframeUrl),
     slots: normalizeCategorySlots(category?.slots),
-    services: Array.isArray(category?.services) ? category.services : []
+    services: normalizeCategoryType(category?.type) === "iframe" ? [] : (Array.isArray(category?.services) ? category.services : [])
   }));
   return normalizedConfig;
 }
@@ -517,7 +546,7 @@ function pushUndo() {
 
 async function persistConfig() {
   await api.saveConfig(state.config);
-  state.config = await api.getConfig();
+  state.config = normalizeConfig(await api.getConfig());
 }
 
 async function persistSettings() {
@@ -623,12 +652,15 @@ function renderCategory(category) {
   const isCollapsed = state.editMode ? false : Boolean(category.collapsed);
   const slotSpan = normalizeCategorySlots(category.slots);
   category.slots = slotSpan;
+  const categoryType = normalizeCategoryType(category.type);
+  const iframeUrl = normalizeIframeUrl(category.iframeUrl);
   const card = document.createElement("article");
   card.className = `category ${state.editMode ? "is-edit-mode" : ""}`;
   card.dataset.color = category.color || "primary";
   card.dataset.slots = String(slotSpan);
   card.style.setProperty("--category-slots", String(slotSpan));
   card.classList.toggle("is-collapsed", isCollapsed);
+  card.dataset.categoryType = categoryType;
   card.innerHTML = `
     <div class="category-header">
       <button type="button" class="category-header-main" data-toggle-collapse>
@@ -643,16 +675,31 @@ function renderCategory(category) {
       </div>
     </div>
     <div class="category-content ${isCollapsed ? "is-collapsed" : ""}">
-      <div data-services-container data-category-id="${category.id}" class="services"></div>
+      ${categoryType === "iframe" ? `
+        <div class="category-iframe">
+          <iframe
+            class="category-iframe__frame"
+            title="${category.name}"
+            src="${resolveIframeSrc(iframeUrl)}"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+          ></iframe>
+        </div>
+      ` : `
+        <div data-services-container data-category-id="${category.id}" class="services"></div>
+      `}
     </div>
-    ${state.editMode ? renderAddServiceTile() : ""}
+    ${state.editMode && categoryType !== "iframe" ? renderAddServiceTile() : ""}
   `;
   card.dataset.categoryId = category.id;
 
-  const servicesRoot = card.querySelector("[data-services-container]");
   const content = card.querySelector(".category-content");
   const arrow = card.querySelector(".collapse-arrow");
-  for (const service of category.services || []) servicesRoot.append(renderService(category, service));
+  const servicesRoot = card.querySelector("[data-services-container]");
+  if (servicesRoot && categoryType !== "iframe") {
+    for (const service of category.services || []) servicesRoot.append(renderService(category, service));
+  }
   syncCategoryContentHeight(content, isCollapsed);
 
   const toggleCollapse = async () => {
@@ -793,6 +840,8 @@ function openCategoryModal(category = null) {
   const isEdit = Boolean(category);
   const form = document.createElement("form");
   const selectedSlots = normalizeCategorySlots(category?.slots);
+  const existingType = normalizeCategoryType(category?.type);
+  const isIframeCategory = isEdit && existingType === "iframe";
   form.innerHTML = `
     <div class="form-row">
       <label>${t("ui.name")}</label>
@@ -833,6 +882,28 @@ function openCategoryModal(category = null) {
         <input type="hidden" name="slots" value="${selectedSlots}" />
       </div>
     </div>
+    ${!isEdit ? `
+      <div class="form-row">
+        <label>${t("ui.categoryType")}</label>
+        <div class="select-wrap">
+          <select name="type" data-category-type>
+            <option value="service-list" selected>${t("ui.categoryTypeServiceList")}</option>
+            <option value="iframe">${t("ui.categoryTypeIframe")}</option>
+          </select>
+          <span class="select-chevron">${iconSvg(ICONS.chevron, "inline-icon")}</span>
+        </div>
+      </div>
+      <div class="form-row hidden" data-iframe-url-row>
+        <label>${t("ui.iframeUrl")}</label>
+        <input name="iframeUrl" inputmode="url" autocomplete="off" placeholder="https://…" />
+      </div>
+    ` : ""}
+    ${isIframeCategory ? `
+      <div class="form-row">
+        <label>${t("ui.iframeUrl")}</label>
+        <input name="iframeUrl" inputmode="url" autocomplete="off" value="${normalizeIframeUrl(category?.iframeUrl)}" required />
+      </div>
+    ` : ""}
   `;
 
   showModal({
@@ -856,27 +927,87 @@ function openCategoryModal(category = null) {
       const fd = new FormData(form);
       pushUndo();
       const selectedIcon = normalizeMdiIconName(fd.get("icon"));
+      const iframeUrlValue = normalizeIframeUrl(fd.get("iframeUrl"));
+      if (!isEdit) {
+        const typeForNew = normalizeCategoryType(fd.get("type") || DEFAULT_CATEGORY_TYPE);
+        if (typeForNew === "iframe" && !isValidIframeUrl(iframeUrlValue)) {
+          const input = form.querySelector("input[name='iframeUrl']");
+          input?.setCustomValidity(t("ui.iframeUrlInvalid"));
+          input?.reportValidity();
+          input?.setCustomValidity("");
+          return false;
+        }
+      }
+      if (isIframeCategory && !isValidIframeUrl(iframeUrlValue)) {
+        const input = form.querySelector("input[name='iframeUrl']");
+        input?.setCustomValidity(t("ui.iframeUrlInvalid"));
+        input?.reportValidity();
+        input?.setCustomValidity("");
+        return false;
+      }
       if (isEdit) {
         category.name = fd.get("name");
         category.icon = selectedIcon;
         category.color = fd.get("color");
         category.collapsed = form.querySelector("input[name='collapsed']").checked;
         category.slots = normalizeCategorySlots(fd.get("slots"));
+        if (isIframeCategory) {
+          category.type = "iframe";
+          category.iframeUrl = iframeUrlValue;
+          category.services = [];
+        }
       } else {
-        state.config.categories.push({
-          id: uid(),
-          name: fd.get("name"),
-          icon: selectedIcon,
-          color: fd.get("color"),
-          collapsed: form.querySelector("input[name='collapsed']").checked,
-          slots: normalizeCategorySlots(fd.get("slots")),
-          services: []
-        });
+        const typeForNew = normalizeCategoryType(fd.get("type") || DEFAULT_CATEGORY_TYPE);
+        if (typeForNew === "iframe") {
+          state.config.categories.push({
+            id: uid(),
+            name: fd.get("name"),
+            icon: selectedIcon,
+            color: fd.get("color"),
+            collapsed: form.querySelector("input[name='collapsed']").checked,
+            slots: normalizeCategorySlots(fd.get("slots")),
+            type: "iframe",
+            iframeUrl: iframeUrlValue,
+            services: []
+          });
+        } else {
+          state.config.categories.push({
+            id: uid(),
+            name: fd.get("name"),
+            icon: selectedIcon,
+            color: fd.get("color"),
+            collapsed: form.querySelector("input[name='collapsed']").checked,
+            slots: normalizeCategorySlots(fd.get("slots")),
+            type: "service-list",
+            iframeUrl: "",
+            services: []
+          });
+        }
       }
       await persistConfig();
       render();
     }
   });
+
+  const typeSelect = form.querySelector("select[name='type'][data-category-type]");
+  const iframeUrlRow = form.querySelector("[data-iframe-url-row]");
+  const iframeUrlInput = iframeUrlRow?.querySelector("input[name='iframeUrl']");
+  const syncTypeFields = () => {
+    if (!typeSelect || !iframeUrlRow) return;
+    const nextType = normalizeCategoryType(typeSelect.value);
+    const showIframe = nextType === "iframe";
+    iframeUrlRow.classList.toggle("hidden", !showIframe);
+    if (iframeUrlInput) {
+      iframeUrlInput.required = showIframe;
+      if (!showIframe) {
+        iframeUrlInput.value = "";
+        iframeUrlInput.setCustomValidity("");
+      }
+    }
+  };
+  typeSelect?.addEventListener("change", syncTypeFields);
+  iframeUrlInput?.addEventListener("input", () => iframeUrlInput.setCustomValidity(""));
+  syncTypeFields();
 
   const input = form.querySelector("input[name='icon']");
   const results = form.querySelector("[data-icon-results]");
@@ -937,6 +1068,7 @@ function openCategoryModal(category = null) {
 function openServiceModal(categoryId, service = null) {
   const category = state.config.categories.find((c) => c.id === categoryId);
   if (!category) return;
+  if (normalizeCategoryType(category.type) === "iframe") return;
   const isEdit = Boolean(service);
   const form = document.createElement("form");
   const previewImgSrc = service ? serviceStoredIconSrcForDisplay(service) : resolveIconSrcForImgTag("");
