@@ -278,6 +278,10 @@ main {
   text-decoration: none;
 }
 
+.service.has-shortcut .service-left {
+  padding-right: calc(var(--size-service-pad-x-right) + 5.2rem);
+}
+
 .service-left img {
   width: var(--size-service-icon);
   height: var(--size-service-icon);
@@ -294,6 +298,33 @@ main {
   line-height: 1.25;
   font-size: var(--size-service-font);
   font-weight: 500;
+}
+
+.service-shortcut {
+  position: absolute;
+  right: var(--size-service-actions-right);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  pointer-events: none;
+}
+
+.shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.15rem;
+  min-width: 1.15rem;
+  border-radius: 4px;
+  border: 1px solid var(--shortcut-chip-border);
+  background: var(--shortcut-chip-bg);
+  color: var(--shortcut-chip-text);
+  padding: 0 0.34rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  font-weight: 600;
 }
 
 .service-actions {
@@ -643,6 +674,51 @@ select {
   width: 22px;
   height: 22px;
   border-radius: 4px;
+}
+
+.shortcut-input-wrap {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.shortcut-input {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: var(--surface-2);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.shortcut-input:focus-visible {
+  outline: none;
+  border-color: var(--shortcut-input-focus-border);
+  box-shadow: var(--focus-ring);
+}
+
+.shortcut-input-placeholder {
+  color: var(--muted);
+}
+
+.shortcut-input-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.shortcut-feedback {
+  min-height: 1em;
+  color: var(--muted);
+}
+
+.shortcut-feedback.is-error {
+  color: var(--shortcut-feedback-error);
 }
 
 .range-control {

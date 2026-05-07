@@ -104,6 +104,96 @@ const RESTART_OK_WITHOUT_DOWN_MS = 12_000;
 const DEFAULT_CATEGORY_ACCENT_STRENGTH = 15;
 const ELEMENT_SIZE_OPTIONS = ["small", "medium", "large"];
 const DEFAULT_ELEMENT_SIZE = "medium";
+const SHORTCUT_VALID_KEY_REGEX = /^(?:[A-Z0-9]|F[1-9]|F1[0-2])$/;
+const RESERVED_SHORTCUTS = new Set([
+  "Ctrl+T",
+  "Ctrl+W",
+  "Ctrl+L",
+  "Ctrl+R",
+  "Ctrl+F",
+  "F5"
+]);
+
+function normalizeServiceShortcut(value) {
+  if (!value) return "";
+  const text = String(value).trim();
+  if (!text) return "";
+  const parts = text
+    .split("+")
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const key = parts[parts.length - 1].toUpperCase();
+  if (!SHORTCUT_VALID_KEY_REGEX.test(key)) return "";
+  const modifiers = new Set(parts.slice(0, -1).map((part) => part.toLowerCase()));
+  const ordered = [];
+  if (modifiers.has("ctrl")) ordered.push("Ctrl");
+  if (modifiers.has("alt")) ordered.push("Alt");
+  if (modifiers.has("shift")) ordered.push("Shift");
+  return [...ordered, key].join("+");
+}
+
+function shortcutFromKeyboardEvent(event) {
+  if (event.metaKey) return "";
+  let key = String(event.key || "").toUpperCase();
+  if (!SHORTCUT_VALID_KEY_REGEX.test(key)) return "";
+  const parts = [];
+  if (event.ctrlKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  parts.push(key);
+  return parts.join("+");
+}
+
+function shortcutTokens(shortcut) {
+  const normalized = normalizeServiceShortcut(shortcut);
+  if (!normalized) return [];
+  const lang = state.settings.language === "de" ? "de" : "en";
+  return normalized.split("+").map((token) => {
+    if (token === "Ctrl") return lang === "de" ? "Strg" : "Ctrl";
+    if (token === "Shift") return "Shift";
+    if (token === "Alt") return "Alt";
+    return token;
+  });
+}
+
+function renderShortcutChips(shortcut, className = "shortcut-chip") {
+  const tokens = shortcutTokens(shortcut);
+  if (!tokens.length) return "";
+  return tokens.map((token) => `<span class="${className}">${token}</span>`).join("");
+}
+
+function findServiceByShortcut(shortcut, skipServiceId = "") {
+  const normalized = normalizeServiceShortcut(shortcut);
+  if (!normalized) return null;
+  for (const category of state.config.categories || []) {
+    for (const service of category.services || []) {
+      if (skipServiceId && service.id === skipServiceId) continue;
+      if (normalizeServiceShortcut(service.shortcut) === normalized) {
+        return { category, service };
+      }
+    }
+  }
+  return null;
+}
+
+function isReservedShortcut(shortcut) {
+  return RESERVED_SHORTCUTS.has(normalizeServiceShortcut(shortcut));
+}
+
+function isBlockingFocusTarget(target) {
+  if (!(target instanceof Element)) return false;
+  if (target.closest(".modal-overlay")) return true;
+  if (target.closest("[data-shortcut-capture]")) return true;
+  if (target.closest("input, textarea, select, [contenteditable='true']")) return true;
+  return false;
+}
+
+function triggerServiceLaunch(serviceId) {
+  const tile = document.querySelector(`.service[data-service-id="${serviceId}"] .service-left`);
+  if (!(tile instanceof HTMLAnchorElement)) return;
+  tile.click();
+}
 
 function normalizeCategoryAccentStrength(value) {
   const parsed = Number(value);
@@ -297,6 +387,17 @@ function wireEvents() {
   elements.undo.addEventListener("click", undo);
   elements.settings.addEventListener("click", openSettingsModal);
   elements.addCategory?.addEventListener("click", () => openCategoryModal());
+  document.addEventListener("keydown", (event) => {
+    if (state.editMode) return;
+    if (event.defaultPrevented) return;
+    if (isBlockingFocusTarget(document.activeElement) || isBlockingFocusTarget(event.target)) return;
+    const shortcut = shortcutFromKeyboardEvent(event);
+    if (!shortcut) return;
+    const match = findServiceByShortcut(shortcut);
+    if (!match) return;
+    event.preventDefault();
+    triggerServiceLaunch(match.service.id);
+  });
 }
 
 function pushUndo() {
@@ -513,7 +614,8 @@ function renderService(category, service) {
   const canMoveLeft = serviceIndex > 0;
   const canMoveRight = serviceIndex >= 0 && serviceIndex < services.length - 1;
   const item = document.createElement("div");
-  item.className = `service ${state.editMode ? "is-edit-mode" : ""}`;
+  const hasShortcut = Boolean(normalizeServiceShortcut(service.shortcut));
+  item.className = `service ${state.editMode ? "is-edit-mode" : ""} ${hasShortcut ? "has-shortcut" : ""}`;
   item.dataset.categoryId = category.id;
   item.dataset.serviceId = service.id;
 
@@ -524,6 +626,7 @@ function renderService(category, service) {
       <img loading="lazy" src="${iconPath}" alt="" />
       <span class="service-name">${service.name}</span>
     </a>
+    ${!state.editMode && hasShortcut ? `<div class="service-shortcut">${renderShortcutChips(service.shortcut)}</div>` : ""}
     <div class="service-actions ${state.editMode ? "" : "hidden"}">
       ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
       ${button({ label: t("ui.moveLeft"), icon: iconSvg(ICONS.arrowLeft, "inline-icon"), dataAttr: `data-move-service-left ${canMoveLeft ? "" : "disabled"}`, variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
@@ -726,6 +829,16 @@ function openServiceModal(categoryId, service = null) {
         <option value="new-tab" ${service?.openMode === "new-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
       </select>
     </div>
+    <div class="form-row">
+      <label>${t("ui.shortcut")}</label>
+      <div class="shortcut-input-wrap">
+        <button type="button" class="shortcut-input" data-shortcut-capture data-enter-submit="false">
+          <span class="shortcut-input-placeholder">${t("ui.shortcutPlaceholder")}</span>
+          <span class="shortcut-input-chips"></span>
+        </button>
+        <small class="shortcut-feedback" data-shortcut-feedback></small>
+      </div>
+    </div>
   `;
 
   if (service?.cachedIcon) {
@@ -749,6 +862,7 @@ function openServiceModal(categoryId, service = null) {
     }] : [],
     onSave: async () => {
       if (!form.reportValidity()) return false;
+      if (!validateShortcut()) return false;
       const fd = new FormData(form);
       const iconUrl = String(fd.get("iconUrl") || "").trim();
       let cachedIcon = form.dataset.cachedIcon ? normalizeAppIconPath(String(form.dataset.cachedIcon)) : "";
@@ -763,6 +877,7 @@ function openServiceModal(categoryId, service = null) {
         service.iconUrl = iconUrl;
         service.cachedIcon = cachedIcon;
         service.openMode = fd.get("openMode");
+        service.shortcut = selectedShortcut;
       } else {
         category.services.push({
           id: uid(),
@@ -770,7 +885,8 @@ function openServiceModal(categoryId, service = null) {
           url: fd.get("url"),
           iconUrl,
           cachedIcon,
-          openMode: fd.get("openMode")
+          openMode: fd.get("openMode"),
+          shortcut: selectedShortcut
         });
       }
       await persistConfig();
@@ -780,10 +896,64 @@ function openServiceModal(categoryId, service = null) {
 
   const iconUrlInput = form.querySelector("input[name='iconUrl']");
   const urlInput = form.querySelector("input[name='url']");
+  const shortcutCapture = form.querySelector("[data-shortcut-capture]");
+  const shortcutChips = shortcutCapture?.querySelector(".shortcut-input-chips");
+  const shortcutPlaceholder = shortcutCapture?.querySelector(".shortcut-input-placeholder");
+  const shortcutFeedback = form.querySelector("[data-shortcut-feedback]");
   const fetchFaviconButton = form.querySelector("[data-fetch-favicon]");
   const status = form.querySelector("#favicon-status");
   const spinner = form.querySelector("#favicon-spinner");
   const preview = form.querySelector("#favicon-preview");
+
+  let selectedShortcut = normalizeServiceShortcut(service?.shortcut || "");
+  const updateShortcutFeedback = (message = "", isError = false) => {
+    if (!shortcutFeedback) return;
+    shortcutFeedback.textContent = message;
+    shortcutFeedback.classList.toggle("is-error", isError);
+  };
+  const updateShortcutUI = () => {
+    if (!shortcutChips || !shortcutPlaceholder) return;
+    shortcutChips.innerHTML = renderShortcutChips(selectedShortcut, "shortcut-chip");
+    shortcutPlaceholder.classList.toggle("hidden", Boolean(selectedShortcut));
+  };
+  const validateShortcut = () => {
+    if (!selectedShortcut) {
+      updateShortcutFeedback("");
+      return true;
+    }
+    if (isReservedShortcut(selectedShortcut)) {
+      updateShortcutFeedback(t("ui.shortcutReserved"), true);
+      return false;
+    }
+    const conflict = findServiceByShortcut(selectedShortcut, service?.id || "");
+    if (conflict) {
+      updateShortcutFeedback(t("ui.shortcutConflict"), true);
+      return false;
+    }
+    updateShortcutFeedback("");
+    return true;
+  };
+  shortcutCapture?.addEventListener("keydown", (event) => {
+    event.preventDefault();
+    if (event.key === "Backspace" || event.key === "Delete") {
+      selectedShortcut = "";
+      updateShortcutUI();
+      validateShortcut();
+      return;
+    }
+    if (event.key === "Escape") {
+      shortcutCapture.blur();
+      return;
+    }
+    const nextShortcut = shortcutFromKeyboardEvent(event);
+    if (!nextShortcut) return;
+    selectedShortcut = normalizeServiceShortcut(nextShortcut);
+    updateShortcutUI();
+    validateShortcut();
+  });
+  shortcutCapture?.addEventListener("click", () => {
+    shortcutCapture.focus();
+  });
 
   const syncIconPreviewFromField = () => {
     const v = String(iconUrlInput.value || "").trim();
@@ -841,6 +1011,8 @@ function openServiceModal(categoryId, service = null) {
 
   fetchFaviconButton.addEventListener("click", triggerFaviconLoad);
   syncIconPreviewFromField();
+  updateShortcutUI();
+  validateShortcut();
 }
 
 function openSettingsModal() {

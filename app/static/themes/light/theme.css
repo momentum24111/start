@@ -33,6 +33,11 @@ body {
   --range-thumb-bg: #ffffff;
   --range-thumb-border: #5e79a6;
   --range-value-text: #4f6278;
+  --shortcut-chip-bg: #e6edf7;
+  --shortcut-chip-border: #bfd0e6;
+  --shortcut-chip-text: #294b7f;
+  --shortcut-input-focus-border: #2d65d6;
+  --shortcut-feedback-error: #b52d2d;
   --category-accent-strength: 15%;
   --cat-primary: #4f84f1;
   --cat-teal: #1fa79f;

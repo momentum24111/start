@@ -34,6 +34,11 @@ body {
   --range-thumb-border: #2e4566;
   --range-tooltip-bg: #2e4566;
   --range-tooltip-text: #ecf2fb;
+  --shortcut-chip-bg: #2a3746;
+  --shortcut-chip-border: #405266;
+  --shortcut-chip-text: #dce7f5;
+  --shortcut-input-focus-border: #6ea6ff;
+  --shortcut-feedback-error: #ee6a6a;
   --category-accent-strength: 15%;
   --cat-primary: #6ea6ff;
   --cat-teal: #38b9b2;
