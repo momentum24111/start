@@ -5,7 +5,7 @@ import { applyTheme } from "./themes.js";
 
 const state = {
   config: { categories: [] },
-  settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15, elementSize: "medium" },
+  settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15, elementSize: "medium", globalShortcuts: {} },
   editMode: false,
   editModeCollapsedSnapshot: null,
   undoStack: [],
@@ -113,6 +113,11 @@ const RESERVED_SHORTCUTS = new Set([
   "Ctrl+F",
   "F5"
 ]);
+const GLOBAL_SHORTCUT_ACTIONS = [
+  { id: "undo", labelKey: "ui.undo" },
+  { id: "toggleEditMode", labelKey: "ui.editMode" },
+  { id: "openSettings", labelKey: "ui.openSettings" }
+];
 
 function normalizeServiceShortcut(value) {
   if (!value) return "";
@@ -131,6 +136,29 @@ function normalizeServiceShortcut(value) {
   if (modifiers.has("alt")) ordered.push("Alt");
   if (modifiers.has("shift")) ordered.push("Shift");
   return [...ordered, key].join("+");
+}
+
+function interpolateLabel(template, values = {}) {
+  let text = String(template || "");
+  for (const [key, value] of Object.entries(values)) {
+    text = text.replaceAll(`{${key}}`, String(value ?? ""));
+  }
+  return text;
+}
+
+function normalizeGlobalShortcuts(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const normalized = {};
+  for (const action of GLOBAL_SHORTCUT_ACTIONS) {
+    normalized[action.id] = normalizeServiceShortcut(source[action.id]);
+  }
+  return normalized;
+}
+
+function getGlobalShortcutLabel(actionId) {
+  const action = GLOBAL_SHORTCUT_ACTIONS.find((entry) => entry.id === actionId);
+  if (!action) return actionId;
+  return t(action.labelKey);
 }
 
 function shortcutFromKeyboardEvent(event) {
@@ -177,6 +205,35 @@ function findServiceByShortcut(shortcut, skipServiceId = "") {
   return null;
 }
 
+function findShortcutUsage(shortcut, { skipServiceId = "", skipGlobalAction = "" } = {}) {
+  const normalized = normalizeServiceShortcut(shortcut);
+  if (!normalized) return null;
+  for (const category of state.config.categories || []) {
+    for (const service of category.services || []) {
+      if (skipServiceId && service.id === skipServiceId) continue;
+      if (normalizeServiceShortcut(service.shortcut) === normalized) {
+        return { type: "service", serviceName: service.name || t("ui.service"), serviceId: service.id };
+      }
+    }
+  }
+  const globalShortcuts = normalizeGlobalShortcuts(state.settings.globalShortcuts);
+  for (const action of GLOBAL_SHORTCUT_ACTIONS) {
+    if (skipGlobalAction && action.id === skipGlobalAction) continue;
+    if (normalizeServiceShortcut(globalShortcuts[action.id]) === normalized) {
+      return { type: "global", actionId: action.id, actionLabel: getGlobalShortcutLabel(action.id) };
+    }
+  }
+  return null;
+}
+
+function getShortcutConflictMessage(usage) {
+  if (!usage) return "";
+  if (usage.type === "service") {
+    return interpolateLabel(t("ui.shortcutConflictService"), { name: usage.serviceName });
+  }
+  return interpolateLabel(t("ui.shortcutConflictAction"), { name: usage.actionLabel });
+}
+
 function isReservedShortcut(shortcut) {
   return RESERVED_SHORTCUTS.has(normalizeServiceShortcut(shortcut));
 }
@@ -193,6 +250,31 @@ function triggerServiceLaunch(serviceId) {
   const tile = document.querySelector(`.service[data-service-id="${serviceId}"] .service-left`);
   if (!(tile instanceof HTMLAnchorElement)) return;
   tile.click();
+}
+
+function getGlobalShortcut(actionId) {
+  const shortcuts = normalizeGlobalShortcuts(state.settings.globalShortcuts);
+  return normalizeServiceShortcut(shortcuts[actionId]);
+}
+
+function formatShortcutForTooltip(shortcut) {
+  const tokens = shortcutTokens(shortcut);
+  if (!tokens.length) return "";
+  return tokens.join(" + ");
+}
+
+function runGlobalShortcutAction(actionId) {
+  if (actionId === "undo") {
+    void undo();
+    return;
+  }
+  if (actionId === "toggleEditMode") {
+    elements.edit.click();
+    return;
+  }
+  if (actionId === "openSettings") {
+    openSettingsModal();
+  }
 }
 
 function normalizeCategoryAccentStrength(value) {
@@ -353,7 +435,8 @@ async function bootstrap() {
     ...state.settings,
     ...settings,
     categoryAccentStrength: normalizeCategoryAccentStrength(settings?.categoryAccentStrength),
-    elementSize: normalizeElementSize(settings?.elementSize)
+    elementSize: normalizeElementSize(settings?.elementSize),
+    globalShortcuts: normalizeGlobalShortcuts(settings?.globalShortcuts)
   };
   state.themes = themes.themes;
   state.languages = languages.languages;
@@ -388,11 +471,17 @@ function wireEvents() {
   elements.settings.addEventListener("click", openSettingsModal);
   elements.addCategory?.addEventListener("click", () => openCategoryModal());
   document.addEventListener("keydown", (event) => {
-    if (state.editMode) return;
     if (event.defaultPrevented) return;
     if (isBlockingFocusTarget(document.activeElement) || isBlockingFocusTarget(event.target)) return;
     const shortcut = shortcutFromKeyboardEvent(event);
     if (!shortcut) return;
+    const globalMatch = GLOBAL_SHORTCUT_ACTIONS.find((action) => getGlobalShortcut(action.id) === shortcut);
+    if (globalMatch) {
+      event.preventDefault();
+      runGlobalShortcutAction(globalMatch.id);
+      return;
+    }
+    if (state.editMode) return;
     const match = findServiceByShortcut(shortcut);
     if (!match) return;
     event.preventDefault();
@@ -462,9 +551,12 @@ function updateAppTitleUI() {
 }
 
 function updateTopbarActionTexts() {
-  elements.undo.title = t("ui.undo");
-  elements.edit.title = t("ui.edit");
-  elements.settings.title = t("ui.settings");
+  const undoShortcut = formatShortcutForTooltip(getGlobalShortcut("undo"));
+  const editShortcut = formatShortcutForTooltip(getGlobalShortcut("toggleEditMode"));
+  const settingsShortcut = formatShortcutForTooltip(getGlobalShortcut("openSettings"));
+  elements.undo.title = undoShortcut ? `${t("ui.undo")} (${undoShortcut})` : t("ui.undo");
+  elements.edit.title = editShortcut ? `${t("ui.edit")} (${editShortcut})` : t("ui.edit");
+  elements.settings.title = settingsShortcut ? `${t("ui.settings")} (${settingsShortcut})` : t("ui.settings");
   elements.undo.setAttribute("aria-label", t("ui.undo"));
   elements.edit.setAttribute("aria-label", t("ui.edit"));
   elements.settings.setAttribute("aria-label", t("ui.settings"));
@@ -490,6 +582,13 @@ function refreshSettingsModalTexts(form) {
   form.querySelector("[data-settings-language-label]")?.replaceChildren(t("ui.language"));
   form.querySelector("[data-settings-accent-label]")?.replaceChildren(t("ui.categoryAccentStrength"));
   form.querySelector("[data-settings-element-size-label]")?.replaceChildren(t("ui.elementSize"));
+  form.querySelector("[data-settings-shortcuts-label]")?.replaceChildren(t("ui.shortcuts"));
+  form.querySelectorAll("[data-global-shortcut-label]").forEach((entry) => {
+    entry.textContent = getGlobalShortcutLabel(entry.dataset.globalShortcutLabel);
+  });
+  form.querySelectorAll("[data-shortcut-placeholder]").forEach((entry) => {
+    entry.textContent = t("ui.shortcutPlaceholder");
+  });
   form.querySelectorAll("[data-element-size]").forEach((entry) => {
     const size = normalizeElementSize(entry.dataset.elementSize);
     entry.textContent = t(`ui.size${size.charAt(0).toUpperCase()}${size.slice(1)}`);
@@ -829,7 +928,7 @@ function openServiceModal(categoryId, service = null) {
         <option value="new-tab" ${service?.openMode === "new-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
       </select>
     </div>
-    <div class="form-row">
+    <div class="form-row form-row--shortcut">
       <label>${t("ui.shortcut")}</label>
       <div class="shortcut-input-wrap">
         <button type="button" class="shortcut-input" data-shortcut-capture data-enter-submit="false">
@@ -925,9 +1024,9 @@ function openServiceModal(categoryId, service = null) {
       updateShortcutFeedback(t("ui.shortcutReserved"), true);
       return false;
     }
-    const conflict = findServiceByShortcut(selectedShortcut, service?.id || "");
+    const conflict = findShortcutUsage(selectedShortcut, { skipServiceId: service?.id || "" });
     if (conflict) {
-      updateShortcutFeedback(t("ui.shortcutConflict"), true);
+      updateShortcutFeedback(getShortcutConflictMessage(conflict), true);
       return false;
     }
     updateShortcutFeedback("");
@@ -1027,6 +1126,19 @@ function openSettingsModal() {
   const languageOptions = state.languages
     .map((lang) => `<option value="${lang.code}" ${state.settings.language === lang.code ? "selected" : ""}>${lang.name}</option>`)
     .join("");
+  const globalShortcuts = normalizeGlobalShortcuts(state.settings.globalShortcuts);
+  const shortcutRows = GLOBAL_SHORTCUT_ACTIONS.map((action) => `
+        <div class="settings-shortcut-row">
+          <span class="settings-shortcut-name" data-global-shortcut-label="${action.id}">${getGlobalShortcutLabel(action.id)}</span>
+          <div class="shortcut-input-wrap">
+            <button type="button" class="shortcut-input" data-shortcut-capture data-global-shortcut="${action.id}" data-enter-submit="false">
+              <span class="shortcut-input-placeholder" data-shortcut-placeholder>${t("ui.shortcutPlaceholder")}</span>
+              <span class="shortcut-input-chips"></span>
+            </button>
+            <small class="shortcut-feedback" data-shortcut-feedback="${action.id}"></small>
+          </div>
+        </div>
+      `).join("");
   form.innerHTML = `
     <div class="form-row">
       <label data-settings-name-label>${t("ui.name")}</label>
@@ -1057,6 +1169,12 @@ function openSettingsModal() {
       <label data-settings-element-size-label>${t("ui.elementSize")}</label>
       <div class="element-size-options">
         ${ELEMENT_SIZE_OPTIONS.map((size) => `<button type="button" class="theme-option ${currentElementSize === size ? "active" : ""}" data-element-size="${size}">${t(`ui.size${size.charAt(0).toUpperCase()}${size.slice(1)}`)}</button>`).join("")}
+      </div>
+    </div>
+    <div class="form-row form-row--shortcut-group">
+      <label data-settings-shortcuts-label>${t("ui.shortcuts")}</label>
+      <div class="settings-shortcuts-list">
+        ${shortcutRows}
       </div>
     </div>
     <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
@@ -1113,6 +1231,73 @@ function openSettingsModal() {
       button.classList.add("active");
       scheduleSettingsPersist(0);
     });
+  });
+  const globalShortcutState = { ...globalShortcuts };
+  const updateGlobalShortcutFeedback = (actionId, message = "", isError = false) => {
+    const feedback = form.querySelector(`[data-shortcut-feedback="${actionId}"]`);
+    if (!feedback) return;
+    feedback.textContent = message;
+    feedback.classList.toggle("is-error", isError);
+  };
+  const updateGlobalShortcutUI = (actionId) => {
+    const capture = form.querySelector(`[data-global-shortcut="${actionId}"]`);
+    if (!capture) return;
+    const chips = capture.querySelector(".shortcut-input-chips");
+    const placeholder = capture.querySelector(".shortcut-input-placeholder");
+    const current = normalizeServiceShortcut(globalShortcutState[actionId]);
+    chips.innerHTML = renderShortcutChips(current, "shortcut-chip");
+    placeholder.classList.toggle("hidden", Boolean(current));
+  };
+  const setGlobalShortcut = (actionId, nextShortcut) => {
+    const normalizedShortcut = normalizeServiceShortcut(nextShortcut);
+    if (!normalizedShortcut) {
+      globalShortcutState[actionId] = "";
+      state.settings.globalShortcuts = { ...globalShortcutState };
+      updateGlobalShortcutFeedback(actionId, "", false);
+      updateGlobalShortcutUI(actionId);
+      updateTopbarActionTexts();
+      scheduleSettingsPersist(0);
+      return;
+    }
+    if (isReservedShortcut(normalizedShortcut)) {
+      updateGlobalShortcutFeedback(actionId, t("ui.shortcutReserved"), true);
+      return;
+    }
+    const conflict = findShortcutUsage(normalizedShortcut, { skipGlobalAction: actionId });
+    if (conflict) {
+      updateGlobalShortcutFeedback(actionId, getShortcutConflictMessage(conflict), true);
+      return;
+    }
+    globalShortcutState[actionId] = normalizedShortcut;
+    state.settings.globalShortcuts = { ...globalShortcutState };
+    updateGlobalShortcutFeedback(actionId, "", false);
+    updateGlobalShortcutUI(actionId);
+    updateTopbarActionTexts();
+    scheduleSettingsPersist(0);
+  };
+  form.querySelectorAll("[data-shortcut-capture][data-global-shortcut]").forEach((capture) => {
+    const actionId = capture.dataset.globalShortcut;
+    capture.addEventListener("keydown", (event) => {
+      event.preventDefault();
+      if (event.key === "Backspace" || event.key === "Delete") {
+        setGlobalShortcut(actionId, "");
+        return;
+      }
+      if (event.key === "Escape") {
+        capture.blur();
+        return;
+      }
+      const nextShortcut = shortcutFromKeyboardEvent(event);
+      if (!nextShortcut) return;
+      setGlobalShortcut(actionId, nextShortcut);
+    });
+    capture.addEventListener("click", () => {
+      capture.focus();
+    });
+    capture.addEventListener("focus", () => {
+      updateGlobalShortcutFeedback(actionId, "", false);
+    });
+    updateGlobalShortcutUI(actionId);
   });
   const categoryAccentStrengthInput = form.querySelector("input[name='categoryAccentStrength']");
   const categoryAccentStrengthValue = form.querySelector("[data-category-accent-strength-value]");

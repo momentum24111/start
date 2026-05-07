@@ -302,7 +302,7 @@ main {
 
 .service-shortcut {
   position: absolute;
-  right: var(--size-service-actions-right);
+  right: calc(var(--size-service-actions-right) + 0.45rem);
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
@@ -422,6 +422,10 @@ main {
   gap: 0.6rem;
   align-items: center;
   margin-bottom: 0.6rem;
+}
+.form-row.form-row--shortcut,
+.form-row.form-row--shortcut-group {
+  align-items: start;
 }
 .form-row.form-row--range {
   margin-top: 0.95rem;
@@ -693,9 +697,10 @@ select {
   gap: 0.3rem;
   padding: 0.35rem 0.5rem;
   text-align: left;
+  cursor: text;
 }
 
-.shortcut-input:focus-visible {
+.shortcut-input:focus {
   outline: none;
   border-color: var(--shortcut-input-focus-border);
   box-shadow: var(--focus-ring);
@@ -719,6 +724,24 @@ select {
 
 .shortcut-feedback.is-error {
   color: var(--shortcut-feedback-error);
+}
+
+.settings-shortcuts-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.settings-shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.settings-shortcut-name {
+  color: var(--text);
+  line-height: 1.4;
+  padding-top: 0.45rem;
 }
 
 .range-control {

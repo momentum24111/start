@@ -3,5 +3,10 @@
   "theme": "dark",
   "language": "en",
   "categoryAccentStrength": 15,
-  "elementSize": "medium"
+  "elementSize": "medium",
+  "globalShortcuts": {
+    "undo": "",
+    "toggleEditMode": "",
+    "openSettings": ""
+  }
 }
