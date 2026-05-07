@@ -1128,17 +1128,17 @@ function openSettingsModal() {
     .join("");
   const globalShortcuts = normalizeGlobalShortcuts(state.settings.globalShortcuts);
   const shortcutRows = GLOBAL_SHORTCUT_ACTIONS.map((action) => `
-        <div class="settings-shortcut-row">
-          <span class="settings-shortcut-name" data-global-shortcut-label="${action.id}">${getGlobalShortcutLabel(action.id)}</span>
-          <div class="shortcut-input-wrap">
-            <button type="button" class="shortcut-input" data-shortcut-capture data-global-shortcut="${action.id}" data-enter-submit="false">
-              <span class="shortcut-input-placeholder" data-shortcut-placeholder>${t("ui.shortcutPlaceholder")}</span>
-              <span class="shortcut-input-chips"></span>
-            </button>
-            <small class="shortcut-feedback" data-shortcut-feedback="${action.id}"></small>
-          </div>
-        </div>
-      `).join("");
+    <div class="form-row form-row--shortcut-option">
+      <label class="settings-shortcut-name" data-global-shortcut-label="${action.id}">${getGlobalShortcutLabel(action.id)}</label>
+      <div class="shortcut-input-wrap">
+        <button type="button" class="shortcut-input" data-shortcut-capture data-global-shortcut="${action.id}" data-enter-submit="false">
+          <span class="shortcut-input-placeholder" data-shortcut-placeholder>${t("ui.shortcutPlaceholder")}</span>
+          <span class="shortcut-input-chips"></span>
+        </button>
+        <small class="shortcut-feedback" data-shortcut-feedback="${action.id}"></small>
+      </div>
+    </div>
+  `).join("");
   form.innerHTML = `
     <div class="form-row">
       <label data-settings-name-label>${t("ui.name")}</label>
@@ -1171,11 +1171,9 @@ function openSettingsModal() {
         ${ELEMENT_SIZE_OPTIONS.map((size) => `<button type="button" class="theme-option ${currentElementSize === size ? "active" : ""}" data-element-size="${size}">${t(`ui.size${size.charAt(0).toUpperCase()}${size.slice(1)}`)}</button>`).join("")}
       </div>
     </div>
-    <div class="form-row form-row--shortcut-group">
-      <label data-settings-shortcuts-label>${t("ui.shortcuts")}</label>
-      <div class="settings-shortcuts-list">
-        ${shortcutRows}
-      </div>
+    <div class="settings-section-title" data-settings-shortcuts-label>${t("ui.shortcuts")}</div>
+    <div class="settings-shortcuts-list">
+      ${shortcutRows}
     </div>
     <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
       <label id="settings-actions-heading" data-settings-actions-label for="restart-app-btn">${t("ui.actions")}</label>

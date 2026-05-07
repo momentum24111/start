@@ -288,7 +288,8 @@ main {
   border-radius: 4px;
   flex: 0 0 auto;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .service-name {
@@ -424,7 +425,8 @@ main {
   margin-bottom: 0.6rem;
 }
 .form-row.form-row--shortcut,
-.form-row.form-row--shortcut-group {
+.form-row.form-row--shortcut-group,
+.form-row.form-row--shortcut-option {
   align-items: start;
 }
 .form-row.form-row--range {
@@ -731,16 +733,14 @@ select {
   gap: 0.45rem;
 }
 
-.settings-shortcut-row {
-  display: grid;
-  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: start;
+.settings-section-title {
+  margin-top: 0.2rem;
+  margin-bottom: 0.45rem;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .settings-shortcut-name {
-  color: var(--text);
-  line-height: 1.4;
   padding-top: 0.45rem;
 }
 
