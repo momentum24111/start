@@ -104,6 +104,8 @@ const RESTART_OK_WITHOUT_DOWN_MS = 12_000;
 const DEFAULT_CATEGORY_ACCENT_STRENGTH = 15;
 const ELEMENT_SIZE_OPTIONS = ["small", "medium", "large"];
 const DEFAULT_ELEMENT_SIZE = "medium";
+const CATEGORY_SLOT_OPTIONS = [1, 2, 3];
+const DEFAULT_CATEGORY_SLOTS = 1;
 const SHORTCUT_VALID_KEY_REGEX = /^(?:[A-Z0-9]|F[1-9]|F1[0-2])$/;
 const RESERVED_SHORTCUTS = new Set([
   "Ctrl+T",
@@ -294,6 +296,22 @@ function normalizeElementSize(value) {
   return ELEMENT_SIZE_OPTIONS.includes(normalized) ? normalized : DEFAULT_ELEMENT_SIZE;
 }
 
+function normalizeCategorySlots(value) {
+  const parsed = Number(value);
+  return CATEGORY_SLOT_OPTIONS.includes(parsed) ? parsed : DEFAULT_CATEGORY_SLOTS;
+}
+
+function normalizeConfig(config) {
+  const normalizedConfig = config && typeof config === "object" ? config : { categories: [] };
+  const categories = Array.isArray(normalizedConfig.categories) ? normalizedConfig.categories : [];
+  normalizedConfig.categories = categories.map((category) => ({
+    ...category,
+    slots: normalizeCategorySlots(category?.slots),
+    services: Array.isArray(category?.services) ? category.services : []
+  }));
+  return normalizedConfig;
+}
+
 function applyElementSize(size) {
   const normalized = normalizeElementSize(size);
   document.body.dataset.elementSize = normalized;
@@ -430,7 +448,7 @@ async function bootstrap() {
     api.getThemes(),
     api.getLanguages()
   ]);
-  state.config = config;
+  state.config = normalizeConfig(config);
   state.settings = {
     ...state.settings,
     ...settings,
@@ -603,9 +621,13 @@ function renderCategory(category) {
   const canMoveLeft = categoryIndex > 0;
   const canMoveRight = categoryIndex >= 0 && categoryIndex < state.config.categories.length - 1;
   const isCollapsed = state.editMode ? false : Boolean(category.collapsed);
+  const slotSpan = normalizeCategorySlots(category.slots);
+  category.slots = slotSpan;
   const card = document.createElement("article");
   card.className = `category ${state.editMode ? "is-edit-mode" : ""}`;
   card.dataset.color = category.color || "primary";
+  card.dataset.slots = String(slotSpan);
+  card.style.setProperty("--category-slots", String(slotSpan));
   card.classList.toggle("is-collapsed", isCollapsed);
   card.innerHTML = `
     <div class="category-header">
@@ -770,6 +792,7 @@ function renderAddServiceTile() {
 function openCategoryModal(category = null) {
   const isEdit = Boolean(category);
   const form = document.createElement("form");
+  const selectedSlots = normalizeCategorySlots(category?.slots);
   form.innerHTML = `
     <div class="form-row">
       <label>${t("ui.name")}</label>
@@ -801,6 +824,15 @@ function openCategoryModal(category = null) {
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
       </label>
     </div>
+    <div class="form-row">
+      <label>${t("ui.slots")}</label>
+      <div>
+        <div class="slot-options">
+          ${CATEGORY_SLOT_OPTIONS.map((slot) => `<button type="button" class="theme-option ${selectedSlots === slot ? "active" : ""}" data-slot-pick="${slot}">${slot}</button>`).join("")}
+        </div>
+        <input type="hidden" name="slots" value="${selectedSlots}" />
+      </div>
+    </div>
   `;
 
   showModal({
@@ -829,6 +861,7 @@ function openCategoryModal(category = null) {
         category.icon = selectedIcon;
         category.color = fd.get("color");
         category.collapsed = form.querySelector("input[name='collapsed']").checked;
+        category.slots = normalizeCategorySlots(fd.get("slots"));
       } else {
         state.config.categories.push({
           id: uid(),
@@ -836,6 +869,7 @@ function openCategoryModal(category = null) {
           icon: selectedIcon,
           color: fd.get("color"),
           collapsed: form.querySelector("input[name='collapsed']").checked,
+          slots: normalizeCategorySlots(fd.get("slots")),
           services: []
         });
       }
@@ -885,6 +919,14 @@ function openCategoryModal(category = null) {
       form.querySelector("input[name='color']").value = colorButton.dataset.color;
       form.querySelectorAll("[data-color-pick]").forEach((entry) => entry.classList.remove("is-active"));
       colorButton.classList.add("is-active");
+    });
+  });
+  form.querySelectorAll("[data-slot-pick]").forEach((slotButton) => {
+    slotButton.addEventListener("click", () => {
+      const nextSlots = normalizeCategorySlots(slotButton.dataset.slotPick);
+      form.querySelector("input[name='slots']").value = String(nextSlots);
+      form.querySelectorAll("[data-slot-pick]").forEach((entry) => entry.classList.remove("active"));
+      slotButton.classList.add("active");
     });
   });
   applySelectedIcon(category?.icon || FALLBACK_MDI_ICON);
