@@ -166,6 +166,22 @@ main {
   margin: 0;
   padding: calc(var(--size-category-padding) + var(--size-category-header-pad-y)) var(--size-category-padding) var(--size-category-header-pad-y);
   font: inherit;
+  position: relative;
+}
+
+/* Geschlossene Kategorie: Klickfläche des Toggle-Buttons bis in den unteren Card-Innenabstand (gleiche visuelle Fläche, kein toter Rand). */
+.category.is-collapsed .category-content {
+  pointer-events: none;
+}
+
+.category.is-collapsed .category-header-main::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--size-category-padding);
+  pointer-events: auto;
 }
 
 .category-title {
