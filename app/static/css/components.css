@@ -141,12 +141,13 @@ main {
 
 .category-header {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: var(--size-gap-header);
   position: relative;
   min-height: var(--size-category-header-height);
   overflow: visible;
+  margin: calc(var(--size-category-padding) * -1) calc(var(--size-category-padding) * -1) 0;
 }
 
 .category-header-main {
@@ -158,10 +159,11 @@ main {
   min-height: calc(var(--size-category-header-height) + var(--size-category-padding));
   display: flex;
   align-items: center;
+  align-self: stretch;
   gap: var(--size-gap-inline);
   text-align: left;
   cursor: pointer;
-  margin: calc(var(--size-category-padding) * -1) calc(var(--size-category-padding) * -1) 0;
+  margin: 0;
   padding: calc(var(--size-category-padding) + var(--size-category-header-pad-y)) var(--size-category-padding) var(--size-category-header-pad-y);
   font: inherit;
 }
@@ -203,8 +205,8 @@ main {
 
 .category-actions {
   position: absolute;
-  top: 50%;
-  right: var(--size-edit-actions-inset);
+  top: calc(50% + var(--size-category-padding) / 2);
+  right: calc(var(--size-edit-actions-inset) + var(--size-category-padding));
   transform: translateY(-50%);
   z-index: 2;
   max-width: var(--size-edit-overlay-width);
