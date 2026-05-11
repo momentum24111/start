@@ -146,7 +146,7 @@ main {
   gap: var(--size-gap-header);
   position: relative;
   min-height: var(--size-category-header-height);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .category-header-main {
@@ -155,13 +155,14 @@ main {
   color: inherit;
   width: 100%;
   min-width: 0;
-  min-height: var(--size-category-header-height);
+  min-height: calc(var(--size-category-header-height) + var(--size-category-padding));
   display: flex;
   align-items: center;
   gap: var(--size-gap-inline);
   text-align: left;
   cursor: pointer;
-  padding: var(--size-category-header-pad-y) 0;
+  margin: calc(var(--size-category-padding) * -1) calc(var(--size-category-padding) * -1) 0;
+  padding: calc(var(--size-category-padding) + var(--size-category-header-pad-y)) var(--size-category-padding) var(--size-category-header-pad-y);
   font: inherit;
 }
 
@@ -367,6 +368,10 @@ main {
   padding-right: var(--size-edit-reserved-width);
 }
 
+.category.is-edit-mode .category-header-main {
+  padding-right: calc(var(--size-edit-reserved-width) + var(--size-category-padding));
+}
+
 .category.is-edit-mode .category-header-main::after,
 .service.is-edit-mode .service-left::after {
   content: "";
@@ -376,6 +381,10 @@ main {
   width: var(--size-edit-overlay-fade);
   height: 100%;
   pointer-events: none;
+}
+
+.category.is-edit-mode .category-header-main::after {
+  right: calc(var(--size-edit-reserved-width) + var(--size-category-padding));
 }
 
 .category-actions .btn,
