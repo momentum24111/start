@@ -592,9 +592,10 @@ function updateDocumentLanguage() {
 }
 
 function updateAppTitleUI() {
-  const title = state.settings.appTitle || "Start";
-  document.title = title;
-  elements.title.textContent = title;
+  const raw = state.settings.appTitle;
+  const title = (typeof raw === "string" ? raw.trim() : String(raw || "").trim()) || "Start";
+  if (document.title !== title) document.title = title;
+  if (elements.title.textContent !== title) elements.title.textContent = title;
 }
 
 function updateTopbarActionTexts() {

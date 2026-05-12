@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
 import re
@@ -18,7 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -35,6 +36,9 @@ CONFIG_EXAMPLE = DATA_DIR / "config.example.json"
 SETTINGS_EXAMPLE = DATA_DIR / "settings.example.json"
 CONFIG_FILE = DATA_DIR / "config.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
+
+INDEX_HTML_MARKER = "__START_PKG_INITIAL_APP_TITLE__"
+INDEX_HTML_PATH = STATIC_DIR / "index.html"
 
 RUNTIME_STATE: dict = {
     "last_loaded_file": None,
@@ -456,6 +460,29 @@ async def post_favicon(payload: FaviconRequest) -> dict:
 @app.exception_handler(RuntimeError)
 def runtime_error_handler(_, exc: RuntimeError) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+
+def _build_index_html() -> str:
+    """Liefert index.html mit aktuellem App-Titel (kein sichtbarer Platzhalter beim ersten Paint)."""
+    ensure_bootstrap()
+    settings = load_json(SETTINGS_FILE, context="index_html")
+    raw_title = str(settings.get("appTitle") or "").strip() or "Start"
+    escaped = html.escape(raw_title, quote=False)
+    template = INDEX_HTML_PATH.read_text(encoding="utf-8")
+    if INDEX_HTML_MARKER not in template:
+        raise RuntimeError(f"Missing inject marker {INDEX_HTML_MARKER!r} in index.html")
+    return template.replace(INDEX_HTML_MARKER, escaped)
+
+
+@app.get("/")
+@app.get("/index.html")
+def get_app_index() -> HTMLResponse:
+    body = _build_index_html()
+    return HTMLResponse(
+        content=body,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
