@@ -8,11 +8,21 @@ const state = {
   settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15, elementSize: "medium", globalShortcuts: {} },
   editMode: false,
   editModeCollapsedSnapshot: null,
+  /** Ephemeral UI overrides for normal mode only; never persisted. Absent key means use `category.collapsed`. */
+  sessionCategoryCollapsed: {},
   undoStack: [],
   themes: [],
   languages: [],
   faviconLoading: false
 };
+
+function categoryEffectiveCollapsed(category) {
+  if (state.editMode) return false;
+  if (Object.hasOwn(state.sessionCategoryCollapsed, category.id)) {
+    return Boolean(state.sessionCategoryCollapsed[category.id]);
+  }
+  return Boolean(category.collapsed);
+}
 
 const elements = {
   title: document.getElementById("app-title"),
@@ -510,6 +520,7 @@ function wireEvents() {
         }
       }
       state.editModeCollapsedSnapshot = null;
+      state.sessionCategoryCollapsed = {};
     }
     state.editMode = nextEditMode;
     render();
@@ -559,6 +570,7 @@ async function undo() {
   if (!last) return;
   state.config = last.config;
   state.settings = last.settings;
+  state.sessionCategoryCollapsed = {};
   await Promise.all([persistConfig(), persistSettings()]);
   await initI18n(state.settings.language);
   applyTheme(state.settings.theme);
@@ -650,7 +662,7 @@ function renderCategory(category) {
   const categoryIndex = state.config.categories.findIndex((entry) => entry.id === category.id);
   const canMoveLeft = categoryIndex > 0;
   const canMoveRight = categoryIndex >= 0 && categoryIndex < state.config.categories.length - 1;
-  const isCollapsed = state.editMode ? false : Boolean(category.collapsed);
+  const isCollapsed = categoryEffectiveCollapsed(category);
   const slotSpan = normalizeCategorySlots(category.slots);
   category.slots = slotSpan;
   const categoryType = normalizeCategoryType(category.type);
@@ -703,23 +715,27 @@ function renderCategory(category) {
   }
   syncCategoryContentHeight(content, isCollapsed);
 
-  const toggleCollapse = async () => {
+  const toggleCollapse = () => {
     if (state.editMode) return;
-    const nextCollapsed = !category.collapsed;
+    const persisted = Boolean(category.collapsed);
+    const nextCollapsed = !categoryEffectiveCollapsed(category);
     animateCategoryCollapse(content, arrow, nextCollapsed);
-    category.collapsed = nextCollapsed;
+    if (nextCollapsed === persisted) {
+      delete state.sessionCategoryCollapsed[category.id];
+    } else {
+      state.sessionCategoryCollapsed[category.id] = nextCollapsed;
+    }
     card.classList.toggle("is-collapsed", nextCollapsed);
-    await persistConfig();
   };
-  card.querySelector("[data-toggle-collapse]").addEventListener("click", async (event) => {
+  card.querySelector("[data-toggle-collapse]").addEventListener("click", (event) => {
     event.stopPropagation();
-    await toggleCollapse();
+    toggleCollapse();
   });
-  card.addEventListener("click", async (event) => {
-    if (!category.collapsed || state.editMode) return;
+  card.addEventListener("click", (event) => {
+    if (!categoryEffectiveCollapsed(category) || state.editMode) return;
     const interactive = event.target.closest("button, a, input, select, textarea, .service, .category-actions");
     if (interactive) return;
-    await toggleCollapse();
+    toggleCollapse();
   });
   card.querySelector("[data-add-service]")?.addEventListener("click", () => openServiceModal(category.id));
   card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
@@ -923,6 +939,7 @@ function openCategoryModal(category = null) {
       onClick: async () => {
         pushUndo();
         state.config.categories = state.config.categories.filter((c) => c.id !== category.id);
+        delete state.sessionCategoryCollapsed[category.id];
         await persistConfig();
         render();
       }
@@ -957,6 +974,7 @@ function openCategoryModal(category = null) {
         category.icon = selectedIcon;
         category.color = fd.get("color");
         category.collapsed = nextCollapsed;
+        delete state.sessionCategoryCollapsed[category.id];
         syncEditModeCollapsedSnapshot(category.id, nextCollapsed);
         category.slots = normalizeCategorySlots(fd.get("slots"));
         if (isIframeCategory) {
@@ -1278,9 +1296,10 @@ function openServiceModal(categoryId, service = null) {
       delete form.dataset.cachedIcon;
       syncIconPreviewFromField();
       status.textContent = "";
-    } catch (_) {
-      status.textContent = t("ui.faviconFailed");
-      preview.src = resolveServiceIconDisplaySrc("");
+    } catch (err) {
+      const detail = err && typeof err.message === "string" ? err.message.trim() : "";
+      status.textContent = detail || t("ui.faviconFailed");
+      syncIconPreviewFromField();
     } finally {
       fetchFaviconButton.disabled = false;
       state.faviconLoading = false;

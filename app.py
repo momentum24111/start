@@ -162,83 +162,209 @@ def _infer_size_from_path(path: str) -> int:
     return 0
 
 
-def _favicon_link_tier(rel: str, mime: str, absolute_url: str) -> int:
+def _rel_tokens(rel_raw: str) -> list[str]:
+    return [t.strip().lower() for t in re.split(r"[\s,]+", rel_raw.strip()) if t.strip()]
+
+
+def _rel_is_apple_touch(tokens: list[str]) -> bool:
+    return any(t.startswith("apple-touch") for t in tokens)
+
+
+def _link_tags(html: str) -> list[str]:
+    return re.findall(r"<link\b[^>]*>", html, flags=re.IGNORECASE)
+
+
+def _parse_link_tag(tag: str) -> tuple[str, str, str, str] | None:
+    """href_raw, rel_raw, mime, sizes_val (may be empty)."""
+    href_match = re.search(r"""href\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
+    rel_match = re.search(r"""rel\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
+    if not href_match or not rel_match:
+        return None
+    href_raw = href_match.group(1).strip()
+    rel_raw = rel_match.group(1).strip()
+    if not href_raw:
+        return None
+    type_match = re.search(r"""type\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
+    sizes_match = re.search(r"""sizes\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
+    mime = type_match.group(1).strip() if type_match else ""
+    sizes_val = sizes_match.group(1).strip() if sizes_match else ""
+    return href_raw, rel_raw, mime, sizes_val
+
+
+def _entry_size_from_link(sizes_val: str, absolute: str) -> int:
+    size = _parse_sizes_attr(sizes_val)
+    if size == 0:
+        size = _infer_size_from_path(urlparse(absolute).path or "")
+    return size
+
+
+def extract_web_manifest_urls(html: str, page_base_url: str) -> list[str]:
+    """Absolute manifest URLs from <link rel=\"manifest\" …>."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for tag in _link_tags(html):
+        parsed = _parse_link_tag(tag)
+        if not parsed:
+            continue
+        href_raw, rel_raw, _, _ = parsed
+        tokens = _rel_tokens(rel_raw)
+        if "manifest" not in tokens:
+            continue
+        absolute = urljoin(page_base_url, href_raw)
+        if absolute not in seen:
+            seen.add(absolute)
+            out.append(absolute)
+    return out
+
+
+def _html_link_svg_icon_entries(html: str, base_url: str) -> list[tuple[int, int, str]]:
     """
-    Lower tier = try earlier. PNG raster icons before Apple Touch before SVG before ICO.
+    Priority 0: SVG favicons from <link> (not apple-touch, not mask-icon, not manifest).
+    Prefers declared image/svg+xml or .svg href (matches common high-quality icons).
     """
-    rel_l = rel.lower()
-    mime_l = mime.lower()
-    path = (urlparse(absolute_url).path or "").lower()
-
-    if "apple-touch" in rel_l:
-        return 1
-
-    is_png = "image/png" in mime_l or path.endswith(".png")
-    is_webp = "image/webp" in mime_l or path.endswith(".webp")
-    is_jpeg = "image/jpeg" in mime_l or "image/jpg" in mime_l or path.endswith((".jpg", ".jpeg"))
-    if is_png or is_webp or is_jpeg:
-        return 0
-
-    if "mask-icon" in rel_l or "image/svg" in mime_l or path.endswith(".svg"):
-        return 2
-
-    if (
-        path.endswith(".ico")
-        or "image/x-icon" in mime_l
-        or mime_l == "image/vnd.microsoft.icon"
-    ):
-        return 3
-
-    return 3
-
-
-def extract_favicon_entries(html: str, base_url: str) -> list[dict]:
-    """Parse <link> tags into prioritized favicon entries (url, tier, size)."""
-    entries: list[dict] = []
-    pattern = re.compile(r"<link\b[^>]*>", flags=re.IGNORECASE)
-
-    for tag in pattern.findall(html):
-        href_match = re.search(r"""href\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
-        rel_match = re.search(r"""rel\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
-        if not href_match or not rel_match:
+    out: list[tuple[int, int, str]] = []
+    for tag in _link_tags(html):
+        parsed = _parse_link_tag(tag)
+        if not parsed:
             continue
-        rel_raw = rel_match.group(1).strip()
-        if "icon" not in rel_raw.lower():
+        href_raw, rel_raw, mime, sizes_val = parsed
+        tokens = _rel_tokens(rel_raw)
+        if "manifest" in tokens:
             continue
-        href_raw = href_match.group(1).strip()
-        if not href_raw:
+        if _rel_is_apple_touch(tokens):
             continue
-
-        type_match = re.search(r"""type\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
-        sizes_match = re.search(r"""sizes\s*=\s*["']([^"']+)["']""", tag, flags=re.IGNORECASE)
-        mime = type_match.group(1).strip() if type_match else ""
-        sizes_val = sizes_match.group(1).strip() if sizes_match else ""
-
+        rel_lower = rel_raw.lower()
+        if "mask-icon" in rel_lower:
+            continue
+        if "icon" not in rel_lower:
+            continue
+        mime_l = mime.lower()
+        path_l = (urlparse(href_raw).path or "").lower()
+        is_svg = "image/svg+xml" in mime_l or path_l.endswith(".svg")
+        if not is_svg:
+            continue
         absolute = urljoin(base_url, href_raw)
-        tier = _favicon_link_tier(rel_raw, mime, absolute)
-        size = _parse_sizes_attr(sizes_val)
-        if size == 0:
-            size = _infer_size_from_path(urlparse(absolute).path or "")
-
-        entries.append({"url": absolute, "tier": tier, "size": size})
-
-    return entries
+        size = _entry_size_from_link(sizes_val, absolute)
+        out.append((0, size, absolute))
+    return out
 
 
-def _merge_favicon_entries_by_url(entries: list[dict]) -> list[dict]:
-    """Keep best metadata per URL: lower tier wins, then larger declared size."""
-    merged: dict[str, dict] = {}
-    for entry in entries:
-        url = entry["url"]
-        if url not in merged:
-            merged[url] = entry
+def _html_link_png_non_apple_entries(html: str, base_url: str) -> list[tuple[int, int, str]]:
+    """Priority 1: PNG from <link rel=…icon…> (excluding apple-touch)."""
+    out: list[tuple[int, int, str]] = []
+    for tag in _link_tags(html):
+        parsed = _parse_link_tag(tag)
+        if not parsed:
             continue
-        current = merged[url]
-        t_cur, s_cur = current["tier"], current["size"]
-        t_new, s_new = entry["tier"], entry["size"]
-        if t_new < t_cur or (t_new == t_cur and s_new > s_cur):
-            merged[url] = entry
-    return list(merged.values())
+        href_raw, rel_raw, mime, sizes_val = parsed
+        tokens = _rel_tokens(rel_raw)
+        if "manifest" in tokens:
+            continue
+        if _rel_is_apple_touch(tokens):
+            continue
+        rel_lower = rel_raw.lower()
+        if "mask-icon" in rel_lower:
+            continue
+        if "icon" not in rel_lower:
+            continue
+        mime_l = mime.lower()
+        path_l = (urlparse(href_raw).path or "").lower()
+        is_png = "image/png" in mime_l or path_l.endswith(".png")
+        if not is_png:
+            continue
+        absolute = urljoin(base_url, href_raw)
+        size = _entry_size_from_link(sizes_val, absolute)
+        out.append((1, size, absolute))
+    return out
+
+
+def _html_link_apple_png_entries(html: str, base_url: str) -> list[tuple[int, int, str]]:
+    """Priority 2: PNG apple-touch icons."""
+    out: list[tuple[int, int, str]] = []
+    for tag in _link_tags(html):
+        parsed = _parse_link_tag(tag)
+        if not parsed:
+            continue
+        href_raw, rel_raw, mime, sizes_val = parsed
+        tokens = _rel_tokens(rel_raw)
+        if "manifest" in tokens:
+            continue
+        if not _rel_is_apple_touch(tokens):
+            continue
+        mime_l = mime.lower()
+        path_l = (urlparse(href_raw).path or "").lower()
+        is_png = "image/png" in mime_l or path_l.endswith(".png")
+        if not is_png:
+            continue
+        absolute = urljoin(base_url, href_raw)
+        size = _entry_size_from_link(sizes_val, absolute)
+        out.append((2, size, absolute))
+    return out
+
+
+def _manifest_png_entries_from_data(data: dict, manifest_url: str) -> list[tuple[int, int, str]]:
+    """Priority 1: PNG icons declared in a Web App Manifest (same bucket as HTML PNG icons)."""
+    out: list[tuple[int, int, str]] = []
+    icons = data.get("icons")
+    if not isinstance(icons, list):
+        return out
+    for icon in icons:
+        if not isinstance(icon, dict):
+            continue
+        src = icon.get("src")
+        if not isinstance(src, str) or not src.strip():
+            continue
+        href = src.strip()
+        absolute = urljoin(manifest_url, href)
+        mime = str(icon.get("type") or "").lower()
+        path_l = (urlparse(absolute).path or "").lower()
+        is_png = "image/png" in mime or path_l.endswith(".png")
+        if not is_png:
+            continue
+        sizes_val = str(icon.get("sizes") or "")
+        size = _entry_size_from_link(sizes_val, absolute)
+        out.append((1, size, absolute))
+    return out
+
+
+async def _collect_manifest_png_entries(
+    client: httpx.AsyncClient, html: str, page_base_url: str
+) -> list[tuple[int, int, str]]:
+    out: list[tuple[int, int, str]] = []
+    for manifest_url in extract_web_manifest_urls(html, page_base_url):
+        try:
+            response = await client.get(
+                manifest_url,
+                headers={
+                    "accept": (
+                        "application/manifest+json,application/json;q=0.9,"
+                        "text/plain;q=0.1,*/*;q=0.05"
+                    )
+                },
+            )
+            response.raise_for_status()
+            if len(response.content) > 2_000_000:
+                continue
+            data = json.loads(response.text.lstrip("\ufeff"))
+            if not isinstance(data, dict):
+                continue
+            out.extend(_manifest_png_entries_from_data(data, manifest_url))
+        except Exception:
+            continue
+    return out
+
+
+def _finalize_favicon_candidates(scored: list[tuple[int, int, str]]) -> list[str]:
+    """Sort by ascending priority, then descending declared size; first occurrence wins per URL."""
+    scored.sort(key=lambda row: (row[0], -row[1]))
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for _, _, url in scored:
+        if url in seen:
+            continue
+        seen.add(url)
+        ordered.append(url)
+    return ordered
 
 
 def is_probably_image_url(url: str) -> bool:
@@ -269,32 +395,60 @@ def is_valid_image_bytes(data: bytes) -> bool:
 
 
 async def resolve_favicon_candidates(raw_url: str) -> list[str]:
-    page_url = normalize_page_url(raw_url)
-    parsed = urlparse(page_url)
-    origin_fallback = f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+    """
+    Build ordered favicon URLs (first working download wins in post_favicon):
 
-    # If URL already points to an image path, prioritize this direct target.
+    0. SVG <link rel=…icon…> (not apple-touch / mask-icon / manifest)
+    1. Largest PNG from manifest icons and non–apple-touch <link> icons
+    2. Largest PNG apple-touch-icon
+    3. /favicon.ico on the final document origin (after redirects)
+    4. /favicon.ico on the origin of the URL entered by the user
+    """
+    page_url = normalize_page_url(raw_url)
+    parsed_input = urlparse(page_url)
+    input_origin = f"{parsed_input.scheme}://{parsed_input.netloc}"
+    input_favicon_ico = f"{input_origin}/favicon.ico"
+
     if is_probably_image_url(page_url):
         return [page_url]
 
-    html_entries: list[dict] = []
+    scored: list[tuple[int, int, str]] = []
+
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
-            response = await client.get(page_url, headers={"accept": "text/html,*/*"})
+            response = await client.get(
+                page_url,
+                headers={
+                    "accept": (
+                        "text/html,application/xhtml+xml;q=0.9,"
+                        "text/plain;q=0.8,*/*;q=0.5"
+                    )
+                },
+            )
             response.raise_for_status()
-            content_type = response.headers.get("content-type", "")
-            if "html" in content_type:
-                html_entries = extract_favicon_entries(response.text, str(response.url))
+            final = urlparse(str(response.url))
+            page_origin = f"{final.scheme}://{final.netloc}"
+            page_favicon_ico = f"{page_origin}/favicon.ico"
+
+            content_type = (response.headers.get("content-type") or "").lower()
+            if "html" not in content_type:
+                scored.append((3, 0, page_favicon_ico))
+                scored.append((4, 0, input_favicon_ico))
+                return _finalize_favicon_candidates(scored)
+
+            base = str(response.url)
+            html = response.text
+            scored.extend(_html_link_svg_icon_entries(html, base))
+            scored.extend(_html_link_png_non_apple_entries(html, base))
+            scored.extend(await _collect_manifest_png_entries(client, html, base))
+            scored.extend(_html_link_apple_png_entries(html, base))
+            scored.append((3, 0, page_favicon_ico))
+            scored.append((4, 0, input_favicon_ico))
     except Exception:
-        pass
+        scored.append((3, 0, input_favicon_ico))
+        scored.append((4, 0, input_favicon_ico))
 
-    merged = _merge_favicon_entries_by_url(html_entries)
-    merged.sort(key=lambda e: (e["tier"], -e["size"]))
-    candidates = [e["url"] for e in merged]
-
-    if origin_fallback not in candidates:
-        candidates.append(origin_fallback)
-    return candidates
+    return _finalize_favicon_candidates(scored)
 
 
 @asynccontextmanager
