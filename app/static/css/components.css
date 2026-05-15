@@ -65,7 +65,6 @@ textarea {
   align-items: center;
   padding: 0.85rem 1rem;
   background: var(--bg);
-  box-shadow: var(--topbar-shadow);
 }
 
 .actions { display: flex; gap: 0.5rem; }

@@ -15,7 +15,6 @@ body {
   --primary: #2d65d6;
   --danger: #b52d2d;
   --overlay-bg: rgba(15, 22, 32, 0.46);
-  --topbar-shadow: 0 1px 0 rgba(24, 35, 50, 0.08);
   --control-shadow: 0 1px 8px rgba(17, 30, 45, 0.14);
   --control-active-bg: #d5e4ff;
   --control-active-fg: #17376f;
