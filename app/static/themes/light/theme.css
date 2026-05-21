@@ -10,6 +10,8 @@ body {
   --surface: #ffffff;
   --surface-2: #f0f4f8;
   --surface-hover: #e6edf4;
+  --service-hover-bg: #e6edf4;
+  --service-active-bg: #d5e4ff;
   --text: #182332;
   --muted: #516379;
   --primary: #2d65d6;

@@ -287,9 +287,17 @@ main {
   padding: 0;
   min-height: var(--size-service-height);
   box-shadow: var(--card-shadow-soft);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
   position: relative;
   overflow: hidden;
+}
+
+.service:hover {
+  background: var(--service-hover-bg);
+}
+
+.service:active {
+  background: var(--service-active-bg);
 }
 
 .service--add { width: 100%; text-align: left; cursor: pointer; }
