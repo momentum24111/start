@@ -110,13 +110,15 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-grid-min)), 1fr));
   gap: var(--size-gap-grid);
   justify-content: center;
-  align-items: start;
+  align-items: stretch;
 }
 
 .category {
   border: 0;
   border-radius: 4px;
   grid-column: span var(--category-slots, 1);
+  width: 100%;
+  min-width: 0;
   --category-surface: color-mix(in srgb, var(--category-accent, var(--cat-primary)) var(--category-accent-strength), var(--category-bg));
   background: var(--category-surface);
   padding: var(--size-category-padding);
@@ -147,6 +149,8 @@ main {
   align-items: center;
   gap: var(--size-gap-header);
   position: relative;
+  width: 100%;
+  min-width: 0;
   min-height: var(--size-category-header-height);
   overflow: visible;
   margin: calc(var(--size-category-padding) * -1) 0 0;
@@ -246,10 +250,14 @@ main {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-grid-min)), 1fr));
   gap: var(--size-gap-services);
-  align-items: start;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
 }
 
 .category-content {
+  width: 100%;
+  min-width: 0;
   max-height: none;
   overflow: hidden;
   transition: max-height 260ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -279,6 +287,8 @@ main {
   display: flex;
   align-items: center;
   gap: 0;
+  width: 100%;
+  min-width: 0;
   border: 0;
   background: var(--surface-2);
   --service-fade-bg: var(--surface-2);
@@ -346,6 +356,8 @@ main {
 }
 
 .service-name {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
