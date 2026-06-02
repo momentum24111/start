@@ -33,11 +33,7 @@ body {
   --size-service-pad-x-left: calc(0.75rem * var(--element-scale));
   --size-iframe-height: clamp(calc(220px * var(--element-scale)), 35vh, calc(520px * var(--element-scale)));
   --size-edit-actions-inset: calc(0.35rem * var(--element-scale));
-  --size-edit-overlay-width: calc(8.9rem * var(--element-scale));
-  --size-edit-reserved-width: calc(var(--size-edit-overlay-width) + var(--size-edit-actions-inset));
   --size-edit-overlay-fade: calc(2.4rem * var(--element-scale));
-  --size-service-edit-overlay-width: calc(5.4rem * var(--element-scale));
-  --size-service-edit-reserved-width: calc(var(--size-service-edit-overlay-width) + var(--size-edit-actions-inset));
   --size-service-reorder-gap: calc(0.12rem * var(--element-scale));
   --size-service-reorder-btn-height: calc(
     (var(--size-service-height) - 2 * var(--size-service-pad-y) - var(--size-service-reorder-gap)) / 2
@@ -153,11 +149,7 @@ main {
   position: relative;
   min-height: var(--size-category-header-height);
   overflow: visible;
-  margin: calc(var(--size-category-padding) * -1) calc(var(--size-category-padding) * -1) 0;
-}
-
-.category.is-edit-mode .category-header {
-  padding-right: calc(var(--size-category-padding) + var(--size-edit-actions-inset));
+  margin: calc(var(--size-category-padding) * -1) 0 0;
 }
 
 .category-header-main {
@@ -310,7 +302,7 @@ main {
 }
 
 .service.is-edit-mode:not(.service--add) {
-  padding-right: var(--size-edit-actions-inset);
+  padding-right: 0;
 }
 
 .service--add { width: 100%; text-align: left; cursor: pointer; }
@@ -339,7 +331,7 @@ main {
   text-decoration: none;
 }
 
-.service.has-shortcut .service-left {
+.service.has-shortcut:not(.is-edit-mode) .service-left {
   padding-right: calc(var(--size-service-pad-x-right) + 5.2rem);
 }
 
