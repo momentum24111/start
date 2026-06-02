@@ -110,15 +110,19 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-grid-min)), 1fr));
   gap: var(--size-gap-grid);
   justify-content: center;
-  align-items: stretch;
+  justify-items: stretch;
+  align-items: start;
 }
 
 .category {
   border: 0;
   border-radius: 4px;
   grid-column: span var(--category-slots, 1);
+  justify-self: stretch;
+  align-self: start;
   width: 100%;
   min-width: 0;
+  align-content: start;
   --category-surface: color-mix(in srgb, var(--category-accent, var(--cat-primary)) var(--category-accent-strength), var(--category-bg));
   background: var(--category-surface);
   padding: var(--size-category-padding);
@@ -250,7 +254,8 @@ main {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-grid-min)), 1fr));
   gap: var(--size-gap-services);
-  align-items: stretch;
+  justify-items: stretch;
+  align-items: start;
   width: 100%;
   min-width: 0;
 }
@@ -287,6 +292,8 @@ main {
   display: flex;
   align-items: center;
   gap: 0;
+  justify-self: stretch;
+  align-self: start;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -315,16 +322,26 @@ main {
   padding-right: 0;
 }
 
-.service--add { width: 100%; text-align: left; cursor: pointer; }
+.service--add {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  align-self: start;
+  height: var(--size-service-height);
+  min-height: var(--size-service-height);
+  max-height: var(--size-service-height);
+}
+
 .service--add .service-name,
 .service--add .btn__icon {
   color: var(--text);
 }
-.service--add {
-  padding: 0;
-}
+
 .service--add .service-left {
-  min-height: var(--size-service-height);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: var(--size-service-pad-y) var(--size-service-pad-x-right) var(--size-service-pad-y) var(--size-service-pad-x-left);
 }
 
