@@ -176,7 +176,20 @@ main {
   margin: 0;
   padding: calc(var(--size-category-padding) + var(--size-category-header-pad-y)) var(--size-category-padding) var(--size-category-header-pad-y);
   font: inherit;
+  font-size: var(--size-category-font);
+  line-height: 1.28;
   position: relative;
+}
+
+.category-header-main .collapse-arrow,
+.category-header-main .category-icon,
+.category-header-main .category-name {
+  flex: 0 0 auto;
+}
+
+.category-header-main .category-name {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Geschlossene Kategorie: Klickfläche des Toggle-Buttons bis in den unteren Card-Innenabstand (gleiche visuelle Fläche, kein toter Rand). */
@@ -233,6 +246,10 @@ main {
   position: relative;
   flex: 0 0 auto;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  padding: calc(var(--size-category-padding) + var(--size-category-header-pad-y)) var(--size-category-padding) var(--size-category-header-pad-y) 0;
   justify-content: flex-end;
   flex-wrap: nowrap;
 }
@@ -343,6 +360,23 @@ main {
   height: 100%;
   min-height: 0;
   padding: var(--size-service-pad-y) var(--size-service-pad-x-right) var(--size-service-pad-y) var(--size-service-pad-x-left);
+}
+
+.service--add .service-left .btn__icon {
+  flex: 0 0 auto;
+  width: var(--size-service-icon);
+  height: var(--size-service-icon);
+}
+
+.service--add .service-left .inline-icon {
+  width: var(--size-service-icon);
+  height: var(--size-service-icon);
+}
+
+.service--add .service-name {
+  font-size: var(--size-service-font);
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .service-left {
@@ -685,6 +719,16 @@ select {
 .service--add .inline-icon {
   width: var(--size-inline-icon);
   height: var(--size-inline-icon);
+}
+
+.category-header-main .collapse-arrow {
+  width: var(--size-inline-icon);
+  height: var(--size-inline-icon);
+}
+
+.category-header-main .category-icon.mdi-icon {
+  width: var(--size-category-icon);
+  height: var(--size-category-icon);
 }
 
 .mdi-icon {
