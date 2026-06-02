@@ -148,8 +148,7 @@ main {
 
 .category-header {
   display: flex;
-  align-items: stretch;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--size-gap-header);
   position: relative;
   min-height: var(--size-category-header-height);
@@ -157,11 +156,15 @@ main {
   margin: calc(var(--size-category-padding) * -1) calc(var(--size-category-padding) * -1) 0;
 }
 
+.category.is-edit-mode .category-header {
+  padding-right: calc(var(--size-category-padding) + var(--size-edit-actions-inset));
+}
+
 .category-header-main {
   border: 0;
   background: transparent;
   color: inherit;
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: calc(var(--size-category-header-height) + var(--size-category-padding));
   display: flex;
@@ -227,13 +230,9 @@ main {
 .service-actions { display: flex; gap: var(--size-gap-actions); }
 
 .category-actions {
-  position: absolute;
-  top: calc(50% + var(--size-category-padding) / 2);
-  right: calc(var(--size-edit-actions-inset) + var(--size-category-padding));
-  transform: translateY(-50%);
+  position: relative;
+  flex: 0 0 auto;
   z-index: 2;
-  max-width: var(--size-edit-overlay-width);
-  overflow: hidden;
   justify-content: flex-end;
   flex-wrap: nowrap;
 }
@@ -285,12 +284,12 @@ main {
 }
 
 .service {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: var(--size-service-gap);
+  gap: 0;
   border: 0;
   background: var(--surface-2);
+  --service-fade-bg: var(--surface-2);
   border-radius: 4px;
   padding: 0;
   min-height: var(--size-service-height);
@@ -302,10 +301,16 @@ main {
 
 .service:hover {
   background: var(--service-hover-bg);
+  --service-fade-bg: var(--service-hover-bg);
 }
 
 .service:active {
   background: var(--service-active-bg);
+  --service-fade-bg: var(--service-active-bg);
+}
+
+.service.is-edit-mode:not(.service--add) {
+  padding-right: var(--size-edit-actions-inset);
 }
 
 .service--add { width: 100%; text-align: left; cursor: pointer; }
@@ -325,7 +330,8 @@ main {
   display: flex;
   align-items: center;
   gap: var(--size-gap-inline);
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: var(--size-service-height);
   padding: var(--size-service-pad-y) var(--size-service-pad-x-right) var(--size-service-pad-y) var(--size-service-pad-x-left);
   min-width: 0;
@@ -384,13 +390,9 @@ main {
 }
 
 .service-actions {
-  position: absolute;
-  top: 50%;
-  right: var(--size-edit-actions-inset);
-  transform: translateY(-50%);
+  position: relative;
+  flex: 0 0 auto;
   z-index: 2;
-  max-width: var(--size-service-edit-overlay-width);
-  overflow: hidden;
   justify-content: flex-end;
   align-items: center;
   flex-wrap: nowrap;
@@ -421,30 +423,15 @@ main {
   position: relative;
 }
 
-.category.is-edit-mode .category-header-main {
-  padding-right: calc(var(--size-edit-reserved-width) + var(--size-category-padding));
-}
-
-.service.is-edit-mode .service-left {
-  padding-right: var(--size-service-edit-reserved-width);
-}
-
 .category.is-edit-mode .category-header-main::after,
 .service.is-edit-mode .service-left::after {
   content: "";
   position: absolute;
   top: 0;
+  right: 0;
   width: var(--size-edit-overlay-fade);
   height: 100%;
   pointer-events: none;
-}
-
-.category.is-edit-mode .category-header-main::after {
-  right: calc(var(--size-edit-reserved-width) + var(--size-category-padding));
-}
-
-.service.is-edit-mode .service-left::after {
-  right: var(--size-service-edit-reserved-width);
 }
 
 .category-actions .btn,
@@ -457,7 +444,7 @@ main {
 }
 
 .service.is-edit-mode .service-left::after {
-  background: linear-gradient(to right, transparent, var(--surface-2));
+  background: linear-gradient(to right, transparent, var(--service-fade-bg));
 }
 
 .modal-overlay {

@@ -3,6 +3,9 @@ import { showModal, showStatusModal } from "./modal.js";
 import { initI18n, t } from "./i18n.js";
 import { applyTheme } from "./themes.js";
 
+const EDIT_MODE_URL_KEY = "edit";
+let editModeHistoryPushed = false;
+
 const state = {
   config: { categories: [] },
   settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15, elementSize: "medium", globalShortcuts: {} },
@@ -481,6 +484,59 @@ function button({ label = "", icon, dataAttr = "", variant = "", className = "",
   return `<button type="button" class="btn ${variant} ${className} ${iconOnly ? "btn--icon" : ""}" ${dataAttr}>${icon ? `<span class="btn__icon">${icon}</span>` : ""}${iconOnly ? "" : `<span class="btn__label">${label}</span>`}</button>`;
 }
 
+function isEditModeInUrl() {
+  return new URLSearchParams(window.location.search).get(EDIT_MODE_URL_KEY) === "1";
+}
+
+function editModeUrl(enabled) {
+  const url = new URL(window.location.href);
+  if (enabled) url.searchParams.set(EDIT_MODE_URL_KEY, "1");
+  else url.searchParams.delete(EDIT_MODE_URL_KEY);
+  return url;
+}
+
+function captureEditModeCollapsedSnapshot() {
+  if (!state.editModeCollapsedSnapshot) {
+    state.editModeCollapsedSnapshot = Object.fromEntries(
+      (state.config.categories || []).map((category) => [category.id, Boolean(category.collapsed)])
+    );
+  }
+}
+
+function restoreEditModeCollapsedSnapshot() {
+  if (!state.editModeCollapsedSnapshot) return;
+  for (const category of state.config.categories || []) {
+    if (Object.hasOwn(state.editModeCollapsedSnapshot, category.id)) {
+      category.collapsed = Boolean(state.editModeCollapsedSnapshot[category.id]);
+    }
+  }
+  state.editModeCollapsedSnapshot = null;
+  state.sessionCategoryCollapsed = {};
+}
+
+function setEditMode(nextEditMode, { syncHistory = true } = {}) {
+  if (nextEditMode === state.editMode) return;
+  if (syncHistory && !nextEditMode && editModeHistoryPushed) {
+    editModeHistoryPushed = false;
+    history.back();
+    return;
+  }
+  if (nextEditMode) captureEditModeCollapsedSnapshot();
+  else restoreEditModeCollapsedSnapshot();
+  state.editMode = nextEditMode;
+  if (syncHistory) {
+    const url = editModeUrl(nextEditMode);
+    const historyState = { editMode: nextEditMode };
+    if (nextEditMode && !isEditModeInUrl()) {
+      history.pushState(historyState, "", url);
+      editModeHistoryPushed = true;
+    } else {
+      history.replaceState(historyState, "", url);
+    }
+  }
+  render();
+}
+
 async function bootstrap() {
   await loadMdiRegistry();
   const [config, settings, themes, languages] = await Promise.all([
@@ -503,29 +559,27 @@ async function bootstrap() {
   applyTheme(state.settings.theme);
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
   applyElementSize(state.settings.elementSize);
+  if (isEditModeInUrl()) {
+    state.editMode = true;
+    captureEditModeCollapsedSnapshot();
+    history.replaceState({ editMode: true }, "", editModeUrl(true));
+  }
   wireEvents();
   render();
 }
 
 function wireEvents() {
-  elements.edit.addEventListener("click", () => {
-    const nextEditMode = !state.editMode;
-    if (nextEditMode && !state.editModeCollapsedSnapshot) {
-      state.editModeCollapsedSnapshot = Object.fromEntries(
-        (state.config.categories || []).map((category) => [category.id, Boolean(category.collapsed)])
-      );
-    }
-    if (!nextEditMode && state.editModeCollapsedSnapshot) {
-      for (const category of state.config.categories || []) {
-        if (Object.hasOwn(state.editModeCollapsedSnapshot, category.id)) {
-          category.collapsed = Boolean(state.editModeCollapsedSnapshot[category.id]);
-        }
-      }
-      state.editModeCollapsedSnapshot = null;
-      state.sessionCategoryCollapsed = {};
-    }
-    state.editMode = nextEditMode;
+  window.addEventListener("popstate", () => {
+    const urlEditMode = isEditModeInUrl();
+    if (!urlEditMode) editModeHistoryPushed = false;
+    if (urlEditMode === state.editMode) return;
+    if (urlEditMode) captureEditModeCollapsedSnapshot();
+    else restoreEditModeCollapsedSnapshot();
+    state.editMode = urlEditMode;
     render();
+  });
+  elements.edit.addEventListener("click", () => {
+    setEditMode(!state.editMode);
   });
   elements.undo.addEventListener("click", undo);
   elements.settings.addEventListener("click", openSettingsModal);
