@@ -48,6 +48,8 @@
     "reorder": "Verschieben",
     "moveLeft": "Nach links verschieben",
     "moveRight": "Nach rechts verschieben",
+    "moveUp": "Nach oben verschieben",
+    "moveDown": "Nach unten verschieben",
     "fetchFavicon": "Favicon laden",
     "faviconFailed": "Favicon konnte nicht geladen werden",
     "actions": "Aktionen",

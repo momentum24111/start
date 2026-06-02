@@ -48,6 +48,8 @@
     "reorder": "Reorder",
     "moveLeft": "Move left",
     "moveRight": "Move right",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
     "fetchFavicon": "Fetch favicon",
     "faviconFailed": "Could not load favicon",
     "actions": "Actions",
