@@ -121,11 +121,27 @@ def _legacy_service_image(service: dict) -> str:
     return cached or icon_url
 
 
+UNSORTED_CATEGORY_ID = "unsorted"
+
+
 def _normalize_bookmark(raw: dict, *, category_id: str | None = None) -> dict:
     category_ids = (
-        [str(cid).strip() for cid in raw.get("categoryIds", []) if str(cid).strip()]
+        [
+            str(cid).strip()
+            for cid in raw.get("categoryIds", [])
+            if str(cid).strip() and str(cid).strip() != UNSORTED_CATEGORY_ID
+        ]
         if isinstance(raw.get("categoryIds"), list)
-        else ([category_id] if category_id else [])
+        else ([category_id] if category_id and category_id != UNSORTED_CATEGORY_ID else [])
+    )
+    sidebar_category_ids = (
+        [
+            str(cid).strip()
+            for cid in raw.get("sidebarCategoryIds", [])
+            if str(cid).strip() and str(cid).strip() != UNSORTED_CATEGORY_ID
+        ]
+        if isinstance(raw.get("sidebarCategoryIds"), list)
+        else []
     )
     bookmark: dict = {
         "id": str(raw.get("id") or "").strip(),
@@ -134,6 +150,7 @@ def _normalize_bookmark(raw: dict, *, category_id: str | None = None) -> dict:
         "description": str(raw.get("description") or "").strip(),
         "image": str(raw.get("image") or _legacy_service_image(raw) or "").strip(),
         "categoryIds": category_ids,
+        "sidebarCategoryIds": sidebar_category_ids,
         "favorite": bool(raw.get("favorite")),
         "source": _normalize_bookmark_source(raw.get("source")),
     }
@@ -156,6 +173,53 @@ def _normalize_category_entry(raw: dict) -> dict:
     slots = entry.get("slots")
     entry["slots"] = slots if isinstance(slots, int) and slots in (1, 2, 3) else 1
     return entry
+
+
+def _normalize_sidebar_category_entry(raw: dict) -> dict:
+    icon = str(raw.get("icon") or "folder").strip() or "folder"
+    return {
+        "id": str(raw.get("id") or "").strip(),
+        "name": str(raw.get("name") or "").strip(),
+        "icon": icon,
+    }
+
+
+def _normalize_sidebar_category_bookmark_order(
+    raw: object, sidebar_categories: list[dict], bookmarks: list[dict]
+) -> dict[str, list[str]]:
+    valid_category_ids = {
+        str(category.get("id") or "").strip()
+        for category in sidebar_categories
+        if str(category.get("id") or "").strip() and str(category.get("id") or "").strip() != UNSORTED_CATEGORY_ID
+    }
+    valid_bookmark_ids = {str(bookmark.get("id") or "").strip() for bookmark in bookmarks}
+    valid_bookmark_ids.discard("")
+    source = raw if isinstance(raw, dict) else {}
+    normalized: dict[str, list[str]] = {}
+
+    for category_id in valid_category_ids:
+        listed = source.get(category_id) if isinstance(source.get(category_id), list) else []
+        seen: set[str] = set()
+        order: list[str] = []
+        for bookmark_id in listed:
+            bid = str(bookmark_id or "").strip()
+            if not bid or bid not in valid_bookmark_ids or bid in seen:
+                continue
+            seen.add(bid)
+            order.append(bid)
+        for bookmark in bookmarks:
+            bid = str(bookmark.get("id") or "").strip()
+            sidebar_category_ids = (
+                bookmark.get("sidebarCategoryIds")
+                if isinstance(bookmark.get("sidebarCategoryIds"), list)
+                else []
+            )
+            if category_id not in sidebar_category_ids or bid in seen:
+                continue
+            order.append(bid)
+            seen.add(bid)
+        normalized[category_id] = order
+    return normalized
 
 
 def _normalize_category_bookmark_order(
@@ -269,14 +333,25 @@ def migrate_config(data: object) -> dict:
         return {
             "schemaVersion": SCHEMA_VERSION,
             "categories": [],
+            "sidebarCategories": [],
             "bookmarks": [],
             "categoryBookmarkOrder": {},
+            "sidebarCategoryBookmarkOrder": {},
         }
 
     categories = [
         _normalize_category_entry(entry)
         for entry in data.get("categories", [])
         if isinstance(entry, dict)
+        and str(entry.get("id") or "").strip()
+        and str(entry.get("id") or "").strip() != UNSORTED_CATEGORY_ID
+    ]
+    sidebar_categories = [
+        _normalize_sidebar_category_entry(entry)
+        for entry in data.get("sidebarCategories", [])
+        if isinstance(entry, dict)
+        and str(entry.get("id") or "").strip()
+        and str(entry.get("id") or "").strip() != UNSORTED_CATEGORY_ID
     ]
     existing_bookmarks = [
         _normalize_bookmark(entry)
@@ -294,13 +369,24 @@ def migrate_config(data: object) -> dict:
     for category_id, order in legacy_order.items():
         if category_id not in order_source or not order_source.get(category_id):
             order_source[category_id] = order
+    order_source.pop(UNSORTED_CATEGORY_ID, None)
+
+    sidebar_order_source: dict[str, list[str]] = {}
+    raw_sidebar_order = data.get("sidebarCategoryBookmarkOrder")
+    if isinstance(raw_sidebar_order, dict):
+        sidebar_order_source.update(raw_sidebar_order)
+    sidebar_order_source.pop(UNSORTED_CATEGORY_ID, None)
 
     return {
         "schemaVersion": SCHEMA_VERSION,
         "categories": categories,
+        "sidebarCategories": sidebar_categories,
         "bookmarks": bookmarks,
         "categoryBookmarkOrder": _normalize_category_bookmark_order(
             order_source, categories, bookmarks
+        ),
+        "sidebarCategoryBookmarkOrder": _normalize_sidebar_category_bookmark_order(
+            sidebar_order_source, sidebar_categories, bookmarks
         ),
     }
 

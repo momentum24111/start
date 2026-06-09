@@ -1,5 +1,12 @@
 {
   "schemaVersion": 2,
+  "sidebarCategories": [
+    {
+      "id": "reading",
+      "name": "Reading",
+      "icon": "book-open-variant"
+    }
+  ],
   "categories": [
     {
       "id": "infra",
@@ -27,5 +34,8 @@
   ],
   "categoryBookmarkOrder": {
     "infra": ["proxmox"]
+  },
+  "sidebarCategoryBookmarkOrder": {
+    "reading": []
   }
 }

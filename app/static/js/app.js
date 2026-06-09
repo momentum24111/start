@@ -10,12 +10,15 @@ import {
   normalizeBookmarkSource,
   DEFAULT_BOOKMARK_SOURCE,
   getBookmarksForCategory,
+  getBookmarksForSidebarCategory,
   findBookmarkById,
+  findSidebarCategoryById,
   ensureBookmarkInCategoryOrder,
   removeBookmarkFromCategoryOrder,
   removeCategoryFromConfig,
   removeBookmarkFromConfig,
-  listBookmarkListCategories
+  listBookmarkListCategories,
+  getHomepageCategories
 } from "./bookmarks.js";
 import {
   NAV_ALL,
@@ -46,7 +49,14 @@ const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
 
 const state = {
-  config: { schemaVersion: 2, categories: [], bookmarks: [], categoryBookmarkOrder: {} },
+  config: {
+    schemaVersion: 2,
+    categories: [],
+    sidebarCategories: [],
+    bookmarks: [],
+    categoryBookmarkOrder: {},
+    sidebarCategoryBookmarkOrder: {}
+  },
   settings: {
     appTitle: "Start",
     theme: "dark",
@@ -59,6 +69,7 @@ const state = {
   },
   editMode: false,
   sidebarOpen: false,
+  sidebarCategoryDraft: false,
   editModeCollapsedSnapshot: null,
   /** Ephemeral UI overrides for normal mode only; never persisted. Absent key means use `category.collapsed`. */
   sessionCategoryCollapsed: {},
@@ -364,7 +375,7 @@ function getBookmarkReorderState(category, bookmark) {
   if (!category?.id || !isCategoryNavId(state.config, category.id)) {
     return { canMoveLeft: false, canMoveRight: false };
   }
-  const bookmarks = getBookmarksForCategory(state.config, category.id);
+  const bookmarks = getBookmarksForSidebarCategory(state.config, category.id);
   const bookmarkIndex = bookmarks.findIndex((entry) => entry.id === bookmark.id);
   return {
     canMoveLeft: bookmarkIndex > 0,
@@ -657,7 +668,10 @@ function setEditMode(nextEditMode, { syncHistory = true } = {}) {
     return;
   }
   if (nextEditMode) captureEditModeCollapsedSnapshot();
-  else restoreEditModeCollapsedSnapshot();
+  else {
+    restoreEditModeCollapsedSnapshot();
+    state.sidebarCategoryDraft = false;
+  }
   state.editMode = nextEditMode;
   if (syncHistory) {
     const url = editModeUrl(nextEditMode);
@@ -872,21 +886,22 @@ function ensureSidebarShell() {
 }
 
 function updateNavToggleIcon() {
+  queryNavigationElements();
   if (!elements.navToggle) return;
-  elements.navToggle.innerHTML = `<span class="btn__icon">${iconSvg(ICONS.menu, "inline-icon")}</span>`;
+  elements.navToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.menu, "inline-icon")}</span>`;
 }
 
 function bindSidebarEvents() {
   queryNavigationElements();
   ensureSidebarShell();
-
-  if (elements.navToggle && elements.navToggle.dataset.sidebarBound !== "true") {
-    elements.navToggle.dataset.sidebarBound = "true";
-    elements.navToggle.addEventListener("click", (event) => {
-      event.preventDefault();
-      setSidebarOpen(!state.sidebarOpen);
-    });
-  }
+  if (document.documentElement.dataset.sidebarEventsBound === "true") return;
+  document.documentElement.dataset.sidebarEventsBound = "true";
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#nav-toggle-btn")) return;
+    event.preventDefault();
+    queryNavigationElements();
+    setSidebarOpen(!state.sidebarOpen);
+  });
 }
 
 function getActiveNavId() {
@@ -899,6 +914,7 @@ function getActiveNavViewMode() {
 
 function setSidebarOpen(open) {
   ensureSidebarShell();
+  queryNavigationElements();
   state.sidebarOpen = Boolean(open);
   if (elements.sidebar) {
     elements.sidebar.classList.toggle("is-open", state.sidebarOpen);
@@ -929,7 +945,7 @@ async function setNavViewModeForActive(mode) {
 function getNavTitle(navId) {
   const systemItem = SYSTEM_NAV_ITEMS.find((entry) => entry.id === navId);
   if (systemItem) return t(systemItem.labelKey);
-  return findCategoryById(state.config, navId)?.name || "";
+  return findSidebarCategoryById(state.config, navId)?.name || "";
 }
 
 function renderSidebarLink(navId, label, count, iconName) {
@@ -980,11 +996,93 @@ function renderSidebar() {
       )
     );
   }
+  if (state.editMode) {
+    if (state.sidebarCategoryDraft) {
+      elements.sidebarCategories.append(renderSidebarCategoryDraftRow());
+    } else {
+      elements.sidebarCategories.append(renderSidebarAddCategoryTrigger());
+    }
+  }
+}
+
+function renderSidebarAddCategoryTrigger() {
+  const li = document.createElement("li");
+  li.className = "sidebar-item";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "sidebar-link sidebar-link--add";
+  button.innerHTML = `
+    <span class="sidebar-link__icon">${mdiIcon("plus", "inline-icon")}</span>
+    <span class="sidebar-link__label">${t("ui.addSidebarCategory")}</span>
+  `;
+  button.addEventListener("click", () => {
+    state.sidebarCategoryDraft = true;
+    render();
+  });
+  li.append(button);
+  return li;
+}
+
+function renderSidebarCategoryDraftRow() {
+  const li = document.createElement("li");
+  li.className = "sidebar-item";
+  const wrapper = document.createElement("div");
+  wrapper.className = "sidebar-link sidebar-link--draft";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "sidebar-link__input";
+  input.setAttribute("aria-label", t("ui.addSidebarCategory"));
+  const commit = async () => {
+    const name = input.value.trim();
+    state.sidebarCategoryDraft = false;
+    if (!name) {
+      render();
+      return;
+    }
+    await saveSidebarCategory(name);
+  };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void commit();
+    } else if (event.key === "Escape") {
+      state.sidebarCategoryDraft = false;
+      render();
+    }
+  });
+  input.addEventListener("blur", () => {
+    void commit();
+  });
+  wrapper.append(input);
+  li.append(wrapper);
+  requestAnimationFrame(() => input.focus());
+  return li;
+}
+
+async function saveSidebarCategory(name) {
+  pushUndo();
+  const id = uid();
+  if (!state.config.sidebarCategories) state.config.sidebarCategories = [];
+  state.config.sidebarCategories.push({
+    id,
+    name,
+    icon: FALLBACK_MDI_ICON
+  });
+  if (!state.config.sidebarCategoryBookmarkOrder) state.config.sidebarCategoryBookmarkOrder = {};
+  state.config.sidebarCategoryBookmarkOrder[id] = [];
+  await persistConfig();
+  render();
 }
 
 function resolveBookmarkCategoryForNav(bookmark, navId) {
   if (isCategoryNavId(state.config, navId)) {
-    return findCategoryById(state.config, navId);
+    return findSidebarCategoryById(state.config, navId);
+  }
+  const firstSidebarCategoryId = (bookmark.sidebarCategoryIds || []).find((id) =>
+    findSidebarCategoryById(state.config, id)
+  );
+  if (firstSidebarCategoryId) {
+    return findSidebarCategoryById(state.config, firstSidebarCategoryId);
   }
   const firstCategoryId = (bookmark.categoryIds || []).find((id) => findCategoryById(state.config, id));
   return findCategoryById(state.config, firstCategoryId) || null;
@@ -1089,7 +1187,7 @@ function render() {
       header.append(title, renderViewModeToggle(viewMode));
       elements.navView?.append(header);
     }
-    for (const category of state.config.categories) {
+    for (const category of getHomepageCategories(state.config)) {
       elements.categories.append(renderCategory(category));
     }
     if (state.editMode) {
@@ -2290,19 +2388,26 @@ async function swapCategoryByStep(categoryId, step) {
 
 async function swapBookmarkByStep(categoryId, bookmarkId, step) {
   if (!state.editMode) return;
-  if (!state.config.categoryBookmarkOrder) state.config.categoryBookmarkOrder = {};
-  const list = [...(state.config.categoryBookmarkOrder[categoryId] || getBookmarksForCategory(state.config, categoryId).map((b) => b.id))];
+  const isSidebarCategory = isCategoryNavId(state.config, categoryId);
+  const orderKey = isSidebarCategory ? "sidebarCategoryBookmarkOrder" : "categoryBookmarkOrder";
+  const getOrderedBookmarks = isSidebarCategory
+    ? getBookmarksForSidebarCategory
+    : getBookmarksForCategory;
+  if (!state.config[orderKey]) state.config[orderKey] = {};
+  const list = [
+    ...(state.config[orderKey][categoryId] || getOrderedBookmarks(state.config, categoryId).map((bookmark) => bookmark.id))
+  ];
   const from = list.findIndex((entry) => entry === bookmarkId);
   const to = from + step;
   if (from < 0 || to < 0 || to >= list.length) return;
   pushUndo();
   [list[from], list[to]] = [list[to], list[from]];
-  state.config.categoryBookmarkOrder[categoryId] = list;
+  state.config[orderKey][categoryId] = list;
   await persistConfig();
-  animatePositionChanges(
-    `.category[data-category-id="${categoryId}"] .bookmark-item[data-bookmark-id]`,
-    (element) => `bookmark-${categoryId}-${element.dataset.bookmarkId}`
-  );
+  const selector = isSidebarCategory
+    ? `.bookmark-collection .bookmark-item[data-bookmark-id]`
+    : `.category[data-category-id="${categoryId}"] .bookmark-item[data-bookmark-id]`;
+  animatePositionChanges(selector, (element) => `bookmark-${categoryId}-${element.dataset.bookmarkId}`);
 }
 
 ensureSidebarShell();

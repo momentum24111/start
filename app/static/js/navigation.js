@@ -1,20 +1,23 @@
 import {
   getBookmarksForCategory,
-  listBookmarkListCategories,
-  normalizeCategoryType
+  getBookmarksForSidebarCategory,
+  findSidebarCategoryById,
+  listSidebarCategories,
+  UNSORTED_CATEGORY_ID
 } from "./bookmarks.js";
+
+export { UNSORTED_CATEGORY_ID };
 
 export const NAV_ALL = "all";
 export const NAV_FAVORITES = "favorites";
 export const NAV_UNSORTED = "unsorted";
-export const UNSORTED_CATEGORY_ID = "unsorted";
 
 export const VIEW_LIST = "list";
 export const VIEW_CARDS = "cards";
 export const VIEW_MODE_OPTIONS = [VIEW_LIST, VIEW_CARDS];
 
 export const SYSTEM_NAV_ITEMS = [
-  { id: NAV_ALL, labelKey: "ui.navAllBookmarks", icon: "bookmark-multiple" },
+  { id: NAV_ALL, labelKey: "ui.navStart", icon: "play" },
   { id: NAV_FAVORITES, labelKey: "ui.navFavorites", icon: "star" },
   { id: NAV_UNSORTED, labelKey: "ui.navUnsorted", icon: "folder-outline" }
 ];
@@ -52,11 +55,7 @@ export function setNavViewMode(settings, navId, mode) {
 }
 
 export function getSidebarCategories(config) {
-  return listBookmarkListCategories(config)
-    .filter((category) => category.id !== UNSORTED_CATEGORY_ID)
-    .sort((left, right) =>
-      String(left.name || "").localeCompare(String(right.name || ""), undefined, { sensitivity: "base" })
-    );
+  return listSidebarCategories(config);
 }
 
 export function findCategoryById(config, categoryId) {
@@ -64,9 +63,9 @@ export function findCategoryById(config, categoryId) {
 }
 
 export function isUnsortedBookmark(bookmark) {
-  const categoryIds = Array.isArray(bookmark?.categoryIds) ? bookmark.categoryIds : [];
-  if (!categoryIds.length) return true;
-  return categoryIds.every((id) => id === UNSORTED_CATEGORY_ID);
+  const sidebarCategoryIds = Array.isArray(bookmark?.sidebarCategoryIds) ? bookmark.sidebarCategoryIds : [];
+  if (!sidebarCategoryIds.length) return true;
+  return sidebarCategoryIds.every((id) => id === UNSORTED_CATEGORY_ID);
 }
 
 export function getBookmarksForNav(config, navId) {
@@ -79,6 +78,9 @@ export function getBookmarksForNav(config, navId) {
   }
   if (navId === NAV_UNSORTED) {
     return bookmarks.filter((bookmark) => isUnsortedBookmark(bookmark));
+  }
+  if (findSidebarCategoryById(config, navId)) {
+    return getBookmarksForSidebarCategory(config, navId);
   }
   return getBookmarksForCategory(config, navId);
 }
@@ -93,8 +95,7 @@ export function isSystemNavId(navId) {
 
 export function isCategoryNavId(config, navId) {
   if (!navId || isSystemNavId(navId)) return false;
-  const category = findCategoryById(config, navId);
-  return Boolean(category && normalizeCategoryType(category.type) !== "iframe");
+  return Boolean(findSidebarCategoryById(config, navId));
 }
 
 export function isValidNavId(config, navId) {

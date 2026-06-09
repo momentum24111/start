@@ -19,8 +19,6 @@ STATUS_PRESENT = "vorhanden"
 STATUS_DELETED_BY_USER = "gelöscht_durch_benutzer"
 STATUS_MISSING_FROM_BROWSER = "verschwunden_aus_browser"
 
-UNSORTED_CATEGORY_ID = "unsorted"
-UNSORTED_CATEGORY_NAME = "Unsortiert"
 SCHEMA_VERSION = 2
 
 GITHUB_BLOB_RE = re.compile(
@@ -259,28 +257,6 @@ def _find_bookmark_by_id(config: dict, bookmark_id: str | None) -> dict | None:
     return None
 
 
-def _ensure_unsorted_category(config: dict) -> None:
-    categories = config.get("categories")
-    if not isinstance(categories, list):
-        categories = []
-        config["categories"] = categories
-    for category in categories:
-        if isinstance(category, dict) and category.get("id") == UNSORTED_CATEGORY_ID:
-            return
-    categories.append(
-        {
-            "id": UNSORTED_CATEGORY_ID,
-            "name": UNSORTED_CATEGORY_NAME,
-            "icon": "folder",
-            "color": "slate",
-            "collapsed": False,
-            "type": "service-list",
-            "iframeUrl": "",
-            "slots": 1,
-        }
-    )
-
-
 def _new_imported_bookmark(entry: dict[str, str]) -> dict:
     return {
         "id": _generate_bookmark_id(),
@@ -288,7 +264,8 @@ def _new_imported_bookmark(entry: dict[str, str]) -> dict:
         "url": entry["href"],
         "description": "",
         "image": "",
-        "categoryIds": [UNSORTED_CATEGORY_ID],
+        "categoryIds": [],
+        "sidebarCategoryIds": [],
         "favorite": False,
         "source": "browser-import",
         "openMode": "new-tab",
@@ -302,16 +279,6 @@ def _append_bookmark_to_config(config: dict, bookmark: dict) -> None:
         bookmarks = []
         config["bookmarks"] = bookmarks
     bookmarks.append(bookmark)
-
-    order_map = config.get("categoryBookmarkOrder")
-    if not isinstance(order_map, dict):
-        order_map = {}
-        config["categoryBookmarkOrder"] = order_map
-    unsorted_order = order_map.get(UNSORTED_CATEGORY_ID)
-    if not isinstance(unsorted_order, list):
-        unsorted_order = []
-    unsorted_order.append(bookmark["id"])
-    order_map[UNSORTED_CATEGORY_ID] = unsorted_order
 
 
 def _set_id_state(state: dict, browser_id: str, *, status: str, bookmark_id: str | None) -> None:
@@ -391,7 +358,6 @@ def process_sync(*, trigger: str = "scheduled") -> dict:
                 status = record.get("status") if isinstance(record, dict) else None
 
                 if status is None:
-                    _ensure_unsorted_category(config)
                     bookmark = _new_imported_bookmark(entry)
                     _append_bookmark_to_config(config, bookmark)
                     _set_id_state(
@@ -412,7 +378,6 @@ def process_sync(*, trigger: str = "scheduled") -> dict:
                     continue
 
                 if status == STATUS_MISSING_FROM_BROWSER:
-                    _ensure_unsorted_category(config)
                     bookmark = _new_imported_bookmark(entry)
                     _append_bookmark_to_config(config, bookmark)
                     _set_id_state(

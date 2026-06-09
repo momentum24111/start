@@ -112,8 +112,20 @@ textarea {
   color: var(--control-active-fg);
 }
 
+#nav-toggle-btn .btn__icon {
+  width: 18px;
+  height: 18px;
+}
+
+#nav-toggle-btn .btn__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .sidebar {
   flex: 0 0 0;
+  flex-shrink: 0;
   width: 0;
   min-width: 0;
   overflow: hidden;
@@ -213,6 +225,33 @@ textarea {
 .sidebar-link.is-active .sidebar-link__count {
   color: inherit;
   opacity: 0.85;
+}
+
+.sidebar-link--add,
+.sidebar-link--draft {
+  cursor: pointer;
+}
+
+.sidebar-link--draft {
+  cursor: text;
+  padding: 0.35rem 0.5rem;
+}
+
+.sidebar-link__input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+  line-height: 1.3;
+}
+
+.sidebar-link__input:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .nav-view {
