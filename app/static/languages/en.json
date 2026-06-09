@@ -77,7 +77,7 @@
     "sourceManual": "Manual",
     "sourceBrowserImport": "Browser import",
     "browserSync": "Browser synchronization",
-    "browserSyncEnabled": "Enable browser synchronization",
+    "browserSyncEnabled": "Turn browser synchronization on or off",
     "browserSyncGithubUrl": "GitHub file URL",
     "browserSyncGithubPat": "GitHub Personal Access Token",
     "browserSyncInterval": "Sync interval (hours)",

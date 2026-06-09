@@ -1165,7 +1165,11 @@ function refreshSettingsModalTexts(form) {
   form.querySelector("[data-settings-actions-label]")?.replaceChildren(t("ui.actions"));
   form.querySelector("[data-settings-restart-label]")?.replaceChildren(t("ui.restartApp"));
   form.querySelector("[data-settings-browser-sync-title]")?.replaceChildren(t("ui.browserSync"));
-  form.querySelector("[data-settings-browser-sync-enabled-label]")?.replaceChildren(t("ui.browserSyncEnabled"));
+  const browserSyncToggle = form.querySelector("#browser-sync-enabled");
+  const browserSyncToggleLabel = browserSyncToggle?.closest(".toggle-switch");
+  const browserSyncEnabledLabel = t("ui.browserSyncEnabled");
+  if (browserSyncToggle) browserSyncToggle.setAttribute("aria-label", browserSyncEnabledLabel);
+  if (browserSyncToggleLabel) browserSyncToggleLabel.title = browserSyncEnabledLabel;
   form.querySelector("[data-settings-browser-sync-url-label]")?.replaceChildren(t("ui.browserSyncGithubUrl"));
   form.querySelector("[data-settings-browser-sync-pat-label]")?.replaceChildren(t("ui.browserSyncGithubPat"));
   form.querySelector("[data-settings-browser-sync-interval-label]")?.replaceChildren(t("ui.browserSyncInterval"));
@@ -1945,10 +1949,12 @@ function openSettingsModal() {
         ${ELEMENT_SIZE_OPTIONS.map((size) => `<button type="button" class="theme-option ${currentElementSize === size ? "active" : ""}" data-element-size="${size}">${t(`ui.size${size.charAt(0).toUpperCase()}${size.slice(1)}`)}</button>`).join("")}
       </div>
     </div>
-    <div class="settings-section-title" data-settings-browser-sync-title>${t("ui.browserSync")}</div>
-    <div class="form-row form-row--checkbox">
-      <label data-settings-browser-sync-enabled-label for="browser-sync-enabled">${t("ui.browserSyncEnabled")}</label>
-      <input id="browser-sync-enabled" name="browserSyncEnabled" type="checkbox" ${browserSync.enabled ? "checked" : ""} />
+    <div class="settings-section-header">
+      <div class="settings-section-title" data-settings-browser-sync-title>${t("ui.browserSync")}</div>
+      <label class="toggle-switch" title="${t("ui.browserSyncEnabled")}">
+        <input id="browser-sync-enabled" name="browserSyncEnabled" type="checkbox" aria-label="${t("ui.browserSyncEnabled")}" ${browserSync.enabled ? "checked" : ""} />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
     </div>
     <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
       <label data-settings-browser-sync-url-label for="browser-sync-url">${t("ui.browserSyncGithubUrl")}</label>

@@ -1170,6 +1170,19 @@ textarea {
   color: var(--text);
 }
 
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.2rem;
+  margin-bottom: 0.45rem;
+}
+
+.settings-section-header .settings-section-title {
+  margin: 0;
+}
+
 .settings-shortcut-name {
   padding-top: 0.45rem;
 }
