@@ -8,5 +8,13 @@
     "undo": "",
     "toggleEditMode": "",
     "openSettings": ""
-  }
+  },
+  "browserSync": {
+    "enabled": false,
+    "githubFileUrl": "",
+    "githubPat": "",
+    "syncIntervalHours": 6
+  },
+  "activeNavId": "all",
+  "navViewModes": {}
 }

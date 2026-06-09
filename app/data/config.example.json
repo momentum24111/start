@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "categories": [
     {
       "id": "infra",
@@ -8,16 +9,23 @@
       "collapsed": false,
       "type": "service-list",
       "iframeUrl": "",
-      "services": [
-        {
-          "id": "proxmox",
-          "name": "Proxmox",
-          "url": "https://example.local/proxmox",
-          "iconUrl": "https://example.local/favicon.ico",
-          "cachedIcon": "",
-          "openMode": "new-tab"
-        }
-      ]
+      "slots": 1
     }
-  ]
+  ],
+  "bookmarks": [
+    {
+      "id": "proxmox",
+      "title": "Proxmox",
+      "url": "https://example.local/proxmox",
+      "description": "",
+      "image": "https://example.local/favicon.ico",
+      "categoryIds": ["infra"],
+      "favorite": false,
+      "source": "manual",
+      "openMode": "new-tab"
+    }
+  ],
+  "categoryBookmarkOrder": {
+    "infra": ["proxmox"]
+  }
 }

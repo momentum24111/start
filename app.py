@@ -25,6 +25,17 @@ from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
+
+import importlib.util
+
+_browser_sync_spec = importlib.util.spec_from_file_location(
+    "browser_sync", APP_DIR / "browser_sync.py"
+)
+if _browser_sync_spec is None or _browser_sync_spec.loader is None:
+    raise RuntimeError("browser_sync module not found")
+browser_sync = importlib.util.module_from_spec(_browser_sync_spec)
+_browser_sync_spec.loader.exec_module(browser_sync)
+
 STATIC_DIR = APP_DIR / "static"
 DATA_DIR = APP_DIR / "data"
 BACKUP_DIR = DATA_DIR / "backups"
@@ -36,6 +47,10 @@ CONFIG_EXAMPLE = DATA_DIR / "config.example.json"
 SETTINGS_EXAMPLE = DATA_DIR / "settings.example.json"
 CONFIG_FILE = DATA_DIR / "config.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
+
+SCHEMA_VERSION = 2
+BOOKMARK_SOURCE_OPTIONS = frozenset({"manual", "browser-import"})
+DEFAULT_BOOKMARK_SOURCE = "manual"
 
 INDEX_HTML_MARKER = "__START_PKG_INITIAL_APP_TITLE__"
 INDEX_HTML_PATH = STATIC_DIR / "index.html"
@@ -93,6 +108,162 @@ def save_json(path: Path, data: dict, *, context: str = "unknown") -> None:
     RUNTIME_STATE["last_written_file"] = str(path.resolve())
     RUNTIME_STATE["last_written_at"] = _timestamp_now()
     RUNTIME_STATE["last_write_context"] = context
+
+
+def _normalize_bookmark_source(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in BOOKMARK_SOURCE_OPTIONS else DEFAULT_BOOKMARK_SOURCE
+
+
+def _legacy_service_image(service: dict) -> str:
+    cached = str(service.get("cachedIcon") or "").strip()
+    icon_url = str(service.get("iconUrl") or "").strip()
+    return cached or icon_url
+
+
+def _normalize_bookmark(raw: dict, *, category_id: str | None = None) -> dict:
+    category_ids = (
+        [str(cid).strip() for cid in raw.get("categoryIds", []) if str(cid).strip()]
+        if isinstance(raw.get("categoryIds"), list)
+        else ([category_id] if category_id else [])
+    )
+    bookmark: dict = {
+        "id": str(raw.get("id") or "").strip(),
+        "title": str(raw.get("title") or raw.get("name") or "").strip(),
+        "url": str(raw.get("url") or "").strip(),
+        "description": str(raw.get("description") or "").strip(),
+        "image": str(raw.get("image") or _legacy_service_image(raw) or "").strip(),
+        "categoryIds": category_ids,
+        "favorite": bool(raw.get("favorite")),
+        "source": _normalize_bookmark_source(raw.get("source")),
+    }
+    if raw.get("openMode"):
+        bookmark["openMode"] = raw["openMode"]
+    if raw.get("shortcut"):
+        bookmark["shortcut"] = raw["shortcut"]
+    browser_id = str(raw.get("browserId") or "").strip()
+    if browser_id:
+        bookmark["browserId"] = browser_id
+    return bookmark
+
+
+def _normalize_category_entry(raw: dict) -> dict:
+    entry = {key: value for key, value in raw.items() if key != "services"}
+    entry["type"] = str(entry.get("type") or "service-list").strip().lower()
+    if entry["type"] not in {"service-list", "iframe"}:
+        entry["type"] = "service-list"
+    entry["iframeUrl"] = str(entry.get("iframeUrl") or "").strip()
+    slots = entry.get("slots")
+    entry["slots"] = slots if isinstance(slots, int) and slots in (1, 2, 3) else 1
+    return entry
+
+
+def _normalize_category_bookmark_order(
+    raw: object, categories: list[dict], bookmarks: list[dict]
+) -> dict[str, list[str]]:
+    valid_category_ids = {str(c.get("id") or "").strip() for c in categories}
+    valid_category_ids.discard("")
+    valid_bookmark_ids = {str(b.get("id") or "").strip() for b in bookmarks}
+    valid_bookmark_ids.discard("")
+    source = raw if isinstance(raw, dict) else {}
+    normalized: dict[str, list[str]] = {}
+
+    for category_id in valid_category_ids:
+        listed = source.get(category_id) if isinstance(source.get(category_id), list) else []
+        seen: set[str] = set()
+        order: list[str] = []
+        for bookmark_id in listed:
+            bid = str(bookmark_id or "").strip()
+            if not bid or bid not in valid_bookmark_ids or bid in seen:
+                continue
+            seen.add(bid)
+            order.append(bid)
+        for bookmark in bookmarks:
+            bid = str(bookmark.get("id") or "").strip()
+            category_ids = bookmark.get("categoryIds") if isinstance(bookmark.get("categoryIds"), list) else []
+            if category_id not in category_ids or bid in seen:
+                continue
+            order.append(bid)
+            seen.add(bid)
+        normalized[category_id] = order
+    return normalized
+
+
+def migrate_config(data: object) -> dict:
+    """Legacy-Config (services in Kategorien) in einheitliches Lesezeichenmodell überführen."""
+    if not isinstance(data, dict):
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "categories": [],
+            "bookmarks": [],
+            "categoryBookmarkOrder": {},
+        }
+
+    schema_version = int(data.get("schemaVersion") or 1)
+    has_bookmarks = isinstance(data.get("bookmarks"), list)
+    if has_bookmarks and schema_version >= SCHEMA_VERSION:
+        categories = [
+            _normalize_category_entry(entry)
+            for entry in data.get("categories", [])
+            if isinstance(entry, dict)
+        ]
+        bookmarks = [
+            _normalize_bookmark(entry)
+            for entry in data.get("bookmarks", [])
+            if isinstance(entry, dict)
+        ]
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "categories": categories,
+            "bookmarks": bookmarks,
+            "categoryBookmarkOrder": _normalize_category_bookmark_order(
+                data.get("categoryBookmarkOrder"), categories, bookmarks
+            ),
+        }
+
+    categories: list[dict] = []
+    bookmarks: list[dict] = []
+    bookmark_by_id: dict[str, dict] = {}
+    category_bookmark_order: dict[str, list[str]] = {}
+
+    for raw_category in data.get("categories", []):
+        if not isinstance(raw_category, dict):
+            continue
+        category = _normalize_category_entry(raw_category)
+        category_id = str(category.get("id") or "").strip()
+        categories.append(category)
+        if category.get("type") == "iframe":
+            continue
+
+        order: list[str] = []
+        for raw_service in raw_category.get("services", []):
+            if not isinstance(raw_service, dict):
+                continue
+            service_id = str(raw_service.get("id") or "").strip()
+            if not service_id:
+                continue
+            if service_id in bookmark_by_id:
+                existing = bookmark_by_id[service_id]
+                category_ids = existing.setdefault("categoryIds", [])
+                if category_id and category_id not in category_ids:
+                    category_ids.append(category_id)
+            else:
+                bookmark = _normalize_bookmark(raw_service, category_id=category_id or None)
+                bookmark["id"] = service_id
+                bookmark_by_id[service_id] = bookmark
+                bookmarks.append(bookmark)
+            order.append(service_id)
+        if category_id:
+            category_bookmark_order[category_id] = order
+
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "categories": categories,
+        "bookmarks": bookmarks,
+        "categoryBookmarkOrder": _normalize_category_bookmark_order(
+            category_bookmark_order, categories, bookmarks
+        ),
+    }
 
 
 def create_backup(path: Path) -> Path:
@@ -454,35 +625,64 @@ async def resolve_favicon_candidates(raw_url: str) -> list[str]:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ensure_bootstrap()
+    browser_sync.configure(
+        data_dir=DATA_DIR,
+        load_json=load_json,
+        save_json=save_json,
+        create_backup=create_backup,
+        migrate_config=migrate_config,
+    )
+    browser_sync.ensure_bootstrap()
+    browser_sync.start_scheduler()
     yield
+    browser_sync.stop_scheduler()
 
 
 app = FastAPI(title="Start", version="2.0.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
+def config_needs_migration(data: object) -> bool:
+    if not isinstance(data, dict):
+        return True
+    if int(data.get("schemaVersion") or 1) < SCHEMA_VERSION:
+        return True
+    if not isinstance(data.get("bookmarks"), list):
+        return True
+    for entry in data.get("categories", []):
+        if isinstance(entry, dict) and entry.get("services"):
+            return True
+    return False
+
+
 @app.get("/api/config")
 def get_config() -> dict:
-    return load_json(CONFIG_FILE, context="api:get_config")
+    raw = load_json(CONFIG_FILE, context="api:get_config")
+    migrated = migrate_config(raw)
+    if config_needs_migration(raw):
+        create_backup(CONFIG_FILE)
+        save_json(CONFIG_FILE, migrated, context="api:get_config:migrate")
+    return migrated
 
 
 @app.put("/api/config")
 def put_config(payload: dict) -> dict:
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    categories = payload.get("categories", []) if isinstance(payload, dict) else []
-    service_count = 0
-    for entry in categories if isinstance(categories, list) else []:
-        if isinstance(entry, dict):
-            service_count += len(entry.get("services", []) or [])
-    RUNTIME_STATE["last_config_put_summary"] = {
-        "at": _timestamp_now(),
-        "sha256": hashlib.sha256(encoded).hexdigest(),
-        "bytes": len(encoded),
-        "category_count": len(categories) if isinstance(categories, list) else 0,
-        "service_count": service_count,
-    }
-    create_backup(CONFIG_FILE)
-    save_json(CONFIG_FILE, payload, context="api:put_config")
+    with browser_sync.config_lock():
+        old_config = migrate_config(load_json(CONFIG_FILE, context="api:put_config:before"))
+        normalized = migrate_config(payload)
+        encoded = json.dumps(normalized, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        categories = normalized.get("categories", [])
+        bookmarks = normalized.get("bookmarks", [])
+        RUNTIME_STATE["last_config_put_summary"] = {
+            "at": _timestamp_now(),
+            "sha256": hashlib.sha256(encoded).hexdigest(),
+            "bytes": len(encoded),
+            "category_count": len(categories) if isinstance(categories, list) else 0,
+            "bookmark_count": len(bookmarks) if isinstance(bookmarks, list) else 0,
+        }
+        create_backup(CONFIG_FILE)
+        save_json(CONFIG_FILE, normalized, context="api:put_config")
+        browser_sync.on_config_saved(old_config, normalized)
     return {"ok": True}
 
 
@@ -502,7 +702,18 @@ def put_settings(payload: dict) -> dict:
     }
     create_backup(SETTINGS_FILE)
     save_json(SETTINGS_FILE, payload, context="api:put_settings")
+    browser_sync.on_settings_saved()
     return {"ok": True}
+
+
+@app.get("/api/browser-sync/status")
+def get_browser_sync_status() -> dict:
+    return browser_sync.get_status()
+
+
+@app.post("/api/browser-sync/run")
+def post_browser_sync_run() -> dict:
+    return browser_sync.process_sync(trigger="manual")
 
 
 @app.get("/api/debug/storage")

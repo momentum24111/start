@@ -50,4 +50,20 @@ body {
   --cat-emerald: #24ae6f;
   --cat-orange: #e47a36;
   --cat-slate: #6e879f;
+  --sidebar-width: 280px;
+  --sidebar-bg: #ffffff;
+  --sidebar-shadow: 8px 0 24px rgba(20, 37, 56, 0.12);
+  --sidebar-backdrop-bg: rgba(15, 22, 32, 0.32);
+  --sidebar-divider: rgba(81, 99, 121, 0.16);
+  --sidebar-item-hover-bg: #e6edf4;
+  --nav-item-active-bg: #d5e4ff;
+  --nav-item-active-fg: #17376f;
+  --nav-item-count-fg: #516379;
+  --bookmark-thumb-bg: #e8eef5;
+  --bookmark-thumb-placeholder-fg: #6e879f;
+  --bookmark-description-fg: #516379;
+  --bookmark-url-fg: #6e879f;
+  --bookmark-chip-bg: #e6edf7;
+  --bookmark-chip-fg: #294b7f;
+  --bookmark-menu-bg: #ffffff;
 }

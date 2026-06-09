@@ -2,14 +2,63 @@ import { api } from "./api.js";
 import { showModal, showStatusModal } from "./modal.js";
 import { initI18n, t } from "./i18n.js";
 import { applyTheme } from "./themes.js";
+import {
+  normalizeConfig,
+  normalizeCategoryType,
+  normalizeCategorySlots,
+  normalizeIframeUrl,
+  normalizeBookmarkSource,
+  DEFAULT_BOOKMARK_SOURCE,
+  getBookmarksForCategory,
+  findBookmarkById,
+  ensureBookmarkInCategoryOrder,
+  removeBookmarkFromCategoryOrder,
+  removeCategoryFromConfig,
+  removeBookmarkFromConfig,
+  listBookmarkListCategories
+} from "./bookmarks.js";
+import {
+  NAV_ALL,
+  VIEW_LIST,
+  VIEW_CARDS,
+  SYSTEM_NAV_ITEMS,
+  normalizeNavViewModes,
+  normalizeActiveNavId,
+  getNavViewMode,
+  setNavViewMode,
+  getSidebarCategories,
+  getBookmarksForNav,
+  getBookmarkCountForNav,
+  findCategoryById,
+  resolveActiveNavId,
+  shouldShowCategoryGrid,
+  isValidNavId,
+  isCategoryNavId
+} from "./navigation.js";
+import {
+  normalizeBookmarkView,
+  bookmarksContainerClass,
+  createBookmarkElement,
+  ensureBookmarkMenuDismiss
+} from "./bookmark-views.js";
 
 const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
 
 const state = {
-  config: { categories: [] },
-  settings: { appTitle: "Start", theme: "dark", language: "en", categoryAccentStrength: 15, elementSize: "medium", globalShortcuts: {} },
+  config: { schemaVersion: 2, categories: [], bookmarks: [], categoryBookmarkOrder: {} },
+  settings: {
+    appTitle: "Start",
+    theme: "dark",
+    language: "en",
+    categoryAccentStrength: 15,
+    elementSize: "medium",
+    globalShortcuts: {},
+    activeNavId: NAV_ALL,
+    navViewModes: {}
+  },
   editMode: false,
+  sidebarOpen: false,
   editModeCollapsedSnapshot: null,
   /** Ephemeral UI overrides for normal mode only; never persisted. Absent key means use `category.collapsed`. */
   sessionCategoryCollapsed: {},
@@ -30,10 +79,16 @@ function categoryEffectiveCollapsed(category) {
 const elements = {
   title: document.getElementById("app-title"),
   categories: document.getElementById("categories"),
+  navView: document.getElementById("nav-view"),
   addCategory: document.getElementById("add-category-btn"),
   undo: document.getElementById("undo-btn"),
   edit: document.getElementById("edit-btn"),
-  settings: document.getElementById("settings-btn")
+  settings: document.getElementById("settings-btn"),
+  navToggle: document.getElementById("nav-toggle-btn"),
+  sidebar: document.getElementById("sidebar"),
+  sidebarBackdrop: document.getElementById("sidebar-backdrop"),
+  sidebarSystem: document.getElementById("sidebar-system"),
+  sidebarCategories: document.getElementById("sidebar-categories")
 };
 
 const ICONS = {
@@ -48,7 +103,12 @@ const ICONS = {
   arrowRight: "m8.59 16.59 1.41 1.41L16 12 10 6 8.59 7.41 13.17 12z",
   arrowUp: "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z",
   arrowDown: "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z",
-  restart: "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+  restart: "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
+  menu: "M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z",
+  viewList: "M3 5h18v2H3V5m0 6h18v2H3v-2m0 6h18v2H3v-2z",
+  viewCards: "M3 5h8v8H3V5m10 0h8v4H13V5m0 6h8v8H13v-8M3 13h8v6H3v-6z",
+  open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
+  dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
 };
 
 const FALLBACK_MDI_ICON = "folder";
@@ -103,13 +163,12 @@ function resolveIconSrcForImgTag(raw) {
   return resolveServiceIconDisplaySrc(raw);
 }
 
-function serviceStoredIconSrcForDisplay(service) {
-  if (!service) return resolveIconSrcForImgTag("");
-  const c = service.cachedIcon ? normalizeAppIconPath(String(service.cachedIcon)) : "";
-  const u = service.iconUrl ? String(service.iconUrl).trim() : "";
-  let rawForImg = "";
-  if (u) rawForImg = isProbablyExternalIconHref(u) ? u : normalizeAppIconPath(u);
-  else if (c) rawForImg = isProbablyExternalIconHref(c) ? c : normalizeAppIconPath(c);
+function bookmarkStoredImageSrc(bookmark) {
+  if (!bookmark) return resolveIconSrcForImgTag("");
+  const image = bookmark.image ? String(bookmark.image).trim() : "";
+  const rawForImg = image
+    ? (isProbablyExternalIconHref(image) ? image : normalizeAppIconPath(image))
+    : "";
   return resolveIconSrcForImgTag(rawForImg);
 }
 
@@ -123,6 +182,10 @@ const CATEGORY_SLOT_OPTIONS = [1, 2, 3];
 const DEFAULT_CATEGORY_SLOTS = 1;
 const CATEGORY_TYPE_OPTIONS = ["service-list", "iframe"];
 const DEFAULT_CATEGORY_TYPE = "service-list";
+const BOOKMARK_SOURCE_LABEL_KEYS = {
+  manual: "ui.sourceManual",
+  "browser-import": "ui.sourceBrowserImport"
+};
 const SHORTCUT_VALID_KEY_REGEX = /^(?:[A-Z0-9]|F[1-9]|F1[0-2])$/;
 const RESERVED_SHORTCUTS = new Set([
   "Ctrl+T",
@@ -174,6 +237,19 @@ function normalizeGlobalShortcuts(value) {
   return normalized;
 }
 
+function normalizeBrowserSyncSettings(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const parsedInterval = Number(source.syncIntervalHours);
+  return {
+    enabled: Boolean(source.enabled),
+    githubFileUrl: String(source.githubFileUrl || "").trim(),
+    githubPat: String(source.githubPat || "").trim(),
+    syncIntervalHours: Number.isFinite(parsedInterval)
+      ? Math.min(168, Math.max(1, parsedInterval))
+      : 6
+  };
+}
+
 function getGlobalShortcutLabel(actionId) {
   const action = GLOBAL_SHORTCUT_ACTIONS.find((entry) => entry.id === actionId);
   if (!action) return actionId;
@@ -210,29 +286,25 @@ function renderShortcutChips(shortcut, className = "shortcut-chip") {
   return tokens.map((token) => `<span class="${className}">${token}</span>`).join("");
 }
 
-function findServiceByShortcut(shortcut, skipServiceId = "") {
+function findBookmarkByShortcut(shortcut, skipBookmarkId = "") {
   const normalized = normalizeServiceShortcut(shortcut);
   if (!normalized) return null;
-  for (const category of state.config.categories || []) {
-    for (const service of category.services || []) {
-      if (skipServiceId && service.id === skipServiceId) continue;
-      if (normalizeServiceShortcut(service.shortcut) === normalized) {
-        return { category, service };
-      }
+  for (const bookmark of state.config.bookmarks || []) {
+    if (skipBookmarkId && bookmark.id === skipBookmarkId) continue;
+    if (normalizeServiceShortcut(bookmark.shortcut) === normalized) {
+      return { bookmark };
     }
   }
   return null;
 }
 
-function findShortcutUsage(shortcut, { skipServiceId = "", skipGlobalAction = "" } = {}) {
+function findShortcutUsage(shortcut, { skipBookmarkId = "", skipGlobalAction = "" } = {}) {
   const normalized = normalizeServiceShortcut(shortcut);
   if (!normalized) return null;
-  for (const category of state.config.categories || []) {
-    for (const service of category.services || []) {
-      if (skipServiceId && service.id === skipServiceId) continue;
-      if (normalizeServiceShortcut(service.shortcut) === normalized) {
-        return { type: "service", serviceName: service.name || t("ui.service"), serviceId: service.id };
-      }
+  for (const bookmark of state.config.bookmarks || []) {
+    if (skipBookmarkId && bookmark.id === skipBookmarkId) continue;
+    if (normalizeServiceShortcut(bookmark.shortcut) === normalized) {
+      return { type: "bookmark", bookmarkTitle: bookmark.title || t("ui.bookmark"), bookmarkId: bookmark.id };
     }
   }
   const globalShortcuts = normalizeGlobalShortcuts(state.settings.globalShortcuts);
@@ -247,8 +319,8 @@ function findShortcutUsage(shortcut, { skipServiceId = "", skipGlobalAction = ""
 
 function getShortcutConflictMessage(usage) {
   if (!usage) return "";
-  if (usage.type === "service") {
-    return interpolateLabel(t("ui.shortcutConflictService"), { name: usage.serviceName });
+  if (usage.type === "bookmark") {
+    return interpolateLabel(t("ui.shortcutConflictBookmark"), { name: usage.bookmarkTitle });
   }
   return interpolateLabel(t("ui.shortcutConflictAction"), { name: usage.actionLabel });
 }
@@ -265,10 +337,101 @@ function isBlockingFocusTarget(target) {
   return false;
 }
 
-function triggerServiceLaunch(serviceId) {
-  const tile = document.querySelector(`.service[data-service-id="${serviceId}"] .service-left`);
+function triggerBookmarkLaunch(bookmarkId) {
+  const tile = document.querySelector(`.bookmark-item[data-bookmark-id="${bookmarkId}"] [data-bookmark-open]`);
   if (!(tile instanceof HTMLAnchorElement)) return;
   tile.click();
+}
+
+function createBookmarkUiDeps() {
+  return {
+    button,
+    iconSvg,
+    mdiIcon,
+    bookmarkStoredImageSrc,
+    renderShortcutChips,
+    icons: ICONS
+  };
+}
+
+function resolveBookmarkModalCategoryId(bookmark, category) {
+  if (category?.id) return category.id;
+  const fromBookmark = (bookmark.categoryIds || []).find((id) => findCategoryById(state.config, id));
+  if (fromBookmark) return fromBookmark;
+  return listBookmarkListCategories(state.config)[0]?.id || "";
+}
+
+function getBookmarkReorderState(category, bookmark) {
+  if (!category?.id || !isCategoryNavId(state.config, category.id)) {
+    return { canMoveLeft: false, canMoveRight: false };
+  }
+  const bookmarks = getBookmarksForCategory(state.config, category.id);
+  const bookmarkIndex = bookmarks.findIndex((entry) => entry.id === bookmark.id);
+  return {
+    canMoveLeft: bookmarkIndex > 0,
+    canMoveRight: bookmarkIndex >= 0 && bookmarkIndex < bookmarks.length - 1
+  };
+}
+
+async function confirmDeleteBookmark(bookmark) {
+  let confirmed = false;
+  const body = document.createElement("p");
+  body.textContent = interpolateLabel(t("ui.deleteBookmarkConfirm"), {
+    title: bookmark.title || t("ui.bookmark")
+  });
+  await showModal({
+    title: t("ui.delete"),
+    content: body,
+    saveLabel: t("ui.delete"),
+    cancelLabel: t("ui.cancel"),
+    onSave: async () => {
+      confirmed = true;
+    }
+  });
+  return confirmed;
+}
+
+async function handleDeleteBookmark(bookmark) {
+  const confirmed = await confirmDeleteBookmark(bookmark);
+  if (!confirmed) return;
+  pushUndo();
+  removeBookmarkFromConfig(state.config, bookmark.id);
+  await persistConfig();
+  render();
+}
+
+function createBookmarkElementForBookmark(bookmark, category, view) {
+  const categoryContext = category || { id: resolveBookmarkModalCategoryId(bookmark, category) };
+  const reorder = getBookmarkReorderState(category, bookmark);
+  return createBookmarkElement(
+    {
+      category: categoryContext,
+      bookmark,
+      view: normalizeBookmarkView(view),
+      editMode: state.editMode,
+      config: state.config,
+      hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
+      canMoveLeft: reorder.canMoveLeft,
+      canMoveRight: reorder.canMoveRight
+    },
+    {
+      ...createBookmarkUiDeps(),
+      onEdit: () => openBookmarkModal(resolveBookmarkModalCategoryId(bookmark, category), bookmark),
+      onDelete: () => {
+        void handleDeleteBookmark(bookmark);
+      },
+      onMoveLeft: reorder.canMoveLeft
+        ? () => {
+            void swapBookmarkByStep(categoryContext.id, bookmark.id, -1);
+          }
+        : undefined,
+      onMoveRight: reorder.canMoveRight
+        ? () => {
+            void swapBookmarkByStep(categoryContext.id, bookmark.id, 1);
+          }
+        : undefined
+    }
+  );
 }
 
 function getGlobalShortcut(actionId) {
@@ -313,20 +476,6 @@ function normalizeElementSize(value) {
   return ELEMENT_SIZE_OPTIONS.includes(normalized) ? normalized : DEFAULT_ELEMENT_SIZE;
 }
 
-function normalizeCategorySlots(value) {
-  const parsed = Number(value);
-  return CATEGORY_SLOT_OPTIONS.includes(parsed) ? parsed : DEFAULT_CATEGORY_SLOTS;
-}
-
-function normalizeCategoryType(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return CATEGORY_TYPE_OPTIONS.includes(normalized) ? normalized : DEFAULT_CATEGORY_TYPE;
-}
-
-function normalizeIframeUrl(value) {
-  return String(value || "").trim();
-}
-
 function isValidIframeUrl(value) {
   const v = normalizeIframeUrl(value);
   if (!v) return false;
@@ -341,19 +490,6 @@ function resolveIframeSrc(raw) {
   if (v.startsWith("//")) return `${window.location.protocol}${v}`;
   if (v.startsWith("/")) return new URL(v, window.location.origin).href;
   return v;
-}
-
-function normalizeConfig(config) {
-  const normalizedConfig = config && typeof config === "object" ? config : { categories: [] };
-  const categories = Array.isArray(normalizedConfig.categories) ? normalizedConfig.categories : [];
-  normalizedConfig.categories = categories.map((category) => ({
-    ...category,
-    type: normalizeCategoryType(category?.type),
-    iframeUrl: normalizeIframeUrl(category?.iframeUrl),
-    slots: normalizeCategorySlots(category?.slots),
-    services: normalizeCategoryType(category?.type) === "iframe" ? [] : (Array.isArray(category?.services) ? category.services : [])
-  }));
-  return normalizedConfig;
 }
 
 function applyElementSize(size) {
@@ -551,7 +687,10 @@ async function bootstrap() {
     ...settings,
     categoryAccentStrength: normalizeCategoryAccentStrength(settings?.categoryAccentStrength),
     elementSize: normalizeElementSize(settings?.elementSize),
-    globalShortcuts: normalizeGlobalShortcuts(settings?.globalShortcuts)
+    globalShortcuts: normalizeGlobalShortcuts(settings?.globalShortcuts),
+    browserSync: normalizeBrowserSyncSettings(settings?.browserSync),
+    activeNavId: resolveActiveNavId(state.config, settings),
+    navViewModes: normalizeNavViewModes(settings?.navViewModes)
   };
   state.themes = themes.themes;
   state.languages = languages.languages;
@@ -564,6 +703,7 @@ async function bootstrap() {
     captureEditModeCollapsedSnapshot();
     history.replaceState({ editMode: true }, "", editModeUrl(true));
   }
+  ensureBookmarkMenuDismiss();
   wireEvents();
   render();
 }
@@ -584,6 +724,12 @@ function wireEvents() {
   elements.undo.addEventListener("click", undo);
   elements.settings.addEventListener("click", openSettingsModal);
   elements.addCategory?.addEventListener("click", () => openCategoryModal());
+  elements.navToggle?.addEventListener("click", () => {
+    setSidebarOpen(!state.sidebarOpen);
+  });
+  elements.sidebarBackdrop?.addEventListener("click", () => {
+    setSidebarOpen(false);
+  });
   document.addEventListener("keydown", (event) => {
     if (event.defaultPrevented) return;
     if (isBlockingFocusTarget(document.activeElement) || isBlockingFocusTarget(event.target)) return;
@@ -596,10 +742,10 @@ function wireEvents() {
       return;
     }
     if (state.editMode) return;
-    const match = findServiceByShortcut(shortcut);
+    const match = findBookmarkByShortcut(shortcut);
     if (!match) return;
     event.preventDefault();
-    triggerServiceLaunch(match.service.id);
+    triggerBookmarkLaunch(match.bookmark.id);
   });
 }
 
@@ -614,11 +760,24 @@ function pushUndo() {
 async function persistConfig() {
   await api.saveConfig(state.config);
   state.config = normalizeConfig(await api.getConfig());
+  state.settings.activeNavId = resolveActiveNavId(state.config, state.settings);
 }
 
 async function persistSettings() {
+  state.settings.activeNavId = resolveActiveNavId(state.config, state.settings);
+  state.settings.navViewModes = normalizeNavViewModes(state.settings.navViewModes);
   await api.saveSettings(state.settings);
-  state.settings = await api.getSettings();
+  const saved = await api.getSettings();
+  state.settings = {
+    ...state.settings,
+    ...saved,
+    categoryAccentStrength: normalizeCategoryAccentStrength(saved?.categoryAccentStrength),
+    elementSize: normalizeElementSize(saved?.elementSize),
+    globalShortcuts: normalizeGlobalShortcuts(saved?.globalShortcuts),
+    browserSync: normalizeBrowserSyncSettings(saved?.browserSync),
+    activeNavId: resolveActiveNavId(state.config, saved),
+    navViewModes: normalizeNavViewModes(saved?.navViewModes)
+  };
 }
 
 async function undo() {
@@ -633,6 +792,172 @@ async function undo() {
   render();
 }
 
+function getActiveNavId() {
+  return resolveActiveNavId(state.config, state.settings);
+}
+
+function getActiveNavViewMode() {
+  return getNavViewMode(state.settings, getActiveNavId());
+}
+
+function setSidebarOpen(open) {
+  state.sidebarOpen = Boolean(open);
+  elements.sidebar?.classList.toggle("is-open", state.sidebarOpen);
+  elements.sidebarBackdrop?.classList.toggle("hidden", !state.sidebarOpen);
+  elements.sidebarBackdrop?.classList.toggle("is-visible", state.sidebarOpen);
+  elements.sidebar?.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
+  elements.sidebarBackdrop?.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
+  elements.navToggle?.setAttribute("aria-expanded", state.sidebarOpen ? "true" : "false");
+  document.body.classList.toggle("sidebar-open", state.sidebarOpen);
+}
+
+async function selectNav(navId) {
+  const nextNavId = normalizeActiveNavId(navId);
+  if (!isValidNavId(state.config, nextNavId)) return;
+  if (getActiveNavId() === nextNavId) {
+    if (window.matchMedia("(max-width: 650px)").matches) setSidebarOpen(false);
+    return;
+  }
+  state.settings.activeNavId = nextNavId;
+  await persistSettings();
+  if (window.matchMedia("(max-width: 650px)").matches) setSidebarOpen(false);
+  render();
+}
+
+async function setNavViewModeForActive(mode) {
+  const navId = getActiveNavId();
+  if (getNavViewMode(state.settings, navId) === mode) return;
+  setNavViewMode(state.settings, navId, mode);
+  await persistSettings();
+  render();
+}
+
+function getNavTitle(navId) {
+  const systemItem = SYSTEM_NAV_ITEMS.find((entry) => entry.id === navId);
+  if (systemItem) return t(systemItem.labelKey);
+  return findCategoryById(state.config, navId)?.name || "";
+}
+
+function renderSidebarLink(navId, label, count, iconName) {
+  const li = document.createElement("li");
+  li.className = "sidebar-item";
+  const isActive = getActiveNavId() === navId;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `sidebar-link ${isActive ? "is-active" : ""}`;
+  button.dataset.navId = navId;
+  button.innerHTML = `
+    <span class="sidebar-link__icon">${mdiIcon(iconName, "inline-icon")}</span>
+    <span class="sidebar-link__label">${label}</span>
+    <span class="sidebar-link__count">${count}</span>
+  `;
+  button.addEventListener("click", () => {
+    void selectNav(navId);
+  });
+  li.append(button);
+  return li;
+}
+
+function renderSidebar() {
+  if (!elements.sidebarSystem || !elements.sidebarCategories) return;
+  elements.navToggle.innerHTML = iconSvg(ICONS.menu, "inline-icon");
+  elements.navToggle.title = t("ui.navToggle");
+  elements.navToggle.setAttribute("aria-label", t("ui.navToggle"));
+  setSidebarOpen(state.sidebarOpen);
+
+  elements.sidebarSystem.replaceChildren();
+  for (const item of SYSTEM_NAV_ITEMS) {
+    elements.sidebarSystem.append(
+      renderSidebarLink(item.id, t(item.labelKey), getBookmarkCountForNav(state.config, item.id), item.icon)
+    );
+  }
+
+  elements.sidebarCategories.replaceChildren();
+  for (const category of getSidebarCategories(state.config)) {
+    elements.sidebarCategories.append(
+      renderSidebarLink(
+        category.id,
+        category.name,
+        getBookmarkCountForNav(state.config, category.id),
+        category.icon || FALLBACK_MDI_ICON
+      )
+    );
+  }
+}
+
+function resolveBookmarkCategoryForNav(bookmark, navId) {
+  if (isCategoryNavId(state.config, navId)) {
+    return findCategoryById(state.config, navId);
+  }
+  const firstCategoryId = (bookmark.categoryIds || []).find((id) => findCategoryById(state.config, id));
+  return findCategoryById(state.config, firstCategoryId) || null;
+}
+
+function renderBookmarkCollection(bookmarks, navId, viewMode) {
+  const normalizedView = normalizeBookmarkView(viewMode);
+  const root = document.createElement("div");
+  root.className = `${bookmarksContainerClass(normalizedView)} bookmark-collection view-mode--${normalizedView}`;
+  for (const bookmark of bookmarks) {
+    root.append(createBookmarkElementForBookmark(bookmark, resolveBookmarkCategoryForNav(bookmark, navId), normalizedView));
+  }
+  return root;
+}
+
+function renderViewModeToggle(viewMode) {
+  const wrap = document.createElement("div");
+  wrap.className = "view-mode-toggle";
+  wrap.innerHTML = `
+    ${button({
+      label: t("ui.viewList"),
+      icon: iconSvg(ICONS.viewList, "inline-icon"),
+      dataAttr: `data-view-mode="${VIEW_LIST}"`,
+      variant: "btn--ghost",
+      className: `btn--compact ${viewMode === VIEW_LIST ? "is-active" : ""}`,
+      iconOnly: true
+    })}
+    ${button({
+      label: t("ui.viewCards"),
+      icon: iconSvg(ICONS.viewCards, "inline-icon"),
+      dataAttr: `data-view-mode="${VIEW_CARDS}"`,
+      variant: "btn--ghost",
+      className: `btn--compact ${viewMode === VIEW_CARDS ? "is-active" : ""}`,
+      iconOnly: true
+    })}
+  `;
+  const listButton = wrap.querySelector(`[data-view-mode="${VIEW_LIST}"]`);
+  const cardsButton = wrap.querySelector(`[data-view-mode="${VIEW_CARDS}"]`);
+  listButton?.setAttribute("aria-label", t("ui.viewList"));
+  listButton?.setAttribute("title", t("ui.viewList"));
+  cardsButton?.setAttribute("aria-label", t("ui.viewCards"));
+  cardsButton?.setAttribute("title", t("ui.viewCards"));
+  listButton?.addEventListener("click", () => {
+    void setNavViewModeForActive(VIEW_LIST);
+  });
+  cardsButton?.addEventListener("click", () => {
+    void setNavViewModeForActive(VIEW_CARDS);
+  });
+  return wrap;
+}
+
+function renderNavView() {
+  const navId = getActiveNavId();
+  const viewMode = getActiveNavViewMode();
+  const panel = document.createElement("section");
+  panel.className = "nav-view-panel";
+
+  const header = document.createElement("div");
+  header.className = "nav-view-header";
+  const title = document.createElement("h2");
+  title.className = "nav-view-title";
+  title.textContent = getNavTitle(navId);
+  header.append(title, renderViewModeToggle(viewMode));
+  panel.append(header);
+
+  const bookmarks = getBookmarksForNav(state.config, navId);
+  panel.append(renderBookmarkCollection(bookmarks, navId, viewMode));
+  return panel;
+}
+
 function render() {
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
   applyElementSize(state.settings.elementSize);
@@ -645,14 +970,40 @@ function render() {
   elements.edit.classList.toggle("is-active", state.editMode);
   elements.undo.classList.toggle("hidden", !state.editMode || state.undoStack.length === 0);
   elements.addCategory.classList.add("hidden");
+  renderSidebar();
+
+  const activeNavId = getActiveNavId();
+  const viewMode = getActiveNavViewMode();
+  const showCategoryGrid = shouldShowCategoryGrid(activeNavId, state.editMode, viewMode);
+
+  elements.navView.innerHTML = "";
   elements.categories.innerHTML = "";
 
-  for (const category of state.config.categories) {
-    elements.categories.append(renderCategory(category));
+  if (showCategoryGrid) {
+    const showAllBookmarksHeader = activeNavId === NAV_ALL && !state.editMode;
+    elements.navView.classList.toggle("hidden", !showAllBookmarksHeader);
+    elements.categories.classList.remove("hidden");
+    if (showAllBookmarksHeader) {
+      const header = document.createElement("div");
+      header.className = "nav-view-header";
+      const title = document.createElement("h2");
+      title.className = "nav-view-title";
+      title.textContent = getNavTitle(activeNavId);
+      header.append(title, renderViewModeToggle(viewMode));
+      elements.navView.append(header);
+    }
+    for (const category of state.config.categories) {
+      elements.categories.append(renderCategory(category));
+    }
+    if (state.editMode) {
+      elements.categories.append(renderAddCategoryCard());
+    }
+    return;
   }
-  if (state.editMode) {
-    elements.categories.append(renderAddCategoryCard());
-  }
+
+  elements.navView.classList.remove("hidden");
+  elements.categories.classList.add("hidden");
+  elements.navView.append(renderNavView());
 }
 
 function updateDocumentLanguage() {
@@ -681,8 +1032,16 @@ function updateTopbarActionTexts() {
 function refreshStaticLocalizedTexts() {
   updateDocumentLanguage();
   updateTopbarActionTexts();
-  document.querySelectorAll("[data-add-service] .service-name").forEach((entry) => {
-    entry.textContent = t("ui.addService");
+  renderSidebar();
+  const navTitle = elements.navView?.querySelector(".nav-view-title");
+  if (navTitle) navTitle.textContent = getNavTitle(getActiveNavId());
+  elements.navView?.querySelectorAll("[data-view-mode]").forEach((button) => {
+    const mode = button.dataset.viewMode;
+    button.title = mode === VIEW_LIST ? t("ui.viewList") : t("ui.viewCards");
+    button.setAttribute("aria-label", button.title);
+  });
+  document.querySelectorAll("[data-add-bookmark] .service-name").forEach((entry) => {
+    entry.textContent = t("ui.addBookmark");
   });
   document.querySelectorAll("[data-add-category] .btn__label").forEach((entry) => {
     entry.textContent = t("ui.addCategory");
@@ -711,7 +1070,36 @@ function refreshSettingsModalTexts(form) {
   });
   form.querySelector("[data-settings-actions-label]")?.replaceChildren(t("ui.actions"));
   form.querySelector("[data-settings-restart-label]")?.replaceChildren(t("ui.restartApp"));
+  form.querySelector("[data-settings-browser-sync-title]")?.replaceChildren(t("ui.browserSync"));
+  form.querySelector("[data-settings-browser-sync-enabled-label]")?.replaceChildren(t("ui.browserSyncEnabled"));
+  form.querySelector("[data-settings-browser-sync-url-label]")?.replaceChildren(t("ui.browserSyncGithubUrl"));
+  form.querySelector("[data-settings-browser-sync-pat-label]")?.replaceChildren(t("ui.browserSyncGithubPat"));
+  form.querySelector("[data-settings-browser-sync-interval-label]")?.replaceChildren(t("ui.browserSyncInterval"));
+  form.querySelector("[data-browser-sync-run] .btn__label")?.replaceChildren(t("ui.browserSyncRunNow"));
   form.closest(".modal")?.querySelector("[data-cancel] .btn__label")?.replaceChildren(t("ui.close"));
+}
+
+function formatBrowserSyncStatusLine(status) {
+  if (!status?.lastSync) return t("ui.browserSyncNever");
+  const last = status.lastSync;
+  if (!last.ok) {
+    return interpolateLabel(t("ui.browserSyncLastFailed"), { error: last.error || "?" });
+  }
+  return interpolateLabel(t("ui.browserSyncLastOk"), {
+    at: last.at || "",
+    imported: last.imported || 0,
+    reimported: last.reimported || 0,
+    disappeared: last.disappeared || 0
+  });
+}
+
+function updateBrowserSyncFieldsVisibility(form, enabled) {
+  form.querySelectorAll("[data-browser-sync-field]").forEach((row) => {
+    row.classList.toggle("hidden", !enabled);
+    row.querySelectorAll("input, button").forEach((control) => {
+      control.disabled = !enabled;
+    });
+  });
 }
 
 function renderCategory(category) {
@@ -756,18 +1144,20 @@ function renderCategory(category) {
           ></iframe>
         </div>
       ` : `
-        <div data-services-container data-category-id="${category.id}" class="services"></div>
+        <div data-bookmarks-container data-category-id="${category.id}" class="${bookmarksContainerClass(VIEW_LIST)} services"></div>
       `}
     </div>
-    ${state.editMode && categoryType !== "iframe" ? renderAddServiceTile() : ""}
+    ${state.editMode && categoryType !== "iframe" ? renderAddBookmarkTile() : ""}
   `;
   card.dataset.categoryId = category.id;
 
   const content = card.querySelector(".category-content");
   const arrow = card.querySelector(".collapse-arrow");
-  const servicesRoot = card.querySelector("[data-services-container]");
-  if (servicesRoot && categoryType !== "iframe") {
-    for (const service of category.services || []) servicesRoot.append(renderService(category, service));
+  const bookmarksRoot = card.querySelector("[data-bookmarks-container]");
+  if (bookmarksRoot && categoryType !== "iframe") {
+    for (const bookmark of getBookmarksForCategory(state.config, category.id)) {
+      bookmarksRoot.append(renderBookmark(category, bookmark));
+    }
   }
   syncCategoryContentHeight(content, isCollapsed);
 
@@ -789,11 +1179,11 @@ function renderCategory(category) {
   });
   card.addEventListener("click", (event) => {
     if (!categoryEffectiveCollapsed(category) || state.editMode) return;
-    const interactive = event.target.closest("button, a, input, select, textarea, .service, .category-actions");
+    const interactive = event.target.closest("button, a, input, select, textarea, .service, .bookmark-item, .category-actions");
     if (interactive) return;
     toggleCollapse();
   });
-  card.querySelector("[data-add-service]")?.addEventListener("click", () => openServiceModal(category.id));
+  card.querySelector("[data-add-bookmark]")?.addEventListener("click", () => openBookmarkModal(category.id));
   card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
   card.querySelector("[data-move-category-left]")?.addEventListener("click", () => {
     void swapCategoryByStep(category.id, -1);
@@ -849,42 +1239,8 @@ function animateCategoryCollapse(content, arrow, collapsed) {
   content.addEventListener("transitionend", onTransitionEnd);
 }
 
-function renderService(category, service) {
-  const services = category.services || [];
-  const serviceIndex = services.findIndex((entry) => entry.id === service.id);
-  const canMoveLeft = serviceIndex > 0;
-  const canMoveRight = serviceIndex >= 0 && serviceIndex < services.length - 1;
-  const item = document.createElement("div");
-  const hasShortcut = Boolean(normalizeServiceShortcut(service.shortcut));
-  item.className = `service ${state.editMode ? "is-edit-mode" : ""} ${hasShortcut ? "has-shortcut" : ""}`;
-  item.dataset.categoryId = category.id;
-  item.dataset.serviceId = service.id;
-
-  const target = service.openMode === "current-tab" ? "_self" : "_blank";
-  const iconPath = serviceStoredIconSrcForDisplay(service);
-  item.innerHTML = `
-    <a class="service-left" href="${service.url}" target="${target}" rel="noreferrer">
-      <img loading="lazy" src="${iconPath}" alt="" />
-      <span class="service-name">${service.name}</span>
-    </a>
-    ${!state.editMode && hasShortcut ? `<div class="service-shortcut">${renderShortcutChips(service.shortcut)}</div>` : ""}
-    <div class="service-actions ${state.editMode ? "" : "hidden"}">
-      ${button({ label: t("ui.edit"), icon: iconSvg(ICONS.edit, "inline-icon"), dataAttr: "data-edit-service", variant: "btn--ghost", className: "btn--compact", iconOnly: true })}
-      <div class="service-actions__reorder">
-        ${button({ label: t("ui.moveUp"), icon: iconSvg(ICONS.arrowUp, "inline-icon"), dataAttr: `data-move-service-left ${canMoveLeft ? "" : "disabled"}`, variant: "btn--ghost", className: "btn--compact btn--service-reorder", iconOnly: true })}
-        ${button({ label: t("ui.moveDown"), icon: iconSvg(ICONS.arrowDown, "inline-icon"), dataAttr: `data-move-service-right ${canMoveRight ? "" : "disabled"}`, variant: "btn--ghost", className: "btn--compact btn--service-reorder", iconOnly: true })}
-      </div>
-    </div>
-  `;
-
-  item.querySelector("[data-edit-service]").addEventListener("click", () => openServiceModal(category.id, service));
-  item.querySelector("[data-move-service-left]")?.addEventListener("click", () => {
-    void swapServiceByStep(category.id, service.id, -1);
-  });
-  item.querySelector("[data-move-service-right]")?.addEventListener("click", () => {
-    void swapServiceByStep(category.id, service.id, 1);
-  });
-  return item;
+function renderBookmark(category, bookmark) {
+  return createBookmarkElementForBookmark(bookmark, category, VIEW_LIST);
 }
 
 function renderAddCategoryCard() {
@@ -900,12 +1256,12 @@ function renderAddCategoryCard() {
   return card;
 }
 
-function renderAddServiceTile() {
+function renderAddBookmarkTile() {
   return `
-    <button type="button" class="service service--add" data-add-service>
+    <button type="button" class="service service--add" data-add-bookmark>
       <span class="service-left">
         <span class="btn__icon">${iconSvg(ICONS.plus, "inline-icon")}</span>
-        <span class="service-name">${t("ui.addService")}</span>
+        <span class="service-name">${t("ui.addBookmark")}</span>
       </span>
     </button>
   `;
@@ -996,7 +1352,7 @@ function openCategoryModal(category = null) {
       icon: ICONS.trash,
       onClick: async () => {
         pushUndo();
-        state.config.categories = state.config.categories.filter((c) => c.id !== category.id);
+        removeCategoryFromConfig(state.config, category.id);
         delete state.sessionCategoryCollapsed[category.id];
         await persistConfig();
         render();
@@ -1038,7 +1394,6 @@ function openCategoryModal(category = null) {
         if (isIframeCategory) {
           category.type = "iframe";
           category.iframeUrl = iframeUrlValue;
-          category.services = [];
         }
       } else {
         const typeForNew = normalizeCategoryType(fd.get("type") || DEFAULT_CATEGORY_TYPE);
@@ -1054,16 +1409,16 @@ function openCategoryModal(category = null) {
           state.config.categories.push({
             ...createdCategory,
             type: "iframe",
-            iframeUrl: iframeUrlValue,
-            services: []
+            iframeUrl: iframeUrlValue
           });
         } else {
           state.config.categories.push({
             ...createdCategory,
             type: "service-list",
-            iframeUrl: "",
-            services: []
+            iframeUrl: ""
           });
+          state.config.categoryBookmarkOrder = state.config.categoryBookmarkOrder || {};
+          state.config.categoryBookmarkOrder[createdCategory.id] = [];
         }
       }
       await persistConfig();
@@ -1147,27 +1502,56 @@ function openCategoryModal(category = null) {
   results.innerHTML = "";
 }
 
-function openServiceModal(categoryId, service = null) {
+function renderBookmarkCategoryOptions(selectedIds, contextCategoryId) {
+  const selected = new Set(selectedIds || []);
+  if (contextCategoryId) selected.add(contextCategoryId);
+  return listBookmarkListCategories(state.config)
+    .map((category) => {
+      const checked = selected.has(category.id) ? "checked" : "";
+      return `
+        <label class="checkbox-option">
+          <input type="checkbox" name="categoryIds" value="${category.id}" ${checked} />
+          <span>${category.name}</span>
+        </label>
+      `;
+    })
+    .join("");
+}
+
+function bookmarkSourceLabel(source) {
+  const key = BOOKMARK_SOURCE_LABEL_KEYS[normalizeBookmarkSource(source)];
+  return key ? t(key) : normalizeBookmarkSource(source);
+}
+
+function openBookmarkModal(categoryId, bookmark = null) {
   const category = state.config.categories.find((c) => c.id === categoryId);
   if (!category) return;
   if (normalizeCategoryType(category.type) === "iframe") return;
-  const isEdit = Boolean(service);
+  const isEdit = Boolean(bookmark);
+  const existing = isEdit ? findBookmarkById(state.config, bookmark.id) : null;
   const form = document.createElement("form");
-  const previewImgSrc = service ? serviceStoredIconSrcForDisplay(service) : resolveIconSrcForImgTag("");
+  const previewImgSrc = existing ? bookmarkStoredImageSrc(existing) : resolveIconSrcForImgTag("");
+  const selectedCategoryIds = existing?.categoryIds?.length
+    ? [...existing.categoryIds]
+    : [categoryId];
   form.innerHTML = `
     <div class="form-row">
-      <label>${t("ui.name")}</label>
-      <input name="name" value="${service?.name || ""}" required />
+      <label>${t("ui.title")}</label>
+      <input name="title" value="${existing?.title || ""}" required />
     </div>
     <div class="form-row">
       <label>${t("ui.url")}</label>
-      <input name="url" type="url" value="${service?.url || ""}" required />
+      <input name="url" type="url" value="${existing?.url || ""}" required />
     </div>
     <div class="form-row">
-      <label>${t("ui.iconUrl")}</label>
+      <label>${t("ui.description")}</label>
+      <textarea name="description" rows="2">${existing?.description || ""}</textarea>
+    </div>
+    <div class="form-row">
+      <label>${t("ui.image")}</label>
       <div>
         <div class="icon-url-controls">
-          <input name="iconUrl" value="${service?.iconUrl || ""}" />
+          <input name="image" value="${existing?.image || ""}" />
           <div class="icon-preview-box">
             <span id="favicon-spinner" class="spinner hidden" aria-hidden="true"></span>
             <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
@@ -1178,10 +1562,29 @@ function openServiceModal(categoryId, service = null) {
       </div>
     </div>
     <div class="form-row">
+      <label>${t("ui.bookmarkCategories")}</label>
+      <div class="checkbox-group" data-bookmark-categories>
+        ${renderBookmarkCategoryOptions(selectedCategoryIds, categoryId)}
+      </div>
+    </div>
+    <div class="form-row">
+      <label>${t("ui.favorite")}</label>
+      <label class="toggle-switch">
+        <input name="favorite" type="checkbox" ${existing?.favorite ? "checked" : ""} />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
+    </div>
+    ${isEdit ? `
+      <div class="form-row">
+        <label>${t("ui.source")}</label>
+        <input value="${bookmarkSourceLabel(existing?.source)}" readonly disabled />
+      </div>
+    ` : ""}
+    <div class="form-row">
       <label>${t("ui.openMode")}</label>
       <select name="openMode">
-        <option value="current-tab" ${service?.openMode !== "new-tab" ? "selected" : ""}>${t("ui.currentTab")}</option>
-        <option value="new-tab" ${service?.openMode === "new-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
+        <option value="current-tab" ${existing?.openMode !== "new-tab" ? "selected" : ""}>${t("ui.currentTab")}</option>
+        <option value="new-tab" ${existing?.openMode === "new-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
       </select>
     </div>
     <div class="form-row form-row--shortcut">
@@ -1196,12 +1599,8 @@ function openServiceModal(categoryId, service = null) {
     </div>
   `;
 
-  if (service?.cachedIcon) {
-    form.dataset.cachedIcon = normalizeAppIconPath(service.cachedIcon);
-  }
-
   showModal({
-    title: isEdit ? `${t("ui.edit")} ${t("ui.service")}` : t("ui.addService"),
+    title: isEdit ? `${t("ui.edit")} ${t("ui.bookmark")}` : t("ui.addBookmark"),
     content: form,
     saveLabel: t("ui.save"),
     cancelLabel: t("ui.cancel"),
@@ -1209,8 +1608,10 @@ function openServiceModal(categoryId, service = null) {
       label: t("ui.delete"),
       icon: ICONS.trash,
       onClick: async () => {
+        const confirmed = await confirmDeleteBookmark(existing);
+        if (!confirmed) return false;
         pushUndo();
-        category.services = category.services.filter((s) => s.id !== service.id);
+        removeBookmarkFromConfig(state.config, existing.id);
         await persistConfig();
         render();
       }
@@ -1219,37 +1620,57 @@ function openServiceModal(categoryId, service = null) {
       if (!form.reportValidity()) return false;
       if (!validateShortcut()) return false;
       const fd = new FormData(form);
-      const iconUrl = String(fd.get("iconUrl") || "").trim();
-      let cachedIcon = form.dataset.cachedIcon ? normalizeAppIconPath(String(form.dataset.cachedIcon)) : "";
-      if (iconUrl.startsWith("/static/assets/favicon-cache/")) {
-        cachedIcon = "";
+      const categoryIds = [...new Set(fd.getAll("categoryIds").map((id) => String(id || "").trim()).filter(Boolean))];
+      if (!categoryIds.length) {
+        const group = form.querySelector("[data-bookmark-categories]");
+        group?.setAttribute("data-invalid", "true");
+        return false;
       }
+      const image = normalizeAppIconPath(String(fd.get("image") || "").trim());
 
       pushUndo();
       if (isEdit) {
-        service.name = fd.get("name");
-        service.url = fd.get("url");
-        service.iconUrl = iconUrl;
-        service.cachedIcon = cachedIcon;
-        service.openMode = fd.get("openMode");
-        service.shortcut = selectedShortcut;
+        const previousCategoryIds = [...existing.categoryIds];
+        existing.title = String(fd.get("title") || "").trim();
+        existing.url = String(fd.get("url") || "").trim();
+        existing.description = String(fd.get("description") || "").trim();
+        existing.image = image;
+        existing.categoryIds = categoryIds;
+        existing.favorite = form.querySelector("input[name='favorite']").checked;
+        existing.openMode = fd.get("openMode");
+        existing.shortcut = selectedShortcut;
+        for (const cid of categoryIds) {
+          ensureBookmarkInCategoryOrder(state.config, cid, existing.id);
+        }
+        for (const cid of previousCategoryIds) {
+          if (!categoryIds.includes(cid)) {
+            removeBookmarkFromCategoryOrder(state.config, cid, existing.id);
+          }
+        }
       } else {
-        category.services.push({
+        const created = {
           id: uid(),
-          name: fd.get("name"),
-          url: fd.get("url"),
-          iconUrl,
-          cachedIcon,
+          title: String(fd.get("title") || "").trim(),
+          url: String(fd.get("url") || "").trim(),
+          description: String(fd.get("description") || "").trim(),
+          image,
+          categoryIds,
+          favorite: form.querySelector("input[name='favorite']").checked,
+          source: DEFAULT_BOOKMARK_SOURCE,
           openMode: fd.get("openMode"),
           shortcut: selectedShortcut
-        });
+        };
+        state.config.bookmarks.push(created);
+        for (const cid of categoryIds) {
+          ensureBookmarkInCategoryOrder(state.config, cid, created.id);
+        }
       }
       await persistConfig();
       render();
     }
   });
 
-  const iconUrlInput = form.querySelector("input[name='iconUrl']");
+  const imageInput = form.querySelector("input[name='image']");
   const urlInput = form.querySelector("input[name='url']");
   const shortcutCapture = form.querySelector("[data-shortcut-capture]");
   const shortcutChips = shortcutCapture?.querySelector(".shortcut-input-chips");
@@ -1260,7 +1681,7 @@ function openServiceModal(categoryId, service = null) {
   const spinner = form.querySelector("#favicon-spinner");
   const preview = form.querySelector("#favicon-preview");
 
-  let selectedShortcut = normalizeServiceShortcut(service?.shortcut || "");
+  let selectedShortcut = normalizeServiceShortcut(existing?.shortcut || "");
   const updateShortcutFeedback = (message = "", isError = false) => {
     if (!shortcutFeedback) return;
     shortcutFeedback.textContent = message;
@@ -1280,7 +1701,7 @@ function openServiceModal(categoryId, service = null) {
       updateShortcutFeedback(t("ui.shortcutReserved"), true);
       return false;
     }
-    const conflict = findShortcutUsage(selectedShortcut, { skipServiceId: service?.id || "" });
+    const conflict = findShortcutUsage(selectedShortcut, { skipBookmarkId: existing?.id || "" });
     if (conflict) {
       updateShortcutFeedback(getShortcutConflictMessage(conflict), true);
       return false;
@@ -1311,22 +1732,18 @@ function openServiceModal(categoryId, service = null) {
   });
 
   const syncIconPreviewFromField = () => {
-    const v = String(iconUrlInput.value || "").trim();
-    const cached = form.dataset.cachedIcon ? normalizeAppIconPath(String(form.dataset.cachedIcon)) : "";
-    let rawForImg = "";
-    if (v) rawForImg = isProbablyExternalIconHref(v) ? v : normalizeAppIconPath(v);
-    else if (cached) rawForImg = cached;
+    const v = String(imageInput.value || "").trim();
+    const rawForImg = v ? (isProbablyExternalIconHref(v) ? v : normalizeAppIconPath(v)) : "";
     preview.src = resolveIconSrcForImgTag(rawForImg);
   };
 
-  iconUrlInput.addEventListener("input", () => {
-    delete form.dataset.cachedIcon;
+  imageInput.addEventListener("input", () => {
     status.textContent = "";
     syncIconPreviewFromField();
   });
 
   preview.addEventListener("error", () => {
-    const manualValue = String(iconUrlInput.value || "").trim();
+    const manualValue = String(imageInput.value || "").trim();
     if (manualValue) {
       status.textContent = t("ui.faviconFailed");
       return;
@@ -1350,8 +1767,7 @@ function openServiceModal(categoryId, service = null) {
       if (!path.startsWith("/static/assets/favicon-cache/")) {
         throw new Error("Missing cache path");
       }
-      iconUrlInput.value = path;
-      delete form.dataset.cachedIcon;
+      imageInput.value = path;
       syncIconPreviewFromField();
       status.textContent = "";
     } catch (err) {
@@ -1366,6 +1782,11 @@ function openServiceModal(categoryId, service = null) {
   };
 
   fetchFaviconButton.addEventListener("click", triggerFaviconLoad);
+  form.querySelectorAll("input[name='categoryIds']").forEach((input) => {
+    input.addEventListener("change", () => {
+      form.querySelector("[data-bookmark-categories]")?.removeAttribute("data-invalid");
+    });
+  });
   syncIconPreviewFromField();
   updateShortcutUI();
   validateShortcut();
@@ -1384,6 +1805,8 @@ function openSettingsModal() {
     .map((lang) => `<option value="${lang.code}" ${state.settings.language === lang.code ? "selected" : ""}>${lang.name}</option>`)
     .join("");
   const globalShortcuts = normalizeGlobalShortcuts(state.settings.globalShortcuts);
+  const browserSync = normalizeBrowserSyncSettings(state.settings.browserSync);
+  if (!state.settings.browserSync) state.settings.browserSync = browserSync;
   const shortcutRows = GLOBAL_SHORTCUT_ACTIONS.map((action) => `
     <div class="form-row form-row--shortcut-option">
       <label class="settings-shortcut-name" data-global-shortcut-label="${action.id}">${getGlobalShortcutLabel(action.id)}</label>
@@ -1428,6 +1851,30 @@ function openSettingsModal() {
         ${ELEMENT_SIZE_OPTIONS.map((size) => `<button type="button" class="theme-option ${currentElementSize === size ? "active" : ""}" data-element-size="${size}">${t(`ui.size${size.charAt(0).toUpperCase()}${size.slice(1)}`)}</button>`).join("")}
       </div>
     </div>
+    <div class="settings-section-title" data-settings-browser-sync-title>${t("ui.browserSync")}</div>
+    <div class="form-row form-row--checkbox">
+      <label data-settings-browser-sync-enabled-label for="browser-sync-enabled">${t("ui.browserSyncEnabled")}</label>
+      <input id="browser-sync-enabled" name="browserSyncEnabled" type="checkbox" ${browserSync.enabled ? "checked" : ""} />
+    </div>
+    <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
+      <label data-settings-browser-sync-url-label for="browser-sync-url">${t("ui.browserSyncGithubUrl")}</label>
+      <input id="browser-sync-url" name="githubFileUrl" type="url" value="${browserSync.githubFileUrl}" placeholder="https://github.com/user/repo/blob/main/bookmarks.xbel" />
+    </div>
+    <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
+      <label data-settings-browser-sync-pat-label for="browser-sync-pat">${t("ui.browserSyncGithubPat")}</label>
+      <input id="browser-sync-pat" name="githubPat" type="password" value="${browserSync.githubPat}" autocomplete="off" />
+    </div>
+    <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
+      <label data-settings-browser-sync-interval-label for="browser-sync-interval">${t("ui.browserSyncInterval")}</label>
+      <input id="browser-sync-interval" name="syncIntervalHours" type="number" min="1" max="168" step="1" value="${browserSync.syncIntervalHours}" />
+    </div>
+    <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
+      <label>${t("ui.browserSyncStatus")}</label>
+      <div>
+        <small class="browser-sync-status" data-browser-sync-status>${t("ui.browserSyncLoading")}</small>
+        <button type="button" class="btn btn--ghost" data-browser-sync-run><span class="btn__label">${t("ui.browserSyncRunNow")}</span></button>
+      </div>
+    </div>
     <div class="settings-section-title" data-settings-shortcuts-label>${t("ui.shortcuts")}</div>
     <div class="settings-shortcuts-list">
       ${shortcutRows}
@@ -1442,6 +1889,66 @@ function openSettingsModal() {
   form.querySelector("[data-restart-app]")?.addEventListener("click", () => {
     void runAppRestartFromSettings();
   });
+  const browserSyncEnabledInput = form.querySelector("input[name='browserSyncEnabled']");
+  const browserSyncUrlInput = form.querySelector("input[name='githubFileUrl']");
+  const browserSyncPatInput = form.querySelector("input[name='githubPat']");
+  const browserSyncIntervalInput = form.querySelector("input[name='syncIntervalHours']");
+  const browserSyncStatusEl = form.querySelector("[data-browser-sync-status]");
+  const browserSyncRunBtn = form.querySelector("[data-browser-sync-run]");
+  const applyBrowserSyncToState = () => {
+    state.settings.browserSync = normalizeBrowserSyncSettings({
+      enabled: Boolean(browserSyncEnabledInput?.checked),
+      githubFileUrl: browserSyncUrlInput?.value || "",
+      githubPat: browserSyncPatInput?.value || "",
+      syncIntervalHours: browserSyncIntervalInput?.value || 6
+    });
+  };
+  const refreshBrowserSyncStatus = async () => {
+    if (!browserSyncStatusEl) return;
+    try {
+      const status = await api.getBrowserSyncStatus();
+      browserSyncStatusEl.textContent = formatBrowserSyncStatusLine(status);
+    } catch {
+      browserSyncStatusEl.textContent = t("ui.browserSyncStatusFailed");
+    }
+  };
+  browserSyncEnabledInput?.addEventListener("change", () => {
+    applyBrowserSyncToState();
+    updateBrowserSyncFieldsVisibility(form, state.settings.browserSync.enabled);
+    scheduleSettingsPersist(0);
+  });
+  browserSyncUrlInput?.addEventListener("input", () => {
+    applyBrowserSyncToState();
+    scheduleSettingsPersist();
+  });
+  browserSyncPatInput?.addEventListener("input", () => {
+    applyBrowserSyncToState();
+    scheduleSettingsPersist();
+  });
+  browserSyncIntervalInput?.addEventListener("input", () => {
+    applyBrowserSyncToState();
+    scheduleSettingsPersist();
+  });
+  browserSyncRunBtn?.addEventListener("click", async () => {
+    applyBrowserSyncToState();
+    await api.saveSettings(deepClone(state.settings));
+    browserSyncRunBtn.disabled = true;
+    browserSyncStatusEl.textContent = t("ui.browserSyncRunning");
+    try {
+      const result = await api.runBrowserSync();
+      if (result?.ok) {
+        state.config = normalizeConfig(await api.getConfig());
+        render();
+      }
+      await refreshBrowserSyncStatus();
+    } catch {
+      browserSyncStatusEl.textContent = t("ui.browserSyncStatusFailed");
+    } finally {
+      browserSyncRunBtn.disabled = !state.settings.browserSync.enabled;
+    }
+  });
+  updateBrowserSyncFieldsVisibility(form, browserSync.enabled);
+  void refreshBrowserSyncStatus();
   let persistTimer = null;
   let persistChain = Promise.resolve();
   const scheduleSettingsPersist = (delayMs = 250) => {
@@ -1678,20 +2185,20 @@ async function swapCategoryByStep(categoryId, step) {
   animatePositionChanges(".category[data-category-id]", (element) => `category-${element.dataset.categoryId}`);
 }
 
-async function swapServiceByStep(categoryId, serviceId, step) {
+async function swapBookmarkByStep(categoryId, bookmarkId, step) {
   if (!state.editMode) return;
-  const category = state.config.categories.find((entry) => entry.id === categoryId);
-  if (!category) return;
-  const list = category.services || [];
-  const from = list.findIndex((entry) => entry.id === serviceId);
+  if (!state.config.categoryBookmarkOrder) state.config.categoryBookmarkOrder = {};
+  const list = [...(state.config.categoryBookmarkOrder[categoryId] || getBookmarksForCategory(state.config, categoryId).map((b) => b.id))];
+  const from = list.findIndex((entry) => entry === bookmarkId);
   const to = from + step;
   if (from < 0 || to < 0 || to >= list.length) return;
   pushUndo();
   [list[from], list[to]] = [list[to], list[from]];
+  state.config.categoryBookmarkOrder[categoryId] = list;
   await persistConfig();
   animatePositionChanges(
-    `.category[data-category-id="${categoryId}"] .service[data-service-id]`,
-    (element) => `service-${categoryId}-${element.dataset.serviceId}`
+    `.category[data-category-id="${categoryId}"] .bookmark-item[data-bookmark-id]`,
+    (element) => `bookmark-${categoryId}-${element.dataset.bookmarkId}`
   );
 }
 
