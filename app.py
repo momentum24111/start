@@ -189,50 +189,27 @@ def _normalize_category_bookmark_order(
     return normalized
 
 
-def migrate_config(data: object) -> dict:
-    """Legacy-Config (services in Kategorien) in einheitliches Lesezeichenmodell überführen."""
-    if not isinstance(data, dict):
-        return {
-            "schemaVersion": SCHEMA_VERSION,
-            "categories": [],
-            "bookmarks": [],
-            "categoryBookmarkOrder": {},
-        }
+def _has_legacy_services(data: dict) -> bool:
+    for entry in data.get("categories", []):
+        if isinstance(entry, dict) and entry.get("services"):
+            return True
+    return False
 
-    schema_version = int(data.get("schemaVersion") or 1)
-    has_bookmarks = isinstance(data.get("bookmarks"), list)
-    if has_bookmarks and schema_version >= SCHEMA_VERSION:
-        categories = [
-            _normalize_category_entry(entry)
-            for entry in data.get("categories", [])
-            if isinstance(entry, dict)
-        ]
-        bookmarks = [
-            _normalize_bookmark(entry)
-            for entry in data.get("bookmarks", [])
-            if isinstance(entry, dict)
-        ]
-        return {
-            "schemaVersion": SCHEMA_VERSION,
-            "categories": categories,
-            "bookmarks": bookmarks,
-            "categoryBookmarkOrder": _normalize_category_bookmark_order(
-                data.get("categoryBookmarkOrder"), categories, bookmarks
-            ),
-        }
 
-    categories: list[dict] = []
+def _extract_legacy_bookmarks_from_categories(
+    raw_categories: object,
+) -> tuple[list[dict], dict[str, list[str]]]:
+    """Services aus Kategorien in flache Lesezeichen überführen."""
     bookmarks: list[dict] = []
     bookmark_by_id: dict[str, dict] = {}
     category_bookmark_order: dict[str, list[str]] = {}
 
-    for raw_category in data.get("categories", []):
+    for raw_category in raw_categories if isinstance(raw_categories, list) else []:
         if not isinstance(raw_category, dict):
             continue
-        category = _normalize_category_entry(raw_category)
-        category_id = str(category.get("id") or "").strip()
-        categories.append(category)
-        if category.get("type") == "iframe":
+        category_id = str(raw_category.get("id") or "").strip()
+        category_type = str(raw_category.get("type") or "service-list").strip().lower()
+        if category_type == "iframe":
             continue
 
         order: list[str] = []
@@ -256,14 +233,97 @@ def migrate_config(data: object) -> dict:
         if category_id:
             category_bookmark_order[category_id] = order
 
+    return bookmarks, category_bookmark_order
+
+
+def _merge_bookmark_lists(existing: list[dict], legacy: list[dict]) -> list[dict]:
+    by_id: dict[str, dict] = {}
+    for bookmark in existing:
+        bid = str(bookmark.get("id") or "").strip()
+        if bid:
+            by_id[bid] = bookmark
+    for bookmark in legacy:
+        bid = str(bookmark.get("id") or "").strip()
+        if not bid:
+            continue
+        if bid in by_id:
+            merged = by_id[bid]
+            for category_id in bookmark.get("categoryIds", []):
+                category_ids = merged.setdefault("categoryIds", [])
+                if category_id not in category_ids:
+                    category_ids.append(category_id)
+            if not str(merged.get("title") or "").strip() and bookmark.get("title"):
+                merged["title"] = bookmark["title"]
+            if not str(merged.get("url") or "").strip() and bookmark.get("url"):
+                merged["url"] = bookmark["url"]
+            if not str(merged.get("image") or "").strip() and bookmark.get("image"):
+                merged["image"] = bookmark["image"]
+        else:
+            by_id[bid] = bookmark
+    return list(by_id.values())
+
+
+def migrate_config(data: object) -> dict:
+    """Legacy-Config (services in Kategorien) in einheitliches Lesezeichenmodell überführen."""
+    if not isinstance(data, dict):
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "categories": [],
+            "bookmarks": [],
+            "categoryBookmarkOrder": {},
+        }
+
+    categories = [
+        _normalize_category_entry(entry)
+        for entry in data.get("categories", [])
+        if isinstance(entry, dict)
+    ]
+    existing_bookmarks = [
+        _normalize_bookmark(entry)
+        for entry in data.get("bookmarks", [])
+        if isinstance(entry, dict)
+    ] if isinstance(data.get("bookmarks"), list) else []
+
+    legacy_bookmarks, legacy_order = _extract_legacy_bookmarks_from_categories(data.get("categories", []))
+    bookmarks = _merge_bookmark_lists(existing_bookmarks, legacy_bookmarks)
+
+    order_source: dict[str, list[str]] = {}
+    raw_order = data.get("categoryBookmarkOrder")
+    if isinstance(raw_order, dict):
+        order_source.update(raw_order)
+    for category_id, order in legacy_order.items():
+        if category_id not in order_source or not order_source.get(category_id):
+            order_source[category_id] = order
+
     return {
         "schemaVersion": SCHEMA_VERSION,
         "categories": categories,
         "bookmarks": bookmarks,
         "categoryBookmarkOrder": _normalize_category_bookmark_order(
-            category_bookmark_order, categories, bookmarks
+            order_source, categories, bookmarks
         ),
     }
+
+
+def recover_config_from_backups() -> dict | None:
+    """Versucht Lesezeichen aus dem neuesten Config-Backup wiederherzustellen."""
+    if not BACKUP_DIR.exists():
+        return None
+    backups = sorted(
+        BACKUP_DIR.glob("config.*.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for backup_file in backups:
+        try:
+            with backup_file.open("r", encoding="utf-8") as file:
+                backup_data = json.load(file)
+            migrated = migrate_config(backup_data)
+            if migrated.get("bookmarks"):
+                return migrated
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+    return None
 
 
 def create_backup(path: Path) -> Path:
@@ -642,16 +702,19 @@ app = FastAPI(title="Start", version="2.0.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
-def config_needs_migration(data: object) -> bool:
-    if not isinstance(data, dict):
+def config_needs_save(raw: object, migrated: dict) -> bool:
+    if not isinstance(raw, dict):
         return True
-    if int(data.get("schemaVersion") or 1) < SCHEMA_VERSION:
+    if int(raw.get("schemaVersion") or 1) < SCHEMA_VERSION:
         return True
-    if not isinstance(data.get("bookmarks"), list):
+    if not isinstance(raw.get("bookmarks"), list):
         return True
-    for entry in data.get("categories", []):
-        if isinstance(entry, dict) and entry.get("services"):
-            return True
+    if _has_legacy_services(raw):
+        return True
+    raw_bookmarks = raw.get("bookmarks") if isinstance(raw.get("bookmarks"), list) else []
+    migrated_bookmarks = migrated.get("bookmarks") if isinstance(migrated.get("bookmarks"), list) else []
+    if len(migrated_bookmarks) > len(raw_bookmarks):
+        return True
     return False
 
 
@@ -659,7 +722,11 @@ def config_needs_migration(data: object) -> bool:
 def get_config() -> dict:
     raw = load_json(CONFIG_FILE, context="api:get_config")
     migrated = migrate_config(raw)
-    if config_needs_migration(raw):
+    if not migrated.get("bookmarks") and migrated.get("categories"):
+        recovered = recover_config_from_backups()
+        if recovered:
+            migrated = recovered
+    if config_needs_save(raw, migrated):
         create_backup(CONFIG_FILE)
         save_json(CONFIG_FILE, migrated, context="api:get_config:migrate")
     return migrated

@@ -104,7 +104,7 @@ const ICONS = {
   arrowUp: "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z",
   arrowDown: "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z",
   restart: "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
-  menu: "M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z",
+  menu: "M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z",
   viewList: "M3 5h18v2H3V5m0 6h18v2H3v-2m0 6h18v2H3v-2z",
   viewCards: "M3 5h8v8H3V5m10 0h8v4H13V5m0 6h8v8H13v-8M3 13h8v6H3v-6z",
   open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
@@ -674,6 +674,8 @@ function setEditMode(nextEditMode, { syncHistory = true } = {}) {
 }
 
 async function bootstrap() {
+  ensureSidebarShell();
+  bindSidebarEvents();
   await loadMdiRegistry();
   const [config, settings, themes, languages] = await Promise.all([
     api.getConfig(),
@@ -724,12 +726,7 @@ function wireEvents() {
   elements.undo.addEventListener("click", undo);
   elements.settings.addEventListener("click", openSettingsModal);
   elements.addCategory?.addEventListener("click", () => openCategoryModal());
-  elements.navToggle?.addEventListener("click", () => {
-    setSidebarOpen(!state.sidebarOpen);
-  });
-  elements.sidebarBackdrop?.addEventListener("click", () => {
-    setSidebarOpen(false);
-  });
+  bindSidebarEvents();
   document.addEventListener("keydown", (event) => {
     if (event.defaultPrevented) return;
     if (isBlockingFocusTarget(document.activeElement) || isBlockingFocusTarget(event.target)) return;
@@ -792,6 +789,95 @@ async function undo() {
   render();
 }
 
+function queryNavigationElements() {
+  elements.navToggle = document.getElementById("nav-toggle-btn");
+  elements.sidebar = document.getElementById("sidebar");
+  elements.sidebarBackdrop = document.getElementById("sidebar-backdrop");
+  elements.sidebarSystem = document.getElementById("sidebar-system");
+  elements.sidebarCategories = document.getElementById("sidebar-categories");
+}
+
+function ensureSidebarShell() {
+  queryNavigationElements();
+
+  if (!elements.sidebarBackdrop) {
+    const backdrop = document.createElement("div");
+    backdrop.id = "sidebar-backdrop";
+    backdrop.className = "sidebar-backdrop hidden";
+    backdrop.setAttribute("aria-hidden", "true");
+    document.body.append(backdrop);
+    elements.sidebarBackdrop = backdrop;
+  }
+
+  if (!elements.sidebar) {
+    const sidebar = document.createElement("aside");
+    sidebar.id = "sidebar";
+    sidebar.className = "sidebar";
+    sidebar.setAttribute("aria-hidden", "true");
+    sidebar.innerHTML = `
+      <nav class="sidebar-nav" aria-label="Navigation">
+        <ul id="sidebar-system" class="sidebar-list"></ul>
+        <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
+      </nav>
+    `;
+    document.body.append(sidebar);
+    elements.sidebar = sidebar;
+    elements.sidebarSystem = document.getElementById("sidebar-system");
+    elements.sidebarCategories = document.getElementById("sidebar-categories");
+  } else if (!elements.sidebarSystem || !elements.sidebarCategories) {
+    let nav = elements.sidebar.querySelector(".sidebar-nav");
+    if (!nav) {
+      nav = document.createElement("nav");
+      nav.className = "sidebar-nav";
+      nav.setAttribute("aria-label", "Navigation");
+      elements.sidebar.append(nav);
+    }
+    if (!elements.sidebarSystem) {
+      const list = document.createElement("ul");
+      list.id = "sidebar-system";
+      list.className = "sidebar-list";
+      nav.append(list);
+      elements.sidebarSystem = list;
+    }
+    if (!elements.sidebarCategories) {
+      const list = document.createElement("ul");
+      list.id = "sidebar-categories";
+      list.className = "sidebar-list sidebar-list--categories";
+      nav.append(list);
+      elements.sidebarCategories = list;
+    }
+  }
+
+  if (elements.navToggle) {
+    elements.navToggle.setAttribute("aria-controls", "sidebar");
+  }
+}
+
+function updateNavToggleIcon() {
+  if (!elements.navToggle) return;
+  elements.navToggle.innerHTML = `<span class="btn__icon">${iconSvg(ICONS.menu, "inline-icon")}</span>`;
+}
+
+function bindSidebarEvents() {
+  queryNavigationElements();
+  ensureSidebarShell();
+
+  if (elements.navToggle && elements.navToggle.dataset.sidebarBound !== "true") {
+    elements.navToggle.dataset.sidebarBound = "true";
+    elements.navToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      setSidebarOpen(!state.sidebarOpen);
+    });
+  }
+
+  if (elements.sidebarBackdrop && elements.sidebarBackdrop.dataset.sidebarBound !== "true") {
+    elements.sidebarBackdrop.dataset.sidebarBound = "true";
+    elements.sidebarBackdrop.addEventListener("click", () => {
+      setSidebarOpen(false);
+    });
+  }
+}
+
 function getActiveNavId() {
   return resolveActiveNavId(state.config, state.settings);
 }
@@ -801,12 +887,17 @@ function getActiveNavViewMode() {
 }
 
 function setSidebarOpen(open) {
+  ensureSidebarShell();
   state.sidebarOpen = Boolean(open);
-  elements.sidebar?.classList.toggle("is-open", state.sidebarOpen);
-  elements.sidebarBackdrop?.classList.toggle("hidden", !state.sidebarOpen);
-  elements.sidebarBackdrop?.classList.toggle("is-visible", state.sidebarOpen);
-  elements.sidebar?.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
-  elements.sidebarBackdrop?.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
+  if (elements.sidebar) {
+    elements.sidebar.classList.toggle("is-open", state.sidebarOpen);
+    elements.sidebar.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
+  }
+  if (elements.sidebarBackdrop) {
+    elements.sidebarBackdrop.classList.toggle("hidden", !state.sidebarOpen);
+    elements.sidebarBackdrop.classList.toggle("is-visible", state.sidebarOpen);
+    elements.sidebarBackdrop.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
+  }
   elements.navToggle?.setAttribute("aria-expanded", state.sidebarOpen ? "true" : "false");
   document.body.classList.toggle("sidebar-open", state.sidebarOpen);
 }
@@ -859,10 +950,13 @@ function renderSidebarLink(navId, label, count, iconName) {
 }
 
 function renderSidebar() {
+  ensureSidebarShell();
+  updateNavToggleIcon();
+  if (elements.navToggle) {
+    elements.navToggle.title = t("ui.navToggle");
+    elements.navToggle.setAttribute("aria-label", t("ui.navToggle"));
+  }
   if (!elements.sidebarSystem || !elements.sidebarCategories) return;
-  elements.navToggle.innerHTML = iconSvg(ICONS.menu, "inline-icon");
-  elements.navToggle.title = t("ui.navToggle");
-  elements.navToggle.setAttribute("aria-label", t("ui.navToggle"));
   setSidebarOpen(state.sidebarOpen);
 
   elements.sidebarSystem.replaceChildren();
@@ -976,12 +1070,12 @@ function render() {
   const viewMode = getActiveNavViewMode();
   const showCategoryGrid = shouldShowCategoryGrid(activeNavId, state.editMode, viewMode);
 
-  elements.navView.innerHTML = "";
+  if (elements.navView) elements.navView.innerHTML = "";
   elements.categories.innerHTML = "";
 
   if (showCategoryGrid) {
     const showAllBookmarksHeader = activeNavId === NAV_ALL && !state.editMode;
-    elements.navView.classList.toggle("hidden", !showAllBookmarksHeader);
+    elements.navView?.classList.toggle("hidden", !showAllBookmarksHeader);
     elements.categories.classList.remove("hidden");
     if (showAllBookmarksHeader) {
       const header = document.createElement("div");
@@ -990,7 +1084,7 @@ function render() {
       title.className = "nav-view-title";
       title.textContent = getNavTitle(activeNavId);
       header.append(title, renderViewModeToggle(viewMode));
-      elements.navView.append(header);
+      elements.navView?.append(header);
     }
     for (const category of state.config.categories) {
       elements.categories.append(renderCategory(category));
@@ -1001,9 +1095,9 @@ function render() {
     return;
   }
 
-  elements.navView.classList.remove("hidden");
+  elements.navView?.classList.remove("hidden");
   elements.categories.classList.add("hidden");
-  elements.navView.append(renderNavView());
+  elements.navView?.append(renderNavView());
 }
 
 function updateDocumentLanguage() {
@@ -2201,6 +2295,9 @@ async function swapBookmarkByStep(categoryId, bookmarkId, step) {
     (element) => `bookmark-${categoryId}-${element.dataset.bookmarkId}`
   );
 }
+
+ensureSidebarShell();
+bindSidebarEvents();
 
 bootstrap().catch((error) => {
   document.body.innerHTML = `<pre>${error.message}</pre>`;

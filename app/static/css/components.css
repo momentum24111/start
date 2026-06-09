@@ -96,7 +96,7 @@ textarea {
   position: fixed;
   inset: 0;
   z-index: 30;
-  background: var(--sidebar-backdrop-bg);
+  background: var(--sidebar-backdrop-bg, var(--overlay-bg));
   opacity: 0;
   pointer-events: none;
   transition: opacity 200ms ease;
@@ -112,13 +112,13 @@ textarea {
   top: 0;
   left: 0;
   z-index: 40;
-  width: min(100vw, var(--sidebar-width));
-  max-width: var(--sidebar-width);
+  width: min(100vw, var(--sidebar-width, 280px));
+  max-width: var(--sidebar-width, 280px);
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--sidebar-bg);
-  box-shadow: var(--sidebar-shadow);
+  background: var(--sidebar-bg, var(--surface));
+  box-shadow: var(--sidebar-shadow, var(--modal-shadow));
   transform: translateX(-100%);
   opacity: 0;
   visibility: hidden;
@@ -157,7 +157,7 @@ textarea {
 .sidebar-list--categories {
   margin-top: 0.65rem;
   padding-top: 0.65rem;
-  border-top: 1px solid var(--sidebar-divider);
+  border-top: 1px solid var(--sidebar-divider, color-mix(in srgb, var(--text) 12%, transparent));
 }
 
 .sidebar-item {
@@ -181,12 +181,12 @@ textarea {
 }
 
 .sidebar-link:hover {
-  background: var(--sidebar-item-hover-bg);
+  background: var(--sidebar-item-hover-bg, var(--surface-hover));
 }
 
 .sidebar-link.is-active {
-  background: var(--nav-item-active-bg);
-  color: var(--nav-item-active-fg);
+  background: var(--nav-item-active-bg, var(--control-active-bg));
+  color: var(--nav-item-active-fg, var(--control-active-fg));
 }
 
 .sidebar-link__icon {
@@ -208,7 +208,7 @@ textarea {
   min-width: 1.5rem;
   text-align: right;
   font-size: 0.82rem;
-  color: var(--nav-item-count-fg);
+  color: var(--nav-item-count-fg, var(--muted));
 }
 
 .sidebar-link.is-active .sidebar-link__count {

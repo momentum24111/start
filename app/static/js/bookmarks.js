@@ -155,34 +155,53 @@ function normalizeCategoryBookmarkOrder(raw, categories, bookmarks) {
   return normalized;
 }
 
+function mergeBookmarkLists(existing, legacy) {
+  const byId = new Map();
+  for (const bookmark of existing) {
+    if (bookmark?.id) byId.set(bookmark.id, bookmark);
+  }
+  for (const bookmark of legacy) {
+    if (!bookmark?.id) continue;
+    const current = byId.get(bookmark.id);
+    if (!current) {
+      byId.set(bookmark.id, bookmark);
+      continue;
+    }
+    for (const categoryId of bookmark.categoryIds || []) {
+      if (!current.categoryIds.includes(categoryId)) {
+        current.categoryIds.push(categoryId);
+      }
+    }
+    if (!String(current.title || "").trim() && bookmark.title) current.title = bookmark.title;
+    if (!String(current.url || "").trim() && bookmark.url) current.url = bookmark.url;
+    if (!String(current.image || "").trim() && bookmark.image) current.image = bookmark.image;
+  }
+  return [...byId.values()];
+}
+
 /** Lädt und normalisiert Config; migriert Legacy-Format (services in Kategorien) automatisch. */
 export function normalizeConfig(config) {
   const input = config && typeof config === "object" ? config : { categories: [] };
-  const hasBookmarks = Array.isArray(input.bookmarks);
-  const schemaVersion = Number(input.schemaVersion) || 1;
+  const categories = (Array.isArray(input.categories) ? input.categories : []).map(normalizeCategoryEntry);
+  const existingBookmarks = Array.isArray(input.bookmarks)
+    ? input.bookmarks.map(normalizeBookmarkEntry)
+    : [];
+  const legacyMigrated = migrateLegacyConfig(input);
+  const bookmarks = mergeBookmarkLists(existingBookmarks, legacyMigrated.bookmarks.map(normalizeBookmarkEntry));
 
-  let base;
-  if (hasBookmarks && schemaVersion >= SCHEMA_VERSION) {
-    const categories = (Array.isArray(input.categories) ? input.categories : []).map(normalizeCategoryEntry);
-    const bookmarks = (Array.isArray(input.bookmarks) ? input.bookmarks : []).map(normalizeBookmarkEntry);
-    base = {
-      schemaVersion: SCHEMA_VERSION,
-      categories,
-      bookmarks,
-      categoryBookmarkOrder: normalizeCategoryBookmarkOrder(input.categoryBookmarkOrder, categories, bookmarks)
-    };
-  } else {
-    base = migrateLegacyConfig(input);
-    base.bookmarks = base.bookmarks.map(normalizeBookmarkEntry);
-    base.categories = base.categories.map(normalizeCategoryEntry);
-    base.categoryBookmarkOrder = normalizeCategoryBookmarkOrder(
-      base.categoryBookmarkOrder,
-      base.categories,
-      base.bookmarks
-    );
+  const orderSource = { ...(input.categoryBookmarkOrder || {}) };
+  for (const [categoryId, order] of Object.entries(legacyMigrated.categoryBookmarkOrder || {})) {
+    if (!Array.isArray(orderSource[categoryId]) || !orderSource[categoryId].length) {
+      orderSource[categoryId] = order;
+    }
   }
 
-  return base;
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    categories,
+    bookmarks,
+    categoryBookmarkOrder: normalizeCategoryBookmarkOrder(orderSource, categories, bookmarks)
+  };
 }
 
 export function getCategoryBookmarkOrder(config, categoryId) {
