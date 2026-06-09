@@ -52,8 +52,6 @@ body {
   --cat-slate: #6e879f;
   --sidebar-width: 280px;
   --sidebar-bg: #ffffff;
-  --sidebar-shadow: 8px 0 24px rgba(20, 37, 56, 0.12);
-  --sidebar-backdrop-bg: rgba(15, 22, 32, 0.32);
   --sidebar-divider: rgba(81, 99, 121, 0.16);
   --sidebar-item-hover-bg: #e6edf4;
   --nav-item-active-bg: #d5e4ff;

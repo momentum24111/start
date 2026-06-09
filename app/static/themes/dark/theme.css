@@ -53,8 +53,6 @@ body {
   --cat-slate: #8aa0b9;
   --sidebar-width: 280px;
   --sidebar-bg: #151d27;
-  --sidebar-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);
-  --sidebar-backdrop-bg: rgba(0, 0, 0, 0.48);
   --sidebar-divider: rgba(168, 182, 197, 0.14);
   --sidebar-item-hover-bg: #212c38;
   --nav-item-active-bg: #2e4566;

@@ -86,7 +86,6 @@ const elements = {
   settings: document.getElementById("settings-btn"),
   navToggle: document.getElementById("nav-toggle-btn"),
   sidebar: document.getElementById("sidebar"),
-  sidebarBackdrop: document.getElementById("sidebar-backdrop"),
   sidebarSystem: document.getElementById("sidebar-system"),
   sidebarCategories: document.getElementById("sidebar-categories")
 };
@@ -792,22 +791,41 @@ async function undo() {
 function queryNavigationElements() {
   elements.navToggle = document.getElementById("nav-toggle-btn");
   elements.sidebar = document.getElementById("sidebar");
-  elements.sidebarBackdrop = document.getElementById("sidebar-backdrop");
   elements.sidebarSystem = document.getElementById("sidebar-system");
   elements.sidebarCategories = document.getElementById("sidebar-categories");
 }
 
-function ensureSidebarShell() {
-  queryNavigationElements();
+function ensureAppShell() {
+  document.getElementById("sidebar-backdrop")?.remove();
 
-  if (!elements.sidebarBackdrop) {
-    const backdrop = document.createElement("div");
-    backdrop.id = "sidebar-backdrop";
-    backdrop.className = "sidebar-backdrop hidden";
-    backdrop.setAttribute("aria-hidden", "true");
-    document.body.append(backdrop);
-    elements.sidebarBackdrop = backdrop;
+  let shell = document.querySelector(".app-shell");
+  if (!shell) {
+    shell = document.createElement("div");
+    shell.className = "app-shell";
+    document.body.prepend(shell);
   }
+
+  let appMain = shell.querySelector(".app-main");
+  if (!appMain) {
+    appMain = document.createElement("div");
+    appMain.className = "app-main";
+    shell.append(appMain);
+  }
+
+  const topbar = document.querySelector(".topbar");
+  const main = document.querySelector("main");
+  if (topbar && topbar.parentElement !== appMain) appMain.prepend(topbar);
+  if (main && main.parentElement !== appMain) appMain.append(main);
+
+  queryNavigationElements();
+  if (elements.sidebar && elements.sidebar.parentElement !== shell) {
+    shell.prepend(elements.sidebar);
+  }
+}
+
+function ensureSidebarShell() {
+  ensureAppShell();
+  queryNavigationElements();
 
   if (!elements.sidebar) {
     const sidebar = document.createElement("aside");
@@ -820,7 +838,7 @@ function ensureSidebarShell() {
         <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
       </nav>
     `;
-    document.body.append(sidebar);
+    document.querySelector(".app-shell")?.prepend(sidebar);
     elements.sidebar = sidebar;
     elements.sidebarSystem = document.getElementById("sidebar-system");
     elements.sidebarCategories = document.getElementById("sidebar-categories");
@@ -869,13 +887,6 @@ function bindSidebarEvents() {
       setSidebarOpen(!state.sidebarOpen);
     });
   }
-
-  if (elements.sidebarBackdrop && elements.sidebarBackdrop.dataset.sidebarBound !== "true") {
-    elements.sidebarBackdrop.dataset.sidebarBound = "true";
-    elements.sidebarBackdrop.addEventListener("click", () => {
-      setSidebarOpen(false);
-    });
-  }
 }
 
 function getActiveNavId() {
@@ -893,25 +904,17 @@ function setSidebarOpen(open) {
     elements.sidebar.classList.toggle("is-open", state.sidebarOpen);
     elements.sidebar.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
   }
-  if (elements.sidebarBackdrop) {
-    elements.sidebarBackdrop.classList.toggle("hidden", !state.sidebarOpen);
-    elements.sidebarBackdrop.classList.toggle("is-visible", state.sidebarOpen);
-    elements.sidebarBackdrop.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
-  }
   elements.navToggle?.setAttribute("aria-expanded", state.sidebarOpen ? "true" : "false");
+  elements.navToggle?.classList.toggle("is-active", state.sidebarOpen);
   document.body.classList.toggle("sidebar-open", state.sidebarOpen);
 }
 
 async function selectNav(navId) {
   const nextNavId = normalizeActiveNavId(navId);
   if (!isValidNavId(state.config, nextNavId)) return;
-  if (getActiveNavId() === nextNavId) {
-    if (window.matchMedia("(max-width: 650px)").matches) setSidebarOpen(false);
-    return;
-  }
+  if (getActiveNavId() === nextNavId) return;
   state.settings.activeNavId = nextNavId;
   await persistSettings();
-  if (window.matchMedia("(max-width: 650px)").matches) setSidebarOpen(false);
   render();
 }
 

@@ -9,35 +9,38 @@
     <link id="theme-link" rel="stylesheet" href="/static/themes/dark/theme.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="topbar-leading">
-        <button id="nav-toggle-btn" class="btn btn--ghost btn--icon" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Navigation">
-          <span class="btn__icon" aria-hidden="true">
-            <svg class="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"></path></svg>
-          </span>
-        </button>
-        <h1 id="app-title">__START_PKG_INITIAL_APP_TITLE__</h1>
-      </div>
-      <div class="actions">
-        <button id="undo-btn" class="btn btn--ghost hidden" type="button"></button>
-        <button id="edit-btn" class="btn btn--ghost" type="button"></button>
-        <button id="settings-btn" class="btn btn--ghost" type="button"></button>
-      </div>
-    </header>
+    <div class="app-shell">
+      <aside id="sidebar" class="sidebar" aria-hidden="true">
+        <nav class="sidebar-nav" aria-label="Navigation">
+          <ul id="sidebar-system" class="sidebar-list"></ul>
+          <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
+        </nav>
+      </aside>
 
-    <div id="sidebar-backdrop" class="sidebar-backdrop hidden" aria-hidden="true"></div>
-    <aside id="sidebar" class="sidebar" aria-hidden="true">
-      <nav class="sidebar-nav" aria-label="Navigation">
-        <ul id="sidebar-system" class="sidebar-list"></ul>
-        <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
-      </nav>
-    </aside>
+      <div class="app-main">
+        <header class="topbar">
+          <div class="topbar-leading">
+            <button id="nav-toggle-btn" class="btn btn--ghost btn--icon" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Navigation">
+              <span class="btn__icon" aria-hidden="true">
+                <svg class="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"></path></svg>
+              </span>
+            </button>
+            <h1 id="app-title">__START_PKG_INITIAL_APP_TITLE__</h1>
+          </div>
+          <div class="actions">
+            <button id="undo-btn" class="btn btn--ghost hidden" type="button"></button>
+            <button id="edit-btn" class="btn btn--ghost" type="button"></button>
+            <button id="settings-btn" class="btn btn--ghost" type="button"></button>
+          </div>
+        </header>
 
-    <main>
-      <div id="nav-view" class="nav-view hidden"></div>
-      <div id="categories" class="category-grid"></div>
-      <button id="add-category-btn" class="btn fab hidden" type="button">+</button>
-    </main>
+        <main>
+          <div id="nav-view" class="nav-view hidden"></div>
+          <div id="categories" class="category-grid"></div>
+          <button id="add-category-btn" class="btn fab hidden" type="button">+</button>
+        </main>
+      </div>
+    </div>
 
     <div id="modal-root"></div>
 
