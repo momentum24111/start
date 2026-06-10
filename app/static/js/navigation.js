@@ -1,8 +1,12 @@
 import {
   getBookmarksForCategory,
   getBookmarksForSidebarCategory,
+  getBookmarksOnHomepage,
   findSidebarCategoryById,
+  findSidebarCategoryBySlug,
   listSidebarCategories,
+  isBookmarkInFavorites,
+  isUnsortedBookmark,
   UNSORTED_CATEGORY_ID
 } from "./bookmarks.js";
 
@@ -24,6 +28,49 @@ export const SYSTEM_NAV_ITEMS = [
 
 const DEFAULT_ACTIVE_NAV_ID = NAV_ALL;
 const DEFAULT_VIEW_MODE = VIEW_LIST;
+
+const HASH_ROUTE_START = "start";
+const HASH_ROUTE_FAVORITES = "favoriten";
+const HASH_ROUTE_UNSORTED = "unsortiert";
+const HASH_ROUTE_CATEGORY_PREFIX = "kategorie/";
+
+export function normalizeNavHash(value) {
+  return decodeURIComponent(String(value || "").replace(/^#/, "").trim()).toLowerCase();
+}
+
+export function navIdToHash(config, navId) {
+  const normalizedNavId = normalizeActiveNavId(navId);
+  if (normalizedNavId === NAV_ALL) return HASH_ROUTE_START;
+  if (normalizedNavId === NAV_FAVORITES) return HASH_ROUTE_FAVORITES;
+  if (normalizedNavId === NAV_UNSORTED) return HASH_ROUTE_UNSORTED;
+  const category = findSidebarCategoryById(config, normalizedNavId);
+  if (category?.slug) return `${HASH_ROUTE_CATEGORY_PREFIX}${category.slug}`;
+  return HASH_ROUTE_START;
+}
+
+export function parseNavIdFromHash(hash, config) {
+  const raw = normalizeNavHash(hash);
+  if (!raw || raw === HASH_ROUTE_START) return NAV_ALL;
+  if (raw === HASH_ROUTE_FAVORITES) return NAV_FAVORITES;
+  if (raw === HASH_ROUTE_UNSORTED) return NAV_UNSORTED;
+  if (raw.startsWith(HASH_ROUTE_CATEGORY_PREFIX)) {
+    const slug = raw.slice(HASH_ROUTE_CATEGORY_PREFIX.length);
+    const category = findSidebarCategoryBySlug(config, slug);
+    if (category) return category.id;
+    return null;
+  }
+  return null;
+}
+
+export function resolveNavIdFromHash(config, hash, settings) {
+  const parsed = parseNavIdFromHash(hash, config);
+  if (parsed === null) {
+    if (normalizeNavHash(hash)) return NAV_ALL;
+    return resolveActiveNavId(config, settings);
+  }
+  if (isValidNavId(config, parsed)) return parsed;
+  return NAV_ALL;
+}
 
 export function normalizeActiveNavId(value) {
   const normalized = String(value || "").trim();
@@ -62,22 +109,16 @@ export function findCategoryById(config, categoryId) {
   return (config.categories || []).find((entry) => entry.id === categoryId) || null;
 }
 
-export function isUnsortedBookmark(bookmark) {
-  const sidebarCategoryIds = Array.isArray(bookmark?.sidebarCategoryIds) ? bookmark.sidebarCategoryIds : [];
-  if (!sidebarCategoryIds.length) return true;
-  return sidebarCategoryIds.every((id) => id === UNSORTED_CATEGORY_ID);
-}
-
 export function getBookmarksForNav(config, navId) {
   const bookmarks = config.bookmarks || [];
   if (navId === NAV_ALL) {
-    return [...bookmarks];
+    return getBookmarksOnHomepage(config);
   }
   if (navId === NAV_FAVORITES) {
-    return bookmarks.filter((bookmark) => Boolean(bookmark.favorite));
+    return bookmarks.filter((bookmark) => isBookmarkInFavorites(bookmark));
   }
   if (navId === NAV_UNSORTED) {
-    return bookmarks.filter((bookmark) => isUnsortedBookmark(bookmark));
+    return bookmarks.filter((bookmark) => isUnsortedBookmark(bookmark, config));
   }
   if (findSidebarCategoryById(config, navId)) {
     return getBookmarksForSidebarCategory(config, navId);

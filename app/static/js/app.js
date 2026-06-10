@@ -9,15 +9,22 @@ import {
   normalizeIframeUrl,
   normalizeBookmarkSource,
   DEFAULT_BOOKMARK_SOURCE,
+  FAVORITES_CATEGORY_ID,
   getBookmarksForCategory,
   getBookmarksForSidebarCategory,
+  getBookmarkHomepageCategoryId,
+  getBookmarkSidebarPlacementIds,
   findBookmarkById,
   findSidebarCategoryById,
   ensureBookmarkInCategoryOrder,
+  ensureBookmarkInSidebarCategoryOrder,
   removeBookmarkFromCategoryOrder,
+  removeBookmarkFromSidebarCategoryOrder,
   removeCategoryFromConfig,
   removeBookmarkFromConfig,
   listBookmarkListCategories,
+  listSidebarCategories,
+  allocateSidebarCategorySlug,
   getHomepageCategories
 } from "./bookmarks.js";
 import {
@@ -34,6 +41,10 @@ import {
   getBookmarkCountForNav,
   findCategoryById,
   resolveActiveNavId,
+  resolveNavIdFromHash,
+  navIdToHash,
+  parseNavIdFromHash,
+  normalizeNavHash,
   shouldShowCategoryGrid,
   isValidNavId,
   isCategoryNavId
@@ -42,7 +53,8 @@ import {
   normalizeBookmarkView,
   bookmarksContainerClass,
   createBookmarkElement,
-  ensureBookmarkMenuDismiss
+  ensureBookmarkMenuDismiss,
+  escapeHtml
 } from "./bookmark-views.js";
 
 const EDIT_MODE_URL_KEY = "edit";
@@ -173,13 +185,26 @@ function resolveIconSrcForImgTag(raw) {
   return resolveServiceIconDisplaySrc(raw);
 }
 
+function resolveBookmarkPreviewSrc(raw) {
+  const image = String(raw ?? "").trim();
+  if (!image) return resolveIconSrcForImgTag("");
+  if (isProbablyExternalIconHref(image)) {
+    if (image.startsWith("//")) return `${window.location.protocol}${image}`;
+    return image;
+  }
+  return resolveIconSrcForImgTag(normalizeAppIconPath(image));
+}
+
 function bookmarkStoredImageSrc(bookmark) {
   if (!bookmark) return resolveIconSrcForImgTag("");
-  const image = bookmark.image ? String(bookmark.image).trim() : "";
-  const rawForImg = image
-    ? (isProbablyExternalIconHref(image) ? image : normalizeAppIconPath(image))
-    : "";
-  return resolveIconSrcForImgTag(rawForImg);
+  return resolveBookmarkPreviewSrc(bookmark.image);
+}
+
+function normalizeBookmarkImageValue(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value) return "";
+  if (isProbablyExternalIconHref(value)) return value;
+  return normalizeAppIconPath(value);
 }
 
 const RESTART_POLL_MS = 2000;
@@ -417,6 +442,42 @@ async function handleDeleteBookmark(bookmark) {
   render();
 }
 
+function setBookmarkMetadataLoading(item, loading) {
+  if (!(item instanceof HTMLElement)) return;
+  item.classList.toggle("is-reloading-metadata", loading);
+  const overlay = item.querySelector("[data-bookmark-loading]");
+  overlay?.classList.toggle("hidden", !loading);
+  item.querySelector("[data-bookmark-menu-trigger]")?.toggleAttribute("disabled", loading);
+}
+
+async function applyBookmarkMetadata(bookmarkId, { item = null, pushUndoOnChange = true } = {}) {
+  const bookmark = findBookmarkById(state.config, bookmarkId);
+  if (!bookmark?.url) return false;
+  if (item instanceof HTMLElement && item.classList.contains("is-reloading-metadata")) return false;
+  if (item instanceof HTMLElement) setBookmarkMetadataLoading(item, true);
+  try {
+    const metadata = await api.fetchBookmarkMetadata(bookmark.url);
+    if (pushUndoOnChange) pushUndo();
+    if (metadata.title) bookmark.title = String(metadata.title).trim();
+    bookmark.description = String(metadata.description || "").trim();
+    if (metadata.image) bookmark.image = String(metadata.image).trim();
+    await persistConfig();
+    render();
+    return true;
+  } catch {
+    if (item instanceof HTMLElement) {
+      const feedback = document.createElement("div");
+      feedback.className = "bookmark-item__feedback";
+      feedback.textContent = t("ui.reloadBookmarkMetadataFailed");
+      item.append(feedback);
+      window.setTimeout(() => feedback.remove(), 3200);
+    }
+    return false;
+  } finally {
+    if (item instanceof HTMLElement) setBookmarkMetadataLoading(item, false);
+  }
+}
+
 function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false } = {}) {
   const categoryContext = category || { id: resolveBookmarkModalCategoryId(bookmark, category) };
   const reorder = getBookmarkReorderState(category, bookmark);
@@ -427,6 +488,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       bookmark,
       view: normalizedView,
       homepage,
+      navList: !homepage,
       editMode: state.editMode,
       config: state.config,
       hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
@@ -435,7 +497,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
     },
     {
       ...createBookmarkUiDeps(),
-      onEdit: () => openBookmarkModal(resolveBookmarkModalCategoryId(bookmark, category), bookmark),
+      onEdit: () => openBookmarkModal({ bookmark }),
       onDelete: () => {
         void handleDeleteBookmark(bookmark);
       },
@@ -448,7 +510,10 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
         ? () => {
             void swapBookmarkByStep(categoryContext.id, bookmark.id, 1);
           }
-        : undefined
+        : undefined,
+      onReloadMetadata: (item) => {
+        void applyBookmarkMetadata(bookmark.id, { item });
+      }
     }
   );
 }
@@ -643,11 +708,51 @@ function isEditModeInUrl() {
   return new URLSearchParams(window.location.search).get(EDIT_MODE_URL_KEY) === "1";
 }
 
-function editModeUrl(enabled) {
+function buildAppUrl({ navId = getActiveNavId(), editMode = state.editMode } = {}) {
   const url = new URL(window.location.href);
-  if (enabled) url.searchParams.set(EDIT_MODE_URL_KEY, "1");
+  url.hash = navIdToHash(state.config, navId);
+  if (editMode) url.searchParams.set(EDIT_MODE_URL_KEY, "1");
   else url.searchParams.delete(EDIT_MODE_URL_KEY);
   return url;
+}
+
+function syncAppUrl({ navId = getActiveNavId(), editMode = state.editMode, historyMode = "replace" } = {}) {
+  const url = buildAppUrl({ navId, editMode });
+  const historyState = { navId, editMode };
+  if (historyMode === "push") {
+    history.pushState(historyState, "", url.href);
+    return;
+  }
+  history.replaceState(historyState, "", url.href);
+}
+
+function applyStateFromUrl({ normalizeInvalidHash = false } = {}) {
+  const urlEditMode = isEditModeInUrl();
+  const parsedNavId = parseNavIdFromHash(window.location.hash, state.config);
+  const nextNavId = resolveNavIdFromHash(state.config, window.location.hash, state.settings);
+  let changed = false;
+
+  if (state.settings.activeNavId !== nextNavId) {
+    state.settings.activeNavId = nextNavId;
+    changed = true;
+  }
+
+  if (urlEditMode !== state.editMode) {
+    if (urlEditMode) captureEditModeCollapsedSnapshot();
+    else {
+      restoreEditModeCollapsedSnapshot();
+      state.sidebarCategoryDraft = false;
+    }
+    state.editMode = urlEditMode;
+    if (!urlEditMode) editModeHistoryPushed = false;
+    changed = true;
+  }
+
+  if (normalizeInvalidHash && parsedNavId === null && normalizeNavHash(window.location.hash)) {
+    syncAppUrl({ navId: NAV_ALL, editMode: state.editMode, historyMode: "replace" });
+  }
+
+  if (changed) render();
 }
 
 function captureEditModeCollapsedSnapshot() {
@@ -683,13 +788,11 @@ function setEditMode(nextEditMode, { syncHistory = true } = {}) {
   }
   state.editMode = nextEditMode;
   if (syncHistory) {
-    const url = editModeUrl(nextEditMode);
-    const historyState = { editMode: nextEditMode };
     if (nextEditMode && !isEditModeInUrl()) {
-      history.pushState(historyState, "", url);
+      syncAppUrl({ editMode: nextEditMode, historyMode: "push" });
       editModeHistoryPushed = true;
     } else {
-      history.replaceState(historyState, "", url);
+      syncAppUrl({ editMode: nextEditMode, historyMode: "replace" });
     }
   }
   render();
@@ -713,9 +816,9 @@ async function bootstrap() {
     elementSize: normalizeElementSize(settings?.elementSize),
     globalShortcuts: normalizeGlobalShortcuts(settings?.globalShortcuts),
     browserSync: normalizeBrowserSyncSettings(settings?.browserSync),
-    activeNavId: resolveActiveNavId(state.config, settings),
     navViewModes: normalizeNavViewModes(settings?.navViewModes)
   };
+  state.settings.activeNavId = resolveNavIdFromHash(state.config, window.location.hash, state.settings);
   state.themes = themes.themes;
   state.languages = languages.languages;
   await initI18n(state.settings.language);
@@ -725,8 +828,12 @@ async function bootstrap() {
   if (isEditModeInUrl()) {
     state.editMode = true;
     captureEditModeCollapsedSnapshot();
-    history.replaceState({ editMode: true }, "", editModeUrl(true));
   }
+  syncAppUrl({
+    navId: state.settings.activeNavId,
+    editMode: state.editMode,
+    historyMode: "replace"
+  });
   ensureBookmarkMenuDismiss();
   wireEvents();
   render();
@@ -734,13 +841,7 @@ async function bootstrap() {
 
 function wireEvents() {
   window.addEventListener("popstate", () => {
-    const urlEditMode = isEditModeInUrl();
-    if (!urlEditMode) editModeHistoryPushed = false;
-    if (urlEditMode === state.editMode) return;
-    if (urlEditMode) captureEditModeCollapsedSnapshot();
-    else restoreEditModeCollapsedSnapshot();
-    state.editMode = urlEditMode;
-    render();
+    applyStateFromUrl({ normalizeInvalidHash: true });
   });
   elements.edit.addEventListener("click", () => {
     setEditMode(!state.editMode);
@@ -934,11 +1035,20 @@ function setSidebarOpen(open) {
   document.body.classList.toggle("sidebar-open", state.sidebarOpen);
 }
 
-async function selectNav(navId) {
+async function selectNav(navId, { syncHistory = true, historyMode = "push" } = {}) {
   const nextNavId = normalizeActiveNavId(navId);
   if (!isValidNavId(state.config, nextNavId)) return;
-  if (getActiveNavId() === nextNavId) return;
+  const hashNavId = parseNavIdFromHash(window.location.hash, state.config);
+  if (getActiveNavId() === nextNavId) {
+    if (syncHistory && hashNavId !== nextNavId) {
+      syncAppUrl({ navId: nextNavId, historyMode: "replace" });
+    }
+    return;
+  }
   state.settings.activeNavId = nextNavId;
+  if (syncHistory) {
+    syncAppUrl({ navId: nextNavId, historyMode });
+  }
   await persistSettings();
   render();
 }
@@ -1083,7 +1193,8 @@ async function saveSidebarCategory(name) {
   state.config.sidebarCategories.push({
     id,
     name,
-    icon: FALLBACK_MDI_ICON
+    icon: FALLBACK_MDI_ICON,
+    slug: allocateSidebarCategorySlug(state.config, name)
   });
   if (!state.config.sidebarCategoryBookmarkOrder) state.config.sidebarCategoryBookmarkOrder = {};
   state.config.sidebarCategoryBookmarkOrder[id] = [];
@@ -1402,7 +1513,7 @@ function renderCategory(category) {
     if (interactive) return;
     toggleCollapse();
   });
-  card.querySelector("[data-add-bookmark]")?.addEventListener("click", () => openBookmarkModal(category.id));
+  card.querySelector("[data-add-bookmark]")?.addEventListener("click", () => openBookmarkModal({ homepageCategoryId: category.id }));
   card.querySelector("[data-edit-category]")?.addEventListener("click", () => openCategoryModal(category));
   card.querySelector("[data-move-category-left]")?.addEventListener("click", () => {
     void swapCategoryByStep(category.id, -1);
@@ -1721,20 +1832,64 @@ function openCategoryModal(category = null) {
   results.innerHTML = "";
 }
 
-function renderBookmarkCategoryOptions(selectedIds, contextCategoryId) {
-  const selected = new Set(selectedIds || []);
-  if (contextCategoryId) selected.add(contextCategoryId);
-  return listBookmarkListCategories(state.config)
+function renderBookmarkPlacementFields({
+  homepageEnabled,
+  homepageCategoryId,
+  selectedSidebarIds
+} = {}) {
+  const sidebarSelected = new Set(selectedSidebarIds || []);
+  const homepageCategories = listBookmarkListCategories(state.config);
+  const homepageOptions = homepageCategories
     .map((category) => {
-      const checked = selected.has(category.id) ? "checked" : "";
+      const selected = category.id === homepageCategoryId ? "selected" : "";
+      return `<option value="${escapeHtml(category.id)}" ${selected}>${escapeHtml(category.name)}</option>`;
+    })
+    .join("");
+  const sidebarOptions = listSidebarCategories(state.config)
+    .map((category) => {
+      const checked = sidebarSelected.has(category.id) ? "checked" : "";
       return `
         <label class="checkbox-option">
-          <input type="checkbox" name="categoryIds" value="${category.id}" ${checked} />
-          <span>${category.name}</span>
+          <input type="checkbox" name="sidebarCategoryIds" value="${escapeHtml(category.id)}" ${checked} />
+          <span>${escapeHtml(category.name)}</span>
         </label>
       `;
     })
     .join("");
+
+  return `
+    <div class="bookmark-placement-row">
+      <label class="checkbox-option bookmark-placement-row__toggle">
+        <input
+          type="checkbox"
+          name="homepageEnabled"
+          data-homepage-toggle
+          ${homepageEnabled ? "checked" : ""}
+        />
+        <span>${escapeHtml(getHomepageName())}</span>
+      </label>
+      <select
+        name="homepageCategoryId"
+        data-homepage-category
+        class="bookmark-placement-row__select"
+        ${homepageEnabled ? "" : "disabled"}
+      >
+        <option value="">${escapeHtml(t("ui.homepageCategoryPlaceholder"))}</option>
+        ${homepageOptions}
+      </select>
+    </div>
+    <label class="checkbox-option">
+      <input
+        type="checkbox"
+        name="sidebarCategoryIds"
+        value="${FAVORITES_CATEGORY_ID}"
+        ${sidebarSelected.has(FAVORITES_CATEGORY_ID) ? "checked" : ""}
+      />
+      <span>${escapeHtml(t("ui.navFavorites"))}</span>
+    </label>
+    ${sidebarOptions}
+    <small class="bookmark-unsorted-hint hidden" data-unsorted-hint>${escapeHtml(t("ui.bookmarkUnsortedHint"))}</small>
+  `;
 }
 
 function bookmarkSourceLabel(source) {
@@ -1742,17 +1897,21 @@ function bookmarkSourceLabel(source) {
   return key ? t(key) : normalizeBookmarkSource(source);
 }
 
-function openBookmarkModal(categoryId, bookmark = null) {
-  const category = state.config.categories.find((c) => c.id === categoryId);
-  if (!category) return;
-  if (normalizeCategoryType(category.type) === "iframe") return;
+function openBookmarkModal(arg = {}) {
+  const options = typeof arg === "string" ? { homepageCategoryId: arg } : arg;
+  const bookmark = options.bookmark ?? null;
+  const defaultHomepageCategoryId = options.homepageCategoryId || "";
   const isEdit = Boolean(bookmark);
   const existing = isEdit ? findBookmarkById(state.config, bookmark.id) : null;
+  const homepageCategoryId = existing
+    ? getBookmarkHomepageCategoryId(state.config, existing)
+    : defaultHomepageCategoryId;
+  const homepageEnabled = Boolean(homepageCategoryId);
+  const selectedSidebarIds = existing
+    ? getBookmarkSidebarPlacementIds(existing)
+    : [];
   const form = document.createElement("form");
   const previewImgSrc = existing ? bookmarkStoredImageSrc(existing) : resolveIconSrcForImgTag("");
-  const selectedCategoryIds = existing?.categoryIds?.length
-    ? [...existing.categoryIds]
-    : [categoryId];
   form.innerHTML = `
     <div class="form-row">
       <label>${t("ui.title")}</label>
@@ -1780,18 +1939,11 @@ function openBookmarkModal(categoryId, bookmark = null) {
         <small id="favicon-status"></small>
       </div>
     </div>
-    <div class="form-row">
+    <div class="form-row form-row--bookmark-placements">
       <label>${t("ui.bookmarkCategories")}</label>
-      <div class="checkbox-group" data-bookmark-categories>
-        ${renderBookmarkCategoryOptions(selectedCategoryIds, categoryId)}
+      <div class="checkbox-group" data-bookmark-placements>
+        ${renderBookmarkPlacementFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds })}
       </div>
-    </div>
-    <div class="form-row">
-      <label>${t("ui.favorite")}</label>
-      <label class="toggle-switch">
-        <input name="favorite" type="checkbox" ${existing?.favorite ? "checked" : ""} />
-        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-      </label>
     </div>
     ${isEdit ? `
       <div class="form-row">
@@ -1839,33 +1991,69 @@ function openBookmarkModal(categoryId, bookmark = null) {
       if (!form.reportValidity()) return false;
       if (!validateShortcut()) return false;
       const fd = new FormData(form);
-      const categoryIds = [...new Set(fd.getAll("categoryIds").map((id) => String(id || "").trim()).filter(Boolean))];
-      if (!categoryIds.length) {
-        const group = form.querySelector("[data-bookmark-categories]");
-        group?.setAttribute("data-invalid", "true");
-        return false;
-      }
-      const image = normalizeAppIconPath(String(fd.get("image") || "").trim());
+      const homepageEnabled = Boolean(form.querySelector("[data-homepage-toggle]")?.checked);
+      const homepageCategorySelect = form.querySelector("[data-homepage-category]");
+      const homepageCategoryIdValue = String(homepageCategorySelect?.value || "").trim();
+      const listCategoryIds = new Set(listBookmarkListCategories(state.config).map((category) => category.id));
+      const sidebarCategoryIds = [
+        ...new Set(fd.getAll("sidebarCategoryIds").map((id) => String(id || "").trim()).filter(Boolean))
+      ];
 
-      pushUndo();
-      if (isEdit) {
-        const previousCategoryIds = [...existing.categoryIds];
-        existing.title = String(fd.get("title") || "").trim();
-        existing.url = String(fd.get("url") || "").trim();
-        existing.description = String(fd.get("description") || "").trim();
-        existing.image = image;
-        existing.categoryIds = categoryIds;
-        existing.favorite = form.querySelector("input[name='favorite']").checked;
-        existing.openMode = fd.get("openMode");
-        existing.shortcut = selectedShortcut;
+      form.querySelector("[data-bookmark-placements]")?.removeAttribute("data-invalid");
+      homepageCategorySelect?.removeAttribute("data-invalid");
+
+      let categoryIds = [];
+      if (homepageEnabled) {
+        if (!homepageCategoryIdValue || !listCategoryIds.has(homepageCategoryIdValue)) {
+          form.querySelector("[data-bookmark-placements]")?.setAttribute("data-invalid", "true");
+          homepageCategorySelect?.setAttribute("data-invalid", "true");
+          return false;
+        }
+        categoryIds = [homepageCategoryIdValue];
+      }
+
+      const image = normalizeBookmarkImageValue(fd.get("image"));
+
+      const applyPlacementUpdates = (entry, bookmarkId, previousCategoryIds, previousSidebarIds) => {
+        entry.title = String(fd.get("title") || "").trim();
+        entry.url = String(fd.get("url") || "").trim();
+        entry.description = String(fd.get("description") || "").trim();
+        entry.image = image;
+        entry.openMode = fd.get("openMode");
+        entry.shortcut = selectedShortcut;
+        entry.favorite = false;
+        entry.sidebarCategoryIds = sidebarCategoryIds;
+        const preservedNonListCategoryIds = (entry.categoryIds || []).filter((id) => !listCategoryIds.has(id));
+        entry.categoryIds = homepageEnabled
+          ? [...preservedNonListCategoryIds, ...categoryIds]
+          : preservedNonListCategoryIds;
+
         for (const cid of categoryIds) {
-          ensureBookmarkInCategoryOrder(state.config, cid, existing.id);
+          ensureBookmarkInCategoryOrder(state.config, cid, bookmarkId);
         }
         for (const cid of previousCategoryIds) {
           if (!categoryIds.includes(cid)) {
-            removeBookmarkFromCategoryOrder(state.config, cid, existing.id);
+            removeBookmarkFromCategoryOrder(state.config, cid, bookmarkId);
           }
         }
+        for (const cid of sidebarCategoryIds) {
+          if (cid === FAVORITES_CATEGORY_ID) continue;
+          if (findSidebarCategoryById(state.config, cid)) {
+            ensureBookmarkInSidebarCategoryOrder(state.config, cid, bookmarkId);
+          }
+        }
+        for (const cid of previousSidebarIds) {
+          if (sidebarCategoryIds.includes(cid) || cid === FAVORITES_CATEGORY_ID) continue;
+          removeBookmarkFromSidebarCategoryOrder(state.config, cid, bookmarkId);
+        }
+      };
+
+      pushUndo();
+      let createdBookmarkId = "";
+      if (isEdit) {
+        const previousCategoryIds = (existing.categoryIds || []).filter((id) => listCategoryIds.has(id));
+        const previousSidebarIds = getBookmarkSidebarPlacementIds(existing);
+        applyPlacementUpdates(existing, existing.id, previousCategoryIds, previousSidebarIds);
       } else {
         const created = {
           id: uid(),
@@ -1873,19 +2061,22 @@ function openBookmarkModal(categoryId, bookmark = null) {
           url: String(fd.get("url") || "").trim(),
           description: String(fd.get("description") || "").trim(),
           image,
-          categoryIds,
-          favorite: form.querySelector("input[name='favorite']").checked,
+          categoryIds: [],
+          sidebarCategoryIds,
+          favorite: false,
           source: DEFAULT_BOOKMARK_SOURCE,
           openMode: fd.get("openMode"),
           shortcut: selectedShortcut
         };
         state.config.bookmarks.push(created);
-        for (const cid of categoryIds) {
-          ensureBookmarkInCategoryOrder(state.config, cid, created.id);
-        }
+        createdBookmarkId = created.id;
+        applyPlacementUpdates(created, created.id, [], []);
       }
       await persistConfig();
       render();
+      if (createdBookmarkId) {
+        void applyBookmarkMetadata(createdBookmarkId, { pushUndoOnChange: false });
+      }
     }
   });
 
@@ -1952,8 +2143,7 @@ function openBookmarkModal(categoryId, bookmark = null) {
 
   const syncIconPreviewFromField = () => {
     const v = String(imageInput.value || "").trim();
-    const rawForImg = v ? (isProbablyExternalIconHref(v) ? v : normalizeAppIconPath(v)) : "";
-    preview.src = resolveIconSrcForImgTag(rawForImg);
+    preview.src = resolveBookmarkPreviewSrc(v);
   };
 
   imageInput.addEventListener("input", () => {
@@ -2001,11 +2191,39 @@ function openBookmarkModal(categoryId, bookmark = null) {
   };
 
   fetchFaviconButton.addEventListener("click", triggerFaviconLoad);
-  form.querySelectorAll("input[name='categoryIds']").forEach((input) => {
-    input.addEventListener("change", () => {
-      form.querySelector("[data-bookmark-categories]")?.removeAttribute("data-invalid");
-    });
+
+  const homepageToggle = form.querySelector("[data-homepage-toggle]");
+  const homepageCategorySelect = form.querySelector("[data-homepage-category]");
+  const unsortedHint = form.querySelector("[data-unsorted-hint]");
+  const placementGroup = form.querySelector("[data-bookmark-placements]");
+
+  const syncHomepageCategorySelect = () => {
+    const enabled = Boolean(homepageToggle?.checked);
+    if (!homepageCategorySelect) return;
+    homepageCategorySelect.disabled = !enabled;
+    if (!enabled) homepageCategorySelect.removeAttribute("data-invalid");
+  };
+
+  const syncUnsortedHint = () => {
+    if (!unsortedHint) return;
+    const homepageActive = Boolean(homepageToggle?.checked);
+    const sidebarActive = form.querySelectorAll('input[name="sidebarCategoryIds"]:checked').length > 0;
+    unsortedHint.classList.toggle("hidden", homepageActive || sidebarActive);
+  };
+
+  const syncPlacementState = () => {
+    placementGroup?.removeAttribute("data-invalid");
+    homepageCategorySelect?.removeAttribute("data-invalid");
+    syncHomepageCategorySelect();
+    syncUnsortedHint();
+  };
+
+  homepageToggle?.addEventListener("change", syncPlacementState);
+  homepageCategorySelect?.addEventListener("change", syncPlacementState);
+  form.querySelectorAll('input[name="sidebarCategoryIds"]').forEach((input) => {
+    input.addEventListener("change", syncPlacementState);
   });
+  syncPlacementState();
   syncIconPreviewFromField();
   updateShortcutUI();
   validateShortcut();

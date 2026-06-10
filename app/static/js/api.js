@@ -17,6 +17,7 @@ export const api = {
   getThemes: () => request("/api/themes"),
   getLanguages: () => request("/api/languages"),
   cacheFavicon: (url) => request("/api/favicon", { method: "POST", headers, body: JSON.stringify({ url }) }),
+  fetchBookmarkMetadata: (url) => request("/api/bookmark-metadata", { method: "POST", headers, body: JSON.stringify({ url }) }),
   restartApp: () => request("/api/restart", { method: "POST", headers, body: "{}" }),
   getBrowserSyncStatus: () => request("/api/browser-sync/status"),
   runBrowserSync: () => request("/api/browser-sync/run", { method: "POST", headers, body: "{}" })

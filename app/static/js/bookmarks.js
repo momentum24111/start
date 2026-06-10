@@ -2,6 +2,57 @@
 
 export const SCHEMA_VERSION = 2;
 export const UNSORTED_CATEGORY_ID = "unsorted";
+export const FAVORITES_CATEGORY_ID = "favorites";
+
+const RESERVED_SIDEBAR_SLUGS = new Set(["start", "favoriten", "unsortiert", "kategorie"]);
+
+export function slugifySidebarCategoryName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("ä", "ae")
+    .replaceAll("ö", "oe")
+    .replaceAll("ü", "ue")
+    .replaceAll("ß", "ss")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "kategorie";
+}
+
+function prepareSidebarSlugCandidate(baseSlug) {
+  let slug = String(baseSlug || "").trim().toLowerCase() || "kategorie";
+  if (RESERVED_SIDEBAR_SLUGS.has(slug)) slug = `${slug}-2`;
+  return slug;
+}
+
+function ensureUniqueSidebarSlugValue(baseSlug, usedSlugs) {
+  const root = prepareSidebarSlugCandidate(baseSlug);
+  if (!usedSlugs.has(root)) return root;
+  let counter = 2;
+  while (usedSlugs.has(`${root}-${counter}`)) counter += 1;
+  return `${root}-${counter}`;
+}
+
+export function allocateSidebarCategorySlug(config, name, excludeCategoryId = "") {
+  const usedSlugs = new Set(
+    listSidebarCategories(config)
+      .filter((category) => category.id !== excludeCategoryId)
+      .map((category) => category.slug)
+      .filter(Boolean)
+  );
+  return ensureUniqueSidebarSlugValue(slugifySidebarCategoryName(name), usedSlugs);
+}
+
+function finalizeSidebarCategorySlugs(categories) {
+  const usedSlugs = new Set();
+  return categories.map((category) => {
+    const baseSlug = category.slug || slugifySidebarCategoryName(category.name);
+    const slug = ensureUniqueSidebarSlugValue(baseSlug, usedSlugs);
+    usedSlugs.add(slug);
+    return { ...category, slug };
+  });
+}
 
 export const BOOKMARK_SOURCE_OPTIONS = ["manual", "browser-import"];
 export const DEFAULT_BOOKMARK_SOURCE = "manual";
@@ -99,7 +150,8 @@ function normalizeSidebarCategoryEntry(raw) {
   return {
     id: String(entry.id || "").trim(),
     name: String(entry.name || "").trim(),
-    icon: String(entry.icon || "folder").trim() || "folder"
+    icon: String(entry.icon || "folder").trim() || "folder",
+    slug: String(entry.slug || "").trim().toLowerCase()
   };
 }
 
@@ -232,9 +284,11 @@ export function normalizeConfig(config) {
   const categories = (Array.isArray(input.categories) ? input.categories : [])
     .map(normalizeCategoryEntry)
     .filter((category) => category.id && category.id !== UNSORTED_CATEGORY_ID);
-  const sidebarCategories = (Array.isArray(input.sidebarCategories) ? input.sidebarCategories : [])
-    .map(normalizeSidebarCategoryEntry)
-    .filter((category) => category.id && category.id !== UNSORTED_CATEGORY_ID);
+  const sidebarCategories = finalizeSidebarCategorySlugs(
+    (Array.isArray(input.sidebarCategories) ? input.sidebarCategories : [])
+      .map(normalizeSidebarCategoryEntry)
+      .filter((category) => category.id && category.id !== UNSORTED_CATEGORY_ID)
+  );
   const existingBookmarks = Array.isArray(input.bookmarks)
     ? input.bookmarks.map(normalizeBookmarkEntry)
     : [];
@@ -269,6 +323,44 @@ export function normalizeConfig(config) {
 export function getCategoryBookmarkOrder(config, categoryId) {
   const order = config.categoryBookmarkOrder?.[categoryId];
   return Array.isArray(order) ? [...order] : [];
+}
+
+export function getBookmarkHomepageCategoryId(config, bookmark) {
+  if (!bookmark) return "";
+  const listCategoryIds = new Set(listBookmarkListCategories(config).map((category) => category.id));
+  return (bookmark.categoryIds || []).find((id) => listCategoryIds.has(id)) || "";
+}
+
+export function getBookmarkSidebarPlacementIds(bookmark) {
+  if (!bookmark) return [];
+  const ids = (bookmark.sidebarCategoryIds || []).filter((id) => id && id !== UNSORTED_CATEGORY_ID);
+  if (bookmark.favorite && !ids.includes(FAVORITES_CATEGORY_ID)) {
+    return [...ids, FAVORITES_CATEGORY_ID];
+  }
+  return ids;
+}
+
+export function isBookmarkInFavorites(bookmark) {
+  return getBookmarkSidebarPlacementIds(bookmark).includes(FAVORITES_CATEGORY_ID);
+}
+
+export function isUnsortedBookmark(bookmark, config) {
+  if (!bookmark) return true;
+  if (getBookmarkHomepageCategoryId(config, bookmark)) return false;
+  return getBookmarkSidebarPlacementIds(bookmark).length === 0;
+}
+
+export function getBookmarksOnHomepage(config) {
+  const seen = new Set();
+  const result = [];
+  for (const category of listBookmarkListCategories(config)) {
+    for (const bookmark of getBookmarksForCategory(config, category.id)) {
+      if (seen.has(bookmark.id)) continue;
+      seen.add(bookmark.id);
+      result.push(bookmark);
+    }
+  }
+  return result;
 }
 
 export function getBookmarksForCategory(config, categoryId) {
@@ -320,6 +412,9 @@ export function removeBookmarkFromConfig(config, bookmarkId) {
   for (const categoryId of Object.keys(config.categoryBookmarkOrder || {})) {
     removeBookmarkFromCategoryOrder(config, categoryId, bookmarkId);
   }
+  for (const categoryId of Object.keys(config.sidebarCategoryBookmarkOrder || {})) {
+    removeBookmarkFromSidebarCategoryOrder(config, categoryId, bookmarkId);
+  }
 }
 
 export function getHomepageCategories(config) {
@@ -336,6 +431,39 @@ export function listSidebarCategories(config) {
 
 export function findSidebarCategoryById(config, categoryId) {
   return listSidebarCategories(config).find((category) => category.id === categoryId) || null;
+}
+
+export function formatBookmarkDomain(url) {
+  try {
+    const hostname = new URL(String(url || "").trim()).hostname || "";
+    return hostname.replace(/^www\./i, "");
+  } catch {
+    return "";
+  }
+}
+
+export function getBookmarkDisplayCategoryLabels(config, bookmark, labelForFavorites) {
+  const labels = [];
+  const homepageCategoryId = getBookmarkHomepageCategoryId(config, bookmark);
+  if (homepageCategoryId) {
+    const homepageCategory = listBookmarkListCategories(config).find((entry) => entry.id === homepageCategoryId);
+    if (homepageCategory?.name) labels.push(homepageCategory.name);
+  }
+  if (isBookmarkInFavorites(bookmark) && labelForFavorites) {
+    labels.push(labelForFavorites);
+  }
+  for (const categoryId of bookmark?.sidebarCategoryIds || []) {
+    if (categoryId === FAVORITES_CATEGORY_ID || categoryId === UNSORTED_CATEGORY_ID) continue;
+    const sidebarCategory = findSidebarCategoryById(config, categoryId);
+    if (sidebarCategory?.name) labels.push(sidebarCategory.name);
+  }
+  return labels;
+}
+
+export function findSidebarCategoryBySlug(config, slug) {
+  const normalized = String(slug || "").trim().toLowerCase();
+  if (!normalized) return null;
+  return listSidebarCategories(config).find((category) => category.slug === normalized) || null;
 }
 
 export function getSidebarCategoryBookmarkOrder(config, categoryId) {

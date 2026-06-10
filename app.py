@@ -71,6 +71,10 @@ class FaviconRequest(BaseModel):
     url: str = Field(min_length=3, max_length=4096)
 
 
+class BookmarkMetadataRequest(BaseModel):
+    url: str = Field(min_length=3, max_length=4096)
+
+
 def ensure_directories() -> None:
     for directory in (DATA_DIR, BACKUP_DIR, FAVICON_CACHE_DIR, THEMES_DIR, LANGUAGES_DIR):
         directory.mkdir(parents=True, exist_ok=True)
@@ -711,6 +715,64 @@ def is_valid_image_bytes(data: bytes) -> bool:
     return False
 
 
+def _meta_tag_content(html: str, *keys: str) -> str:
+    for key in keys:
+        patterns = (
+            rf'<meta[^>]+(?:property|name)\s*=\s*["\']{re.escape(key)}["\'][^>]+content\s*=\s*["\']([^"\']+)["\']',
+            rf'<meta[^>]+content\s*=\s*["\']([^"\']+)["\'][^>]+(?:property|name)\s*=\s*["\']{re.escape(key)}["\']',
+        )
+        for pattern in patterns:
+            match = re.search(pattern, html, flags=re.IGNORECASE)
+            if match:
+                return html.unescape(match.group(1).strip())
+    return ""
+
+
+def extract_page_title(html: str) -> str:
+    meta_title = _meta_tag_content(html, "og:title", "twitter:title")
+    if meta_title:
+        return meta_title
+    match = re.search(r"<title[^>]*>([^<]+)</title>", html, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return ""
+    return html.unescape(re.sub(r"\s+", " ", match.group(1)).strip())
+
+
+def extract_page_description(html: str) -> str:
+    return _meta_tag_content(html, "og:description", "twitter:description", "description")
+
+
+def extract_preview_image_url(html: str, base_url: str) -> str:
+    for key in ("og:image", "og:image:url", "twitter:image", "twitter:image:src"):
+        raw = _meta_tag_content(html, key)
+        if raw:
+            return urljoin(base_url, raw)
+    return ""
+
+
+def format_hostname_domain(hostname: str) -> str:
+    host = str(hostname or "").strip().lower()
+    if host.startswith("www."):
+        return host[4:]
+    return host
+
+
+async def fetch_page_html(raw_url: str) -> tuple[str, str]:
+    page_url = normalize_page_url(raw_url)
+    async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
+        response = await client.get(
+            page_url,
+            headers={
+                "accept": (
+                    "text/html,application/xhtml+xml;q=0.9,"
+                    "text/plain;q=0.8,*/*;q=0.5"
+                )
+            },
+        )
+        response.raise_for_status()
+        return response.text, str(response.url)
+
+
 async def resolve_favicon_candidates(raw_url: str) -> list[str]:
     """
     Build ordered favicon URLs (first working download wins in post_favicon):
@@ -919,6 +981,32 @@ def get_themes() -> dict:
 @app.get("/api/languages")
 def get_languages() -> dict:
     return {"languages": list_languages()}
+
+
+@app.post("/api/bookmark-metadata")
+async def post_bookmark_metadata(payload: BookmarkMetadataRequest) -> dict:
+    page_url = normalize_page_url(payload.url)
+    try:
+        html, final_url = await fetch_page_html(payload.url)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Metadata fetch failed: {exc}") from exc
+
+    title = extract_page_title(html)
+    description = extract_page_description(html)
+    image = extract_preview_image_url(html, final_url)
+    if not image:
+        candidates = await resolve_favicon_candidates(payload.url)
+        image = candidates[0] if candidates else ""
+
+    parsed = urlparse(page_url)
+    domain = format_hostname_domain(parsed.hostname or "")
+
+    return {
+        "title": title,
+        "description": description,
+        "image": image,
+        "domain": domain,
+    }
 
 
 @app.post("/api/favicon")

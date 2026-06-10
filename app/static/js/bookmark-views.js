@@ -1,6 +1,7 @@
 /** Lesezeichen-Darstellung: Listen- und Kartenansicht. */
 
 import { t } from "./i18n.js";
+import { formatBookmarkDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites } from "./bookmarks.js";
 import { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS } from "./navigation.js";
 
 export { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS };
@@ -110,9 +111,20 @@ function renderActionButtons(options, deps, { compact = false, editOnly = false 
   `;
 }
 
-function renderOverflowMenu(deps) {
+function renderOverflowMenu(deps, { nav = false } = {}) {
+  const menuItems = nav
+    ? `
+        <button type="button" class="bookmark-menu__item" data-edit-bookmark role="menuitem">${escapeHtml(t("ui.edit"))}</button>
+        <button type="button" class="bookmark-menu__item" data-reload-bookmark-metadata role="menuitem">${escapeHtml(t("ui.reloadBookmarkMetadata"))}</button>
+        <button type="button" class="bookmark-menu__item bookmark-menu__item--danger" data-delete-bookmark role="menuitem">${escapeHtml(t("ui.delete"))}</button>
+      `
+    : `
+        <button type="button" class="bookmark-menu__item" data-bookmark-open-action role="menuitem">${escapeHtml(t("ui.open"))}</button>
+        <button type="button" class="bookmark-menu__item" data-edit-bookmark role="menuitem">${escapeHtml(t("ui.edit"))}</button>
+        <button type="button" class="bookmark-menu__item bookmark-menu__item--danger" data-delete-bookmark role="menuitem">${escapeHtml(t("ui.delete"))}</button>
+      `;
   return `
-    <div class="bookmark-menu">
+    <div class="bookmark-menu${nav ? " bookmark-menu--nav" : ""}">
       <button
         type="button"
         class="btn btn--ghost btn--icon btn--bookmark-menu-trigger"
@@ -124,9 +136,7 @@ function renderOverflowMenu(deps) {
         <span class="btn__icon">${deps.iconSvg(deps.icons.dotsVertical, "inline-icon")}</span>
       </button>
       <div class="bookmark-menu__panel hidden" data-bookmark-menu-panel role="menu">
-        <button type="button" class="bookmark-menu__item" data-bookmark-open-action role="menuitem">${escapeHtml(t("ui.open"))}</button>
-        <button type="button" class="bookmark-menu__item" data-edit-bookmark role="menuitem">${escapeHtml(t("ui.edit"))}</button>
-        <button type="button" class="bookmark-menu__item bookmark-menu__item--danger" data-delete-bookmark role="menuitem">${escapeHtml(t("ui.delete"))}</button>
+        ${menuItems}
       </div>
     </div>
   `;
@@ -136,6 +146,10 @@ function bookmarkLinkTarget(bookmark) {
   return bookmark.openMode === "current-tab" ? "_self" : "_blank";
 }
 
+function bookmarkShowsFavorite(bookmark) {
+  return isBookmarkInFavorites(bookmark);
+}
+
 function renderHomepageCardBookmark(options, deps) {
   const { bookmark, editMode } = options;
   const title = escapeHtml(bookmark.title || "");
@@ -143,7 +157,7 @@ function renderHomepageCardBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmark.favorite ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
     >
@@ -176,7 +190,7 @@ function renderHomepageBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--homepage service ${editMode ? "is-edit-mode" : ""} ${bookmark.favorite ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--homepage service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
     >
@@ -200,6 +214,93 @@ function renderHomepageBookmark(options, deps) {
   `;
 }
 
+function renderNavListBookmark(options, deps) {
+  const { bookmark, editMode } = options;
+  const title = escapeHtml(bookmark.title || "");
+  const description = escapeHtml(bookmark.description || "");
+  const url = String(bookmark.url || "").trim();
+  const urlAttr = escapeHtml(url);
+  const domain = escapeHtml(formatBookmarkDomain(url));
+  const categoryLabels = getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"));
+  const categoryChips = renderCategoryChips(categoryLabels);
+
+  return `
+    <article
+      class="bookmark-item bookmark-item--list bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      data-bookmark-id="${escapeHtml(bookmark.id)}"
+      data-category-id="${escapeHtml(options.category.id)}"
+    >
+      <a
+        class="bookmark-item__nav-link"
+        href="${urlAttr}"
+        target="${bookmarkLinkTarget(bookmark)}"
+        rel="noreferrer"
+        data-bookmark-open
+      >
+        ${renderThumbnail(bookmark, deps, "list")}
+        <div class="bookmark-item__main">
+          <h3 class="bookmark-item__title">${title}</h3>
+          ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
+          ${domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : ""}
+          ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
+        </div>
+      </a>
+      ${editMode ? "" : renderOverflowMenu(deps, { nav: true })}
+      ${editMode ? `
+        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--nav">
+          ${renderActionButtons(options, deps, { editOnly: true })}
+          ${renderReorderActions(options, deps)}
+        </div>
+      ` : ""}
+      <div class="bookmark-item__loading hidden" data-bookmark-loading aria-hidden="true">
+        <span class="spinner" aria-hidden="true"></span>
+      </div>
+    </article>
+  `;
+}
+
+function renderNavCardBookmark(options, deps) {
+  const { bookmark, editMode } = options;
+  const title = escapeHtml(bookmark.title || "");
+  const description = escapeHtml(bookmark.description || "");
+  const url = escapeHtml(bookmark.url || "");
+  const categoryLabels = getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"));
+  const categoryChips = renderCategoryChips(categoryLabels);
+
+  return `
+    <article
+      class="bookmark-item bookmark-item--card bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      data-bookmark-id="${escapeHtml(bookmark.id)}"
+      data-category-id="${escapeHtml(options.category.id)}"
+    >
+      <a
+        class="bookmark-card__link"
+        href="${url}"
+        target="${bookmarkLinkTarget(bookmark)}"
+        rel="noreferrer"
+        data-bookmark-open
+        aria-label="${title}"
+      ></a>
+      ${renderThumbnail(bookmark, deps, "card")}
+      <div class="bookmark-card__body">
+        <h3 class="bookmark-item__title">${title}</h3>
+        ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
+        ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
+      </div>
+      ${editMode ? "" : renderOverflowMenu(deps, { nav: true })}
+      ${editMode ? `
+        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--card">
+          ${renderActionButtons(options, deps, { editOnly: true })}
+          ${renderReorderActions(options, deps)}
+        </div>
+      ` : ""}
+      <div class="bookmark-item__loading hidden" data-bookmark-loading aria-hidden="true">
+        <span class="spinner" aria-hidden="true"></span>
+      </div>
+    </article>
+  `;
+}
+
 function renderListBookmark(options, deps) {
   const { bookmark, editMode, hasShortcut } = options;
   const title = escapeHtml(bookmark.title || "");
@@ -212,7 +313,7 @@ function renderListBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--list service ${editMode ? "is-edit-mode" : ""} ${hasShortcut ? "has-shortcut" : ""} ${bookmark.favorite ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--list service ${editMode ? "is-edit-mode" : ""} ${hasShortcut ? "has-shortcut" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
     >
@@ -255,7 +356,7 @@ function renderCardBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--card service ${editMode ? "is-edit-mode" : ""} ${bookmark.favorite ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
     >
@@ -292,6 +393,10 @@ export function renderBookmarkMarkup(options, deps) {
     return renderHomepageBookmark(options, deps);
   }
   const view = normalizeBookmarkView(options.view);
+  if (options.navList) {
+    if (view === "cards") return renderNavCardBookmark(options, deps);
+    return renderNavListBookmark(options, deps);
+  }
   if (view === "cards") return renderCardBookmark(options, deps);
   return renderListBookmark(options, deps);
 }
@@ -374,6 +479,15 @@ export function createBookmarkElement(options, deps) {
       event.stopPropagation();
       closeBookmarkMenu(item.querySelector(".bookmark-menu"));
       deps.onDelete?.();
+    });
+  });
+
+  item.querySelectorAll("[data-reload-bookmark-metadata]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeBookmarkMenu(item.querySelector(".bookmark-menu"));
+      deps.onReloadMetadata?.(item);
     });
   });
 
