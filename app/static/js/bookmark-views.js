@@ -80,10 +80,10 @@ function renderReorderActions(options, deps) {
   `;
 }
 
-function renderActionButtons(options, deps, { compact = false } = {}) {
+function renderActionButtons(options, deps, { compact = false, editOnly = false } = {}) {
   const compactClass = compact ? " btn--compact" : "";
   return `
-    ${deps.button({
+    ${editOnly ? "" : deps.button({
       label: t("ui.open"),
       icon: deps.iconSvg(deps.icons.open, "inline-icon"),
       dataAttr: "data-bookmark-open-action",
@@ -134,6 +134,37 @@ function renderOverflowMenu(deps) {
 
 function bookmarkLinkTarget(bookmark) {
   return bookmark.openMode === "current-tab" ? "_self" : "_blank";
+}
+
+function renderHomepageBookmark(options, deps) {
+  const { bookmark, editMode } = options;
+  const title = escapeHtml(bookmark.title || "");
+  const url = escapeHtml(bookmark.url || "");
+
+  return `
+    <article
+      class="bookmark-item bookmark-item--homepage service ${editMode ? "is-edit-mode" : ""} ${bookmark.favorite ? "is-favorite" : ""}"
+      data-bookmark-id="${escapeHtml(bookmark.id)}"
+      data-category-id="${escapeHtml(options.category.id)}"
+    >
+      <a
+        class="bookmark-homepage__main"
+        href="${url}"
+        target="${bookmarkLinkTarget(bookmark)}"
+        rel="noreferrer"
+        data-bookmark-open
+      >
+        ${renderThumbnail(bookmark, deps, "homepage")}
+        <h3 class="bookmark-item__title">${title}</h3>
+      </a>
+      ${editMode ? `
+        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--homepage">
+          ${renderActionButtons(options, deps, { editOnly: true })}
+          ${renderReorderActions(options, deps)}
+        </div>
+      ` : ""}
+    </article>
+  `;
 }
 
 function renderListBookmark(options, deps) {
@@ -222,6 +253,7 @@ function renderCardBookmark(options, deps) {
 }
 
 export function renderBookmarkMarkup(options, deps) {
+  if (options.homepage) return renderHomepageBookmark(options, deps);
   const view = normalizeBookmarkView(options.view);
   if (view === "cards") return renderCardBookmark(options, deps);
   return renderListBookmark(options, deps);

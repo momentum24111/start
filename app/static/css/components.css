@@ -1413,6 +1413,85 @@ textarea {
   grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr) auto;
 }
 
+.bookmark-item--homepage {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: var(--size-service-height);
+  max-height: var(--size-service-height);
+  padding: 0;
+  contain-intrinsic-size: auto var(--size-service-height);
+  --service-fade-bg: var(--surface-2);
+}
+
+.bookmark-item--homepage:hover {
+  --service-fade-bg: var(--service-hover-bg);
+}
+
+.bookmark-item--homepage:active {
+  --service-fade-bg: var(--service-active-bg);
+}
+
+.bookmark-homepage__main {
+  display: flex;
+  align-items: center;
+  gap: var(--size-gap-inline);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--size-service-pad-y) var(--size-service-pad-x-right) var(--size-service-pad-y) var(--size-service-pad-x-left);
+  color: inherit;
+  text-decoration: none;
+}
+
+.bookmark-item--homepage.is-edit-mode .bookmark-homepage__main {
+  position: relative;
+  pointer-events: none;
+}
+
+.bookmark-item--homepage.is-edit-mode .bookmark-homepage__main::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--size-edit-overlay-fade);
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--service-fade-bg));
+}
+
+.bookmark-thumb--homepage {
+  width: var(--size-service-icon);
+  height: var(--size-service-icon);
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.bookmark-item--homepage .bookmark-thumb__placeholder-icon {
+  width: calc(18px * var(--element-scale));
+  height: calc(18px * var(--element-scale));
+}
+
+.bookmark-item--homepage .bookmark-item__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.bookmark-item--homepage.is-edit-mode {
+  padding-right: 0;
+}
+
+.bookmark-item__edit-actions--homepage {
+  align-self: stretch;
+  padding-right: calc(0.15rem * var(--element-scale));
+}
+
 .bookmark-item--card {
   display: flex;
   flex-direction: column;

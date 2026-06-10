@@ -410,14 +410,16 @@ async function handleDeleteBookmark(bookmark) {
   render();
 }
 
-function createBookmarkElementForBookmark(bookmark, category, view) {
+function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false } = {}) {
   const categoryContext = category || { id: resolveBookmarkModalCategoryId(bookmark, category) };
   const reorder = getBookmarkReorderState(category, bookmark);
+  const normalizedView = normalizeBookmarkView(view);
   return createBookmarkElement(
     {
       category: categoryContext,
       bookmark,
-      view: normalizeBookmarkView(view),
+      view: normalizedView,
+      homepage: homepage && normalizedView === VIEW_LIST,
       editMode: state.editMode,
       config: state.config,
       hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
@@ -1093,7 +1095,12 @@ function renderBookmarkCollection(bookmarks, navId, viewMode) {
   const root = document.createElement("div");
   root.className = `${bookmarksContainerClass(normalizedView)} bookmark-collection view-mode--${normalizedView}`;
   for (const bookmark of bookmarks) {
-    root.append(createBookmarkElementForBookmark(bookmark, resolveBookmarkCategoryForNav(bookmark, navId), normalizedView));
+    root.append(createBookmarkElementForBookmark(
+      bookmark,
+      resolveBookmarkCategoryForNav(bookmark, navId),
+      normalizedView,
+      { homepage: navId === NAV_ALL }
+    ));
   }
   return root;
 }
@@ -1439,7 +1446,7 @@ function animateCategoryCollapse(content, arrow, collapsed) {
 }
 
 function renderBookmark(category, bookmark) {
-  return createBookmarkElementForBookmark(bookmark, category, VIEW_LIST);
+  return createBookmarkElementForBookmark(bookmark, category, VIEW_LIST, { homepage: true });
 }
 
 function renderAddCategoryCard() {
