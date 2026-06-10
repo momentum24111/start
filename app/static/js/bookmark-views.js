@@ -135,7 +135,7 @@ function renderOverflowMenu(deps, { nav = false } = {}) {
       >
         <span class="btn__icon">${deps.iconSvg(deps.icons.dotsVertical, "inline-icon")}</span>
       </button>
-      <div class="bookmark-menu__panel hidden" data-bookmark-menu-panel role="menu">
+      <div class="bookmark-menu__panel bookmark-menu__panel--source hidden" data-bookmark-menu-panel role="menu" aria-hidden="true">
         ${menuItems}
       </div>
     </div>
@@ -401,24 +401,126 @@ export function renderBookmarkMarkup(options, deps) {
   return renderListBookmark(options, deps);
 }
 
-function closeBookmarkMenu(menuRoot) {
-  if (!menuRoot) return;
-  const panel = menuRoot.querySelector("[data-bookmark-menu-panel]");
-  const trigger = menuRoot.querySelector("[data-bookmark-menu-trigger]");
-  panel?.classList.add("hidden");
-  trigger?.setAttribute("aria-expanded", "false");
-  menuRoot.classList.remove("is-open");
+let activeBookmarkMenu = null;
+let bookmarkMenuOverlay = null;
+let bookmarkMenuDismissBound = false;
+
+function getBookmarkMenuOverlay() {
+  if (bookmarkMenuOverlay instanceof HTMLElement) return bookmarkMenuOverlay;
+  const overlay = document.createElement("div");
+  overlay.id = "bookmark-menu-overlay";
+  overlay.className = "bookmark-menu-overlay hidden";
+  overlay.innerHTML = `<div class="bookmark-menu__panel" data-bookmark-menu-panel role="menu"></div>`;
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeBookmarkMenu();
+  });
+  document.body.append(overlay);
+  bookmarkMenuOverlay = overlay;
+  return overlay;
 }
 
-function openBookmarkMenu(menuRoot) {
-  document.querySelectorAll(".bookmark-menu.is-open").forEach((entry) => {
-    if (entry !== menuRoot) closeBookmarkMenu(entry);
+function positionBookmarkMenuPanel(panel, trigger) {
+  const gap = 6;
+  const margin = 8;
+  panel.style.left = "0px";
+  panel.style.top = "0px";
+  const panelRect = panel.getBoundingClientRect();
+  const triggerRect = trigger.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let top = triggerRect.bottom + gap;
+  let left = triggerRect.right - panelRect.width;
+
+  if (top + panelRect.height > viewportHeight - margin) {
+    const aboveTop = triggerRect.top - panelRect.height - gap;
+    if (aboveTop >= margin) top = aboveTop;
+    else top = Math.max(margin, viewportHeight - panelRect.height - margin);
+  }
+  if (top < margin) top = margin;
+
+  if (left < margin) left = margin;
+  if (left + panelRect.width > viewportWidth - margin) {
+    left = Math.max(margin, viewportWidth - panelRect.width - margin);
+  }
+
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+}
+
+function bindOverlayMenuActions(panel, actions) {
+  panel.querySelector("[data-bookmark-open-action]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeBookmarkMenu();
+    actions.onOpen?.();
   });
-  const panel = menuRoot.querySelector("[data-bookmark-menu-panel]");
-  const trigger = menuRoot.querySelector("[data-bookmark-menu-trigger]");
-  panel?.classList.remove("hidden");
-  trigger?.setAttribute("aria-expanded", "true");
+  panel.querySelector("[data-edit-bookmark]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeBookmarkMenu();
+    actions.onEdit?.();
+  });
+  panel.querySelector("[data-reload-bookmark-metadata]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeBookmarkMenu();
+    actions.onReloadMetadata?.();
+  });
+  panel.querySelector("[data-delete-bookmark]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeBookmarkMenu();
+    actions.onDelete?.();
+  });
+}
+
+function onBookmarkMenuViewportChange() {
+  if (activeBookmarkMenu) closeBookmarkMenu();
+}
+
+export function closeBookmarkMenu() {
+  const overlay = bookmarkMenuOverlay;
+  const panel = overlay?.querySelector("[data-bookmark-menu-panel]");
+  if (panel) panel.innerHTML = "";
+  overlay?.classList.add("hidden");
+  overlay?.classList.remove("is-open");
+  if (activeBookmarkMenu?.trigger) {
+    activeBookmarkMenu.trigger.setAttribute("aria-expanded", "false");
+  }
+  activeBookmarkMenu?.menuRoot?.classList.remove("is-open");
+  activeBookmarkMenu = null;
+}
+
+function openBookmarkMenu(menuRoot, actions) {
+  const trigger = menuRoot?.querySelector("[data-bookmark-menu-trigger]");
+  const sourcePanel = menuRoot?.querySelector("[data-bookmark-menu-panel]");
+  if (!(trigger instanceof HTMLElement) || !(sourcePanel instanceof HTMLElement)) return;
+
+  if (activeBookmarkMenu?.menuRoot === menuRoot) {
+    closeBookmarkMenu();
+    return;
+  }
+
+  closeBookmarkMenu();
+
+  const overlay = getBookmarkMenuOverlay();
+  const panel = overlay.querySelector("[data-bookmark-menu-panel]");
+  if (!(panel instanceof HTMLElement)) return;
+
+  panel.innerHTML = sourcePanel.innerHTML;
+  bindOverlayMenuActions(panel, actions);
+
+  overlay.classList.remove("hidden");
+  overlay.classList.add("is-open");
+  trigger.setAttribute("aria-expanded", "true");
   menuRoot.classList.add("is-open");
+  activeBookmarkMenu = { menuRoot, trigger };
+
+  requestAnimationFrame(() => {
+    if (activeBookmarkMenu?.menuRoot !== menuRoot) return;
+    positionBookmarkMenuPanel(panel, trigger);
+  });
 }
 
 function bindThumbnailFallback(item, deps) {
@@ -464,43 +566,20 @@ export function createBookmarkElement(options, deps) {
     });
   });
 
-  item.querySelectorAll("[data-edit-bookmark]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeBookmarkMenu(item.querySelector(".bookmark-menu"));
-      deps.onEdit?.();
-    });
-  });
-
-  item.querySelectorAll("[data-delete-bookmark]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeBookmarkMenu(item.querySelector(".bookmark-menu"));
-      deps.onDelete?.();
-    });
-  });
-
-  item.querySelectorAll("[data-reload-bookmark-metadata]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeBookmarkMenu(item.querySelector(".bookmark-menu"));
-      deps.onReloadMetadata?.(item);
-    });
-  });
+  const menuActions = {
+    onOpen: openLink,
+    onEdit: () => deps.onEdit?.(),
+    onDelete: () => deps.onDelete?.(),
+    onReloadMetadata: () => deps.onReloadMetadata?.(item)
+  };
 
   const menuRoot = item.querySelector(".bookmark-menu");
   const menuTrigger = item.querySelector("[data-bookmark-menu-trigger]");
   menuTrigger?.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (menuRoot?.classList.contains("is-open")) {
-      closeBookmarkMenu(menuRoot);
-      return;
-    }
-    openBookmarkMenu(menuRoot);
+    if (!(menuRoot instanceof HTMLElement)) return;
+    openBookmarkMenu(menuRoot, menuActions);
   });
 
   item.querySelector("[data-move-bookmark-left]")?.addEventListener("click", (event) => {
@@ -515,22 +594,23 @@ export function createBookmarkElement(options, deps) {
   return item;
 }
 
-let menuDismissBound = false;
-
 export function ensureBookmarkMenuDismiss() {
-  if (menuDismissBound) return;
-  menuDismissBound = true;
+  if (bookmarkMenuDismissBound) return;
+  bookmarkMenuDismissBound = true;
+  getBookmarkMenuOverlay();
   document.addEventListener("click", (event) => {
+    if (!activeBookmarkMenu) return;
     const target = event.target;
-    if (target instanceof Element && target.closest(".bookmark-menu")) return;
-    document.querySelectorAll(".bookmark-menu.is-open").forEach((menuRoot) => {
-      closeBookmarkMenu(menuRoot);
-    });
+    if (target instanceof Element && (
+      target.closest("#bookmark-menu-overlay") ||
+      target.closest("[data-bookmark-menu-trigger]")
+    )) return;
+    closeBookmarkMenu();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    document.querySelectorAll(".bookmark-menu.is-open").forEach((menuRoot) => {
-      closeBookmarkMenu(menuRoot);
-    });
+    if (event.key !== "Escape" || !activeBookmarkMenu) return;
+    closeBookmarkMenu();
   });
+  window.addEventListener("scroll", onBookmarkMenuViewportChange, true);
+  window.addEventListener("resize", onBookmarkMenuViewportChange);
 }

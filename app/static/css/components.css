@@ -1932,19 +1932,37 @@ textarea {
 .bookmark-menu {
   position: relative;
   flex: 0 0 auto;
-  z-index: 5;
+  z-index: 2;
 }
 
-.bookmark-menu__panel {
-  position: absolute;
-  top: calc(100% + 0.2rem);
-  right: 0;
-  min-width: var(--size-bookmark-menu-width);
-  border-radius: var(--size-bookmark-card-radius);
+.bookmark-menu__panel--source {
+  display: none !important;
+}
+
+.bookmark-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  pointer-events: none;
+}
+
+.bookmark-menu-overlay.is-open {
+  pointer-events: auto;
+}
+
+.bookmark-menu-overlay .bookmark-menu__panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  margin: 0;
+  min-width: var(--size-bookmark-menu-width, 9.5rem);
+  max-width: min(calc(100vw - 1rem), 16rem);
+  border-radius: var(--size-bookmark-card-radius, 6px);
   background: var(--bookmark-menu-bg);
   box-shadow: var(--modal-shadow);
   padding: 0.25rem;
-  z-index: 6;
+  z-index: 951;
+  pointer-events: auto;
 }
 
 .bookmark-menu__item {
@@ -1954,7 +1972,7 @@ textarea {
   color: var(--text);
   text-align: left;
   padding: 0.42rem 0.5rem;
-  border-radius: calc(var(--size-bookmark-card-radius) - 2px);
+  border-radius: calc(var(--size-bookmark-card-radius, 6px) - 2px);
   cursor: pointer;
   font: inherit;
 }
@@ -2005,10 +2023,6 @@ textarea {
   left: calc(0.4rem * var(--element-scale));
   bottom: calc(0.4rem * var(--element-scale));
   z-index: 5;
-}
-
-.bookmark-item--card .bookmark-menu__panel {
-  top: calc(100% + 0.15rem);
 }
 
 .bookmark-item--list.has-shortcut .bookmark-item__head {
