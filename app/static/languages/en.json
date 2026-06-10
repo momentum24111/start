@@ -19,6 +19,7 @@
     "bookmark": "Bookmark",
     "title": "Title",
     "name": "Name",
+    "homepageName": "Homepage name",
     "url": "URL",
     "icon": "Icon",
     "categoryColor": "Category color",

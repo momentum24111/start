@@ -951,7 +951,14 @@ async function setNavViewModeForActive(mode) {
   render();
 }
 
+function getHomepageName() {
+  const raw = state.settings.appTitle;
+  const trimmed = typeof raw === "string" ? raw.trim() : String(raw || "").trim();
+  return trimmed || t("ui.navStart");
+}
+
 function getNavTitle(navId) {
+  if (navId === NAV_ALL) return getHomepageName();
   const systemItem = SYSTEM_NAV_ITEMS.find((entry) => entry.id === navId);
   if (systemItem) return t(systemItem.labelKey);
   return findSidebarCategoryById(state.config, navId)?.name || "";
@@ -989,8 +996,9 @@ function renderSidebar() {
 
   elements.sidebarSystem.replaceChildren();
   for (const item of SYSTEM_NAV_ITEMS) {
+    const label = item.id === NAV_ALL ? getHomepageName() : t(item.labelKey);
     elements.sidebarSystem.append(
-      renderSidebarLink(item.id, t(item.labelKey), getBookmarkCountForNav(state.config, item.id), item.icon)
+      renderSidebarLink(item.id, label, getBookmarkCountForNav(state.config, item.id), item.icon)
     );
   }
 
@@ -1155,11 +1163,8 @@ function renderNavView() {
   panel.className = "nav-view-panel";
 
   const header = document.createElement("div");
-  header.className = "nav-view-header";
-  const title = document.createElement("h2");
-  title.className = "nav-view-title";
-  title.textContent = getNavTitle(navId);
-  header.append(title, renderViewModeToggle(viewMode));
+  header.className = "nav-view-header nav-view-header--toggle-only";
+  header.append(renderViewModeToggle(viewMode));
   panel.append(header);
 
   const bookmarks = getBookmarksForNav(state.config, navId);
@@ -1195,11 +1200,8 @@ function render() {
     elements.categories.classList.remove("hidden");
     if (isHomepage) {
       const header = document.createElement("div");
-      header.className = "nav-view-header";
-      const title = document.createElement("h2");
-      title.className = "nav-view-title";
-      title.textContent = getNavTitle(activeNavId);
-      header.append(title, renderViewModeToggle(viewMode));
+      header.className = "nav-view-header nav-view-header--toggle-only";
+      header.append(renderViewModeToggle(viewMode));
       elements.navView?.append(header);
     }
     for (const category of getHomepageCategories(state.config)) {
@@ -1222,8 +1224,7 @@ function updateDocumentLanguage() {
 }
 
 function updateAppTitleUI() {
-  const raw = state.settings.appTitle;
-  const title = (typeof raw === "string" ? raw.trim() : String(raw || "").trim()) || "Start";
+  const title = getNavTitle(getActiveNavId());
   if (document.title !== title) document.title = title;
   if (elements.title.textContent !== title) elements.title.textContent = title;
 }
@@ -1243,9 +1244,8 @@ function updateTopbarActionTexts() {
 function refreshStaticLocalizedTexts() {
   updateDocumentLanguage();
   updateTopbarActionTexts();
+  updateAppTitleUI();
   renderSidebar();
-  const navTitle = elements.navView?.querySelector(".nav-view-title");
-  if (navTitle) navTitle.textContent = getNavTitle(getActiveNavId());
   elements.navView?.querySelectorAll("[data-view-mode]").forEach((button) => {
     const mode = button.dataset.viewMode;
     button.title = mode === VIEW_LIST ? t("ui.viewList") : t("ui.viewCards");
@@ -1263,7 +1263,7 @@ function refreshSettingsModalTexts(form) {
   if (!form) return;
   const modalTitle = form.closest(".modal")?.querySelector("h2");
   if (modalTitle) modalTitle.textContent = t("ui.settings");
-  form.querySelector("[data-settings-name-label]")?.replaceChildren(t("ui.name"));
+  form.querySelector("[data-settings-name-label]")?.replaceChildren(t("ui.homepageName"));
   form.querySelector("[data-settings-theme-label]")?.replaceChildren(t("ui.theme"));
   form.querySelector("[data-settings-language-label]")?.replaceChildren(t("ui.language"));
   form.querySelector("[data-settings-accent-label]")?.replaceChildren(t("ui.categoryAccentStrength"));
@@ -2040,8 +2040,8 @@ function openSettingsModal() {
   `).join("");
   form.innerHTML = `
     <div class="form-row">
-      <label data-settings-name-label>${t("ui.name")}</label>
-      <input name="appTitle" value="${state.settings.appTitle || "Start"}" />
+      <label data-settings-name-label>${t("ui.homepageName")}</label>
+      <input name="appTitle" value="${state.settings.appTitle ?? ""}" />
     </div>
     <div class="form-row">
       <label data-settings-theme-label>${t("ui.theme")}</label>
@@ -2184,8 +2184,9 @@ function openSettingsModal() {
     }, delayMs);
   };
   form.querySelector("input[name='appTitle']")?.addEventListener("input", (event) => {
-    state.settings.appTitle = event.target.value || "Start";
+    state.settings.appTitle = event.target.value;
     updateAppTitleUI();
+    renderSidebar();
     scheduleSettingsPersist();
   });
   form.querySelector("select[name='language']")?.addEventListener("change", async (event) => {

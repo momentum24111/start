@@ -19,6 +19,7 @@
     "bookmark": "Lesezeichen",
     "title": "Titel",
     "name": "Name",
+    "homepageName": "Name der Startseite",
     "url": "URL",
     "icon": "Icon",
     "categoryColor": "Kategorie Farbe",

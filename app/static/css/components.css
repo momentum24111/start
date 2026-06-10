@@ -273,6 +273,10 @@ textarea {
   flex-wrap: wrap;
 }
 
+.nav-view-header--toggle-only {
+  justify-content: flex-end;
+}
+
 .nav-view-title {
   margin: 0;
   font-size: 1.15rem;
