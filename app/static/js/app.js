@@ -372,10 +372,17 @@ function resolveBookmarkModalCategoryId(bookmark, category) {
 }
 
 function getBookmarkReorderState(category, bookmark) {
-  if (!category?.id || !isCategoryNavId(state.config, category.id)) {
+  if (!category?.id) {
     return { canMoveLeft: false, canMoveRight: false };
   }
-  const bookmarks = getBookmarksForSidebarCategory(state.config, category.id);
+  let bookmarks;
+  if (isCategoryNavId(state.config, category.id)) {
+    bookmarks = getBookmarksForSidebarCategory(state.config, category.id);
+  } else if (findCategoryById(state.config, category.id)) {
+    bookmarks = getBookmarksForCategory(state.config, category.id);
+  } else {
+    return { canMoveLeft: false, canMoveRight: false };
+  }
   const bookmarkIndex = bookmarks.findIndex((entry) => entry.id === bookmark.id);
   return {
     canMoveLeft: bookmarkIndex > 0,
