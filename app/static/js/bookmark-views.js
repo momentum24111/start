@@ -136,6 +136,39 @@ function bookmarkLinkTarget(bookmark) {
   return bookmark.openMode === "current-tab" ? "_self" : "_blank";
 }
 
+function renderHomepageCardBookmark(options, deps) {
+  const { bookmark, editMode } = options;
+  const title = escapeHtml(bookmark.title || "");
+  const url = escapeHtml(bookmark.url || "");
+
+  return `
+    <article
+      class="bookmark-item bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmark.favorite ? "is-favorite" : ""}"
+      data-bookmark-id="${escapeHtml(bookmark.id)}"
+      data-category-id="${escapeHtml(options.category.id)}"
+    >
+      <a
+        class="bookmark-card__link"
+        href="${url}"
+        target="${bookmarkLinkTarget(bookmark)}"
+        rel="noreferrer"
+        data-bookmark-open
+        aria-label="${title}"
+      ></a>
+      ${renderThumbnail(bookmark, deps, "homepage-card")}
+      <div class="bookmark-homepage-card__body">
+        <h3 class="bookmark-item__title">${title}</h3>
+      </div>
+      ${editMode ? `
+        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--homepage-card">
+          ${renderActionButtons(options, deps, { editOnly: true })}
+          ${renderReorderActions(options, deps)}
+        </div>
+      ` : ""}
+    </article>
+  `;
+}
+
 function renderHomepageBookmark(options, deps) {
   const { bookmark, editMode } = options;
   const title = escapeHtml(bookmark.title || "");
@@ -253,7 +286,11 @@ function renderCardBookmark(options, deps) {
 }
 
 export function renderBookmarkMarkup(options, deps) {
-  if (options.homepage) return renderHomepageBookmark(options, deps);
+  if (options.homepage) {
+    const view = normalizeBookmarkView(options.view);
+    if (view === "cards") return renderHomepageCardBookmark(options, deps);
+    return renderHomepageBookmark(options, deps);
+  }
   const view = normalizeBookmarkView(options.view);
   if (view === "cards") return renderCardBookmark(options, deps);
   return renderListBookmark(options, deps);

@@ -419,7 +419,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       category: categoryContext,
       bookmark,
       view: normalizedView,
-      homepage: homepage && normalizedView === VIEW_LIST,
+      homepage,
       editMode: state.editMode,
       config: state.config,
       hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
@@ -1176,16 +1176,17 @@ function render() {
 
   const activeNavId = getActiveNavId();
   const viewMode = getActiveNavViewMode();
-  const showCategoryGrid = shouldShowCategoryGrid(activeNavId, state.editMode, viewMode);
+  const showCategoryGrid = shouldShowCategoryGrid(activeNavId);
 
   if (elements.navView) elements.navView.innerHTML = "";
   elements.categories.innerHTML = "";
 
   if (showCategoryGrid) {
-    const showAllBookmarksHeader = activeNavId === NAV_ALL && !state.editMode;
-    elements.navView?.classList.toggle("hidden", !showAllBookmarksHeader);
+    const isHomepage = activeNavId === NAV_ALL;
+    elements.navView?.classList.toggle("hidden", !isHomepage);
+    elements.navView?.classList.toggle("nav-view--homepage", isHomepage);
     elements.categories.classList.remove("hidden");
-    if (showAllBookmarksHeader) {
+    if (isHomepage) {
       const header = document.createElement("div");
       header.className = "nav-view-header";
       const title = document.createElement("h2");
@@ -1203,6 +1204,7 @@ function render() {
     return;
   }
 
+  elements.navView?.classList.remove("nav-view--homepage");
   elements.navView?.classList.remove("hidden");
   elements.categories.classList.add("hidden");
   elements.navView?.append(renderNavView());
@@ -1317,6 +1319,10 @@ function renderCategory(category) {
   category.slots = slotSpan;
   const categoryType = normalizeCategoryType(category.type);
   const iframeUrl = normalizeIframeUrl(category.iframeUrl);
+  const viewMode = getActiveNavViewMode();
+  const bookmarkContainerClass = viewMode === VIEW_CARDS
+    ? "category-bookmarks category-bookmarks--cards"
+    : `${bookmarksContainerClass(VIEW_LIST)} services`;
   const card = document.createElement("article");
   card.className = `category ${state.editMode ? "is-edit-mode" : ""}`;
   card.dataset.color = category.color || "primary";
@@ -1350,7 +1356,7 @@ function renderCategory(category) {
           ></iframe>
         </div>
       ` : `
-        <div data-bookmarks-container data-category-id="${category.id}" class="${bookmarksContainerClass(VIEW_LIST)} services"></div>
+        <div data-bookmarks-container data-category-id="${category.id}" class="${bookmarkContainerClass}"></div>
       `}
     </div>
     ${state.editMode && categoryType !== "iframe" ? renderAddBookmarkTile() : ""}
@@ -1446,7 +1452,7 @@ function animateCategoryCollapse(content, arrow, collapsed) {
 }
 
 function renderBookmark(category, bookmark) {
-  return createBookmarkElementForBookmark(bookmark, category, VIEW_LIST, { homepage: true });
+  return createBookmarkElementForBookmark(bookmark, category, getActiveNavViewMode(), { homepage: true });
 }
 
 function renderAddCategoryCard() {

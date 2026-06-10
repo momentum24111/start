@@ -109,8 +109,6 @@ export function resolveActiveNavId(config, settings) {
   return DEFAULT_ACTIVE_NAV_ID;
 }
 
-export function shouldShowCategoryGrid(activeNavId, editMode, viewMode) {
-  if (editMode) return true;
-  if (activeNavId !== NAV_ALL) return false;
-  return viewMode === VIEW_LIST;
+export function shouldShowCategoryGrid(activeNavId) {
+  return activeNavId === NAV_ALL;
 }

@@ -260,6 +260,11 @@ textarea {
   margin-bottom: 0.85rem;
 }
 
+.nav-view--homepage {
+  gap: calc(1rem * var(--element-scale));
+  margin-bottom: calc(1.35rem * var(--element-scale));
+}
+
 .nav-view-header {
   display: flex;
   align-items: center;
@@ -573,8 +578,18 @@ main {
   will-change: max-height;
 }
 
-.category-content > .services {
+.category-content > .services,
+.category-content > .category-bookmarks {
   overflow: hidden;
+}
+
+.category-content > .category-bookmarks--cards {
+  margin-top: var(--size-gap-card);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(140px * var(--element-scale))), 1fr));
+  gap: var(--size-gap-services);
+  width: 100%;
+  min-width: 0;
 }
 
 .category-iframe {
@@ -1490,6 +1505,67 @@ textarea {
 .bookmark-item__edit-actions--homepage {
   align-self: stretch;
   padding-right: calc(0.15rem * var(--element-scale));
+}
+
+.bookmark-item--homepage-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  contain-intrinsic-size: auto calc(180px * var(--element-scale));
+  --service-fade-bg: var(--surface-2);
+}
+
+.bookmark-item--homepage-card:hover {
+  --service-fade-bg: var(--service-hover-bg);
+}
+
+.bookmark-item--homepage-card:active {
+  --service-fade-bg: var(--service-active-bg);
+}
+
+.bookmark-thumb--homepage-card {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+}
+
+.bookmark-homepage-card__body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(2.6rem * var(--element-scale));
+  padding: calc(0.45rem * var(--element-scale)) calc(0.5rem * var(--element-scale)) calc(0.55rem * var(--element-scale));
+  pointer-events: none;
+  text-align: center;
+}
+
+.bookmark-item--homepage-card .bookmark-item__title {
+  margin: 0;
+  width: 100%;
+  font-weight: 500;
+  font-size: var(--size-service-font);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-align: center;
+  white-space: normal;
+}
+
+.bookmark-item--homepage-card.is-edit-mode .bookmark-card__link {
+  pointer-events: none;
+}
+
+.bookmark-item__edit-actions--homepage-card {
+  position: absolute;
+  left: calc(0.35rem * var(--element-scale));
+  right: calc(0.35rem * var(--element-scale));
+  bottom: calc(0.35rem * var(--element-scale));
+  justify-content: flex-end;
+  z-index: 4;
 }
 
 .bookmark-item--card {
