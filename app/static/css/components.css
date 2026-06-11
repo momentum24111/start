@@ -1438,7 +1438,8 @@ textarea {
 
 /* —— Lesezeichen: Listen- und Kartenansicht —— */
 
-#categories {
+#categories,
+#nav-view {
   --size-bookmark-list-thumb: calc(72px * var(--element-scale));
   --size-bookmark-list-height: calc(96px * var(--element-scale));
   --size-bookmark-card-radius: calc(6px * var(--element-scale));
