@@ -526,6 +526,53 @@ export function removeBookmarkFromSidebarCategoryOrder(config, categoryId, bookm
   );
 }
 
+export function listCustomSidebarCategoryIds(config) {
+  return listSidebarCategories(config).map((category) => category.id);
+}
+
+export function clearCustomSidebarCategoriesFromBookmark(config, bookmark) {
+  const customIds = new Set(listCustomSidebarCategoryIds(config));
+  for (const categoryId of customIds) {
+    if ((bookmark.sidebarCategoryIds || []).includes(categoryId)) {
+      removeBookmarkFromSidebarCategoryOrder(config, categoryId, bookmark.id);
+    }
+  }
+  bookmark.sidebarCategoryIds = (bookmark.sidebarCategoryIds || []).filter((id) => !customIds.has(id));
+}
+
+export function assignBookmarkToCustomSidebarCategory(config, bookmark, categoryId) {
+  clearCustomSidebarCategoriesFromBookmark(config, bookmark);
+  if (!bookmark.sidebarCategoryIds) bookmark.sidebarCategoryIds = [];
+  if (!bookmark.sidebarCategoryIds.includes(categoryId)) {
+    bookmark.sidebarCategoryIds.push(categoryId);
+  }
+  ensureBookmarkInSidebarCategoryOrder(config, categoryId, bookmark.id);
+}
+
+export function assignBookmarkToUnsorted(config, bookmark) {
+  clearCustomSidebarCategoriesFromBookmark(config, bookmark);
+}
+
+export function assignBookmarkToFavorites(bookmark) {
+  if (!bookmark.sidebarCategoryIds) bookmark.sidebarCategoryIds = [];
+  if (!bookmark.sidebarCategoryIds.includes(FAVORITES_CATEGORY_ID)) {
+    bookmark.sidebarCategoryIds.push(FAVORITES_CATEGORY_ID);
+  }
+  bookmark.favorite = true;
+}
+
+export function assignBookmarkToHomepageCategory(config, bookmark, categoryId) {
+  const listCategoryIds = new Set(listBookmarkListCategories(config).map((category) => category.id));
+  const preserved = (bookmark.categoryIds || []).filter((id) => !listCategoryIds.has(id));
+  for (const previousId of bookmark.categoryIds || []) {
+    if (listCategoryIds.has(previousId) && previousId !== categoryId) {
+      removeBookmarkFromCategoryOrder(config, previousId, bookmark.id);
+    }
+  }
+  bookmark.categoryIds = [...preserved, categoryId];
+  ensureBookmarkInCategoryOrder(config, categoryId, bookmark.id);
+}
+
 export function removeSidebarCategoryFromConfig(config, categoryId) {
   config.sidebarCategories = (config.sidebarCategories || []).filter((category) => category.id !== categoryId);
   delete config.sidebarCategoryBookmarkOrder?.[categoryId];

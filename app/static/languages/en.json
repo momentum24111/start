@@ -85,6 +85,8 @@
     "searchPlaceholder": "Search bookmarks…",
     "searchResults": "Search results",
     "searchNoResults": "No bookmarks found",
+    "dropToHomepage": "Place on homepage",
+    "dropToHomepageLabel": "Homepage category",
     "actions": "Actions",
     "restartApp": "Restart application",
     "restartingAppTitle": "Restart",

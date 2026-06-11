@@ -31,6 +31,8 @@ import {
 } from "./bookmarks.js";
 import {
   NAV_ALL,
+  NAV_FAVORITES,
+  NAV_UNSORTED,
   VIEW_LIST,
   VIEW_CARDS,
   SYSTEM_NAV_ITEMS,
@@ -56,9 +58,11 @@ import {
   bookmarksContainerClass,
   createBookmarkElement,
   ensureBookmarkMenuDismiss,
-  escapeHtml
+  escapeHtml,
+  openBookmarkUrl
 } from "./bookmark-views.js";
 import { initBookmarkSearch, refreshBookmarkSearchTexts } from "./bookmark-search.js";
+import { bindBookmarkDrag, initBookmarkDragDrop } from "./bookmark-drag.js";
 
 const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
@@ -96,6 +100,9 @@ const state = {
 };
 
 const CATEGORY_METADATA_TOAST_ID = "category-metadata-reload";
+const SIDEBAR_MOBILE_BREAKPOINT = "(max-width: 900px)";
+let sidebarMobileQuery = null;
+let desktopSidebarOpen = false;
 
 function categoryEffectiveCollapsed(category) {
   if (state.editMode) return false;
@@ -386,14 +393,43 @@ function triggerBookmarkLaunch(bookmarkId) {
   tile.click();
 }
 
-function openBookmarkFromSearch(bookmark) {
-  const url = String(bookmark?.url || "").trim();
-  if (!url) return;
-  if (bookmark.openMode === "current-tab") {
-    window.location.assign(url);
-    return;
+function openBookmarkFromSearch(bookmark, { newTab = false } = {}) {
+  openBookmarkUrl(bookmark, { newTab });
+}
+
+async function pickHomepageCategoryForDrop() {
+  const categories = listBookmarkListCategories(state.config);
+  if (!categories.length) return null;
+
+  let selectedCategoryId = categories[0].id;
+  const body = document.createElement("div");
+  body.className = "bookmark-drop-homepage-picker";
+  const label = document.createElement("label");
+  label.textContent = t("ui.dropToHomepageLabel");
+  const select = document.createElement("select");
+  select.className = "bookmark-drop-homepage-picker__select";
+  for (const category of categories) {
+    const option = document.createElement("option");
+    option.value = category.id;
+    option.textContent = category.name;
+    select.append(option);
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+  select.addEventListener("change", () => {
+    selectedCategoryId = select.value;
+  });
+  body.append(label, select);
+
+  let confirmed = false;
+  await showModal({
+    title: t("ui.dropToHomepage"),
+    content: body,
+    saveLabel: t("ui.confirm"),
+    cancelLabel: t("ui.cancel"),
+    onSave: async () => {
+      confirmed = true;
+    }
+  });
+  return confirmed ? selectedCategoryId : null;
 }
 
 function createBookmarkUiDeps() {
@@ -402,6 +438,7 @@ function createBookmarkUiDeps() {
     iconSvg,
     mdiIcon,
     bookmarkStoredImageSrc,
+    bindBookmarkDrag,
     renderShortcutChips,
     icons: ICONS
   };
@@ -1059,6 +1096,17 @@ async function bootstrap() {
     t,
     openBookmark: openBookmarkFromSearch
   });
+  initBookmarkDragDrop({
+    getConfig: () => state.config,
+    bookmarkStoredImageSrc,
+    pushUndo,
+    persistAndRender: async () => {
+      await persistConfig();
+      render();
+    },
+    pickHomepageCategory: pickHomepageCategoryForDrop
+  });
+  initSidebarResponsiveBehavior();
   const searchToggle = document.getElementById("bookmark-search-toggle");
   if (searchToggle) {
     searchToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.search, "inline-icon")}</span>`;
@@ -1147,8 +1195,34 @@ function queryNavigationElements() {
   elements.sidebarCategories = document.getElementById("sidebar-categories");
 }
 
+function ensureSidebarBackdrop() {
+  let backdrop = document.getElementById("sidebar-backdrop");
+  if (!(backdrop instanceof HTMLElement)) {
+    backdrop = document.createElement("div");
+    backdrop.id = "sidebar-backdrop";
+    backdrop.className = "sidebar-backdrop";
+    backdrop.hidden = true;
+    backdrop.addEventListener("click", () => {
+      setSidebarOpen(false);
+    });
+    document.body.append(backdrop);
+  }
+  return backdrop;
+}
+
+function isSidebarMobileLayout() {
+  return Boolean(sidebarMobileQuery?.matches);
+}
+
+function syncSidebarBackdrop() {
+  const backdrop = ensureSidebarBackdrop();
+  const show = isSidebarMobileLayout() && state.sidebarOpen;
+  backdrop.hidden = !show;
+  document.body.classList.toggle("sidebar-mobile-open", show);
+}
+
 function ensureAppShell() {
-  document.getElementById("sidebar-backdrop")?.remove();
+  ensureSidebarBackdrop();
 
   let shell = document.querySelector(".app-shell");
   if (!shell) {
@@ -1253,14 +1327,36 @@ function getActiveNavViewMode() {
 function setSidebarOpen(open) {
   ensureSidebarShell();
   queryNavigationElements();
-  state.sidebarOpen = Boolean(open);
-  if (elements.sidebar) {
-    elements.sidebar.classList.toggle("is-open", state.sidebarOpen);
-    elements.sidebar.setAttribute("aria-hidden", state.sidebarOpen ? "false" : "true");
+  const nextOpen = Boolean(open);
+  state.sidebarOpen = nextOpen;
+  if (!isSidebarMobileLayout()) {
+    desktopSidebarOpen = nextOpen;
   }
-  elements.navToggle?.setAttribute("aria-expanded", state.sidebarOpen ? "true" : "false");
-  elements.navToggle?.classList.toggle("is-active", state.sidebarOpen);
-  document.body.classList.toggle("sidebar-open", state.sidebarOpen);
+  if (elements.sidebar) {
+    elements.sidebar.classList.toggle("is-open", nextOpen);
+    elements.sidebar.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+  }
+  elements.navToggle?.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+  elements.navToggle?.classList.toggle("is-active", nextOpen);
+  document.body.classList.toggle("sidebar-open", nextOpen && !isSidebarMobileLayout());
+  document.body.classList.toggle("sidebar-mobile", isSidebarMobileLayout());
+  syncSidebarBackdrop();
+}
+
+function initSidebarResponsiveBehavior() {
+  sidebarMobileQuery = window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT);
+  const applyLayout = () => {
+    document.body.classList.toggle("sidebar-mobile", isSidebarMobileLayout());
+    if (isSidebarMobileLayout()) {
+      desktopSidebarOpen = state.sidebarOpen;
+      if (state.sidebarOpen) setSidebarOpen(false);
+      else syncSidebarBackdrop();
+      return;
+    }
+    setSidebarOpen(desktopSidebarOpen);
+  };
+  sidebarMobileQuery.addEventListener("change", applyLayout);
+  applyLayout();
 }
 
 async function selectNav(navId, { syncHistory = true, historyMode = "push" } = {}) {
@@ -1310,6 +1406,7 @@ function renderSidebarLink(navId, label, count, iconName) {
   button.type = "button";
   button.className = `sidebar-link ${isActive ? "is-active" : ""}`;
   button.dataset.navId = navId;
+  button.dataset.sidebarDrop = navId;
   button.innerHTML = `
     <span class="sidebar-link__icon">${mdiIcon(iconName, "inline-icon")}</span>
     <span class="sidebar-link__label">${label}</span>

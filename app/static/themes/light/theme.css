@@ -73,4 +73,9 @@ body {
   --search-results-shadow: 0 12px 28px rgba(15, 35, 60, 0.14);
   --search-results-empty-fg: #516379;
   --search-result-active-bg: #e6edf4;
+  --sidebar-backdrop-bg: rgba(15, 35, 60, 0.32);
+  --sidebar-drop-target-bg: #e6edf4;
+  --sidebar-drop-target-border: color-mix(in srgb, var(--primary) 45%, transparent);
+  --bookmark-drag-ghost-bg: #ffffff;
+  --bookmark-drag-ghost-shadow: 0 10px 24px rgba(15, 35, 60, 0.16);
 }

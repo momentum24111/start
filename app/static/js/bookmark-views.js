@@ -142,7 +142,18 @@ function renderOverflowMenu(deps, { nav = false } = {}) {
   `;
 }
 
-function bookmarkLinkTarget(bookmark) {
+export function openBookmarkUrl(bookmark, { newTab = false } = {}) {
+  const url = String(bookmark?.url || "").trim();
+  if (!url) return;
+  if (newTab) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  window.location.assign(url);
+}
+
+function bookmarkLinkTarget(bookmark, { navList = false } = {}) {
+  if (navList) return "_self";
   return bookmark.openMode === "current-tab" ? "_self" : "_blank";
 }
 
@@ -229,11 +240,12 @@ function renderNavListBookmark(options, deps) {
       class="bookmark-item bookmark-item--list bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
+      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
     >
       <a
         class="bookmark-item__nav-link"
         href="${urlAttr}"
-        target="${bookmarkLinkTarget(bookmark)}"
+        target="${bookmarkLinkTarget(bookmark, { navList: true })}"
         rel="noreferrer"
         data-bookmark-open
       >
@@ -272,11 +284,12 @@ function renderNavCardBookmark(options, deps) {
       class="bookmark-item bookmark-item--card bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
+      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
     >
       <a
         class="bookmark-card__link"
         href="${url}"
-        target="${bookmarkLinkTarget(bookmark)}"
+        target="${bookmarkLinkTarget(bookmark, { navList: true })}"
         rel="noreferrer"
         data-bookmark-open
         aria-label="${title}"
@@ -590,6 +603,19 @@ export function createBookmarkElement(options, deps) {
     event.stopPropagation();
     deps.onMoveRight?.();
   });
+
+  item.querySelector("[data-edit-bookmark]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deps.onEdit?.();
+  });
+  item.querySelector("[data-delete-bookmark]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deps.onDelete?.();
+  });
+
+  deps.bindBookmarkDrag?.(item, options.bookmark);
 
   return item;
 }

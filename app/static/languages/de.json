@@ -85,6 +85,8 @@
     "searchPlaceholder": "Lesezeichen suchen…",
     "searchResults": "Suchergebnisse",
     "searchNoResults": "Keine Lesezeichen gefunden",
+    "dropToHomepage": "Auf Startseite platzieren",
+    "dropToHomepageLabel": "Startseiten-Kategorie",
     "actions": "Aktionen",
     "restartApp": "Anwendung neu starten",
     "restartingAppTitle": "Neustart",

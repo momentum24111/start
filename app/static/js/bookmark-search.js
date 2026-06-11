@@ -141,10 +141,10 @@ function closeSearch({ clearInput = true, keepMobileOpen = false } = {}) {
   }
 }
 
-function openBookmarkAt(index) {
+function openBookmarkAt(index, { newTab = false } = {}) {
   const bookmark = currentResults[index];
   if (!bookmark) return;
-  deps.openBookmark(bookmark);
+  deps.openBookmark(bookmark, { newTab });
   closeSearch({ clearInput: true });
   input?.blur();
 }
@@ -186,9 +186,16 @@ function renderResults() {
       event.preventDefault();
     });
     button.addEventListener("click", (event) => {
+      if (event.button !== 0) return;
       event.preventDefault();
       const index = Number(button.getAttribute("data-result-index"));
-      openBookmarkAt(index);
+      openBookmarkAt(index, { newTab: false });
+    });
+    button.addEventListener("auxclick", (event) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      const index = Number(button.getAttribute("data-result-index"));
+      openBookmarkAt(index, { newTab: true });
     });
     button.addEventListener("mouseenter", () => {
       selectedIndex = Number(button.getAttribute("data-result-index"));
@@ -251,7 +258,7 @@ function onInputKeydown(event) {
       return;
     }
     event.preventDefault();
-    openBookmarkAt(selectedIndex);
+    openBookmarkAt(selectedIndex, { newTab: false });
   }
 }
 
