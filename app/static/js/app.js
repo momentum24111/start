@@ -103,6 +103,7 @@ const CATEGORY_METADATA_TOAST_ID = "category-metadata-reload";
 const SIDEBAR_MOBILE_BREAKPOINT = "(max-width: 900px)";
 let sidebarMobileQuery = null;
 let desktopSidebarOpen = false;
+let sidebarOpenBeforeDrag = null;
 
 function categoryEffectiveCollapsed(category) {
   if (state.editMode) return false;
@@ -1114,7 +1115,16 @@ async function bootstrap() {
       render();
     },
     pickHomepageCategory: pickHomepageCategoryForDrop,
-    confirmDropToUnsorted
+    confirmDropToUnsorted,
+    onDragSessionStart: () => {
+      sidebarOpenBeforeDrag = state.sidebarOpen;
+      setSidebarOpen(true);
+    },
+    onDragSessionEnd: () => {
+      if (sidebarOpenBeforeDrag === null) return;
+      setSidebarOpen(sidebarOpenBeforeDrag);
+      sidebarOpenBeforeDrag = null;
+    }
   });
   initBookmarkSearch({
     getBookmarks: () => state.config.bookmarks || [],

@@ -2093,6 +2093,23 @@ body.bookmark-drag-active {
   cursor: grabbing;
 }
 
+body.bookmark-drag-active .sidebar {
+  transition: none !important;
+}
+
+body.bookmark-drag-active:not(.sidebar-mobile) .sidebar.is-open {
+  position: relative;
+  z-index: 320;
+}
+
+body.bookmark-drag-active.sidebar-mobile .sidebar.is-open {
+  z-index: 320;
+}
+
+body.bookmark-drag-active .bookmark-search-results {
+  pointer-events: none;
+}
+
 body.bookmark-drag-active .sidebar-link.is-drop-target {
   cursor: copy;
 }

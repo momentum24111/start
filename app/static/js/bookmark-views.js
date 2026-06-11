@@ -617,7 +617,7 @@ export function createBookmarkElement(options, deps) {
     deps.onDelete?.();
   });
 
-  deps.bindBookmarkDrag?.(item, options.bookmark);
+  deps.bindBookmarkDrag?.(item);
 
   return item;
 }

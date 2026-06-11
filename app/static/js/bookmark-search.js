@@ -2,7 +2,7 @@
 
 import { escapeHtml } from "./bookmark-views.js";
 import { getBookmarkDisplayDomain } from "./bookmarks.js";
-import { bindBookmarkDrag } from "./bookmark-drag.js";
+import { bindBookmarkDrag, isBookmarkDragSessionActive } from "./bookmark-drag.js";
 
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 120;
@@ -125,7 +125,7 @@ function isMobileLayout() {
 }
 
 function isBookmarkDragActive() {
-  return document.body.classList.contains("bookmark-drag-active");
+  return isBookmarkDragSessionActive();
 }
 
 function setMobileOpen(open) {
@@ -190,15 +190,11 @@ function renderResults() {
 
   resultsEl.querySelectorAll("[data-search-result]").forEach((entry) => {
     const index = Number(entry.getAttribute("data-result-index"));
-    const bookmark = currentResults[index];
-    if (bookmark) bindBookmarkDrag(entry, bookmark);
+    bindBookmarkDrag(entry);
 
-    entry.addEventListener("mousedown", (event) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-    });
     entry.addEventListener("click", (event) => {
       if (event.button !== 0) return;
+      if (entry.classList.contains("is-dragging")) return;
       event.preventDefault();
       openBookmarkAt(index, { newTab: false });
     });
