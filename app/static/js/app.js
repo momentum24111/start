@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { showModal, showStatusModal, dismissActiveModalListeners } from "./modal.js";
+import { showToast, updateToast, closeToast } from "./toast.js";
 import { initI18n, t } from "./i18n.js";
 import { applyTheme } from "./themes.js";
 import {
@@ -90,8 +91,10 @@ const state = {
   themes: [],
   languages: [],
   faviconLoading: false,
-  categoryMetadataReloadRunning: false
+  categoryMetadataReload: null
 };
+
+const CATEGORY_METADATA_TOAST_ID = "category-metadata-reload";
 
 function categoryEffectiveCollapsed(category) {
   if (state.editMode) return false;
@@ -453,6 +456,52 @@ function setBookmarkMetadataLoading(item, loading) {
   item.querySelector("[data-bookmark-menu-trigger]")?.toggleAttribute("disabled", loading);
 }
 
+function isCategoryMetadataReloadRunning() {
+  return Boolean(state.categoryMetadataReload?.running);
+}
+
+function getBookmarkMetadataLabel(bookmark) {
+  const title = String(bookmark?.title || "").trim();
+  if (title) return title;
+  return String(bookmark?.url || "").trim();
+}
+
+function findBookmarkItemElement(bookmarkId) {
+  if (!bookmarkId) return null;
+  return document.querySelector(`.bookmark-item[data-bookmark-id="${CSS.escape(bookmarkId)}"]`);
+}
+
+function buildCategoryMetadataToastProgress(reload) {
+  return {
+    title: t("ui.reloadCategoryMetadataToastTitle"),
+    description: interpolateLabel(t("ui.reloadCategoryMetadataToastProgress"), {
+      category: reload.categoryName,
+      current: reload.processedCount,
+      total: reload.totalCount
+    }),
+    detail: reload.currentBookmarkLabel
+      ? interpolateLabel(t("ui.reloadCategoryMetadataToastCurrent"), { bookmark: reload.currentBookmarkLabel })
+      : "",
+    showCancel: true,
+    cancelLabel: t("ui.cancel"),
+    onCancel: cancelCategoryMetadataReload
+  };
+}
+
+function cancelCategoryMetadataReload() {
+  const reload = state.categoryMetadataReload;
+  if (!reload?.running || reload.cancelled) return;
+  reload.cancelled = true;
+  reload.abortController?.abort();
+}
+
+function syncCategoryMetadataReloadBookmarkLoading() {
+  const reload = state.categoryMetadataReload;
+  if (!reload?.running || !reload.currentBookmarkId) return;
+  const item = findBookmarkItemElement(reload.currentBookmarkId);
+  if (item) setBookmarkMetadataLoading(item, true);
+}
+
 function applyMetadataToBookmark(bookmark, metadata) {
   if (!bookmark || !metadata) return;
   if (metadata.title) bookmark.title = String(metadata.title).trim();
@@ -512,25 +561,9 @@ async function confirmReloadCategoryMetadata(bookmarkCount, categoryName) {
   return confirmed;
 }
 
-async function showCategoryMetadataCompletionFeedback(updatedCount, totalCount) {
-  const body = document.createElement("p");
-  body.textContent = interpolateLabel(t("ui.reloadCategoryMetadataDone"), {
-    updated: updatedCount,
-    total: totalCount
-  });
-  showStatusModal({
-    title: t("ui.reloadCategoryMetadata"),
-    content: body
-  });
-  await new Promise((resolve) => window.setTimeout(resolve, 2400));
-  dismissActiveModalListeners();
-  const root = document.getElementById("modal-root");
-  if (root) root.innerHTML = "";
-}
-
 async function reloadCategoryMetadata() {
   const navId = getActiveNavId();
-  if (navId === NAV_ALL || state.categoryMetadataReloadRunning) return;
+  if (navId === NAV_ALL || isCategoryMetadataReloadRunning()) return;
 
   const bookmarks = getBookmarksForNav(state.config, navId).filter((bookmark) => String(bookmark.url || "").trim());
   const totalCount = bookmarks.length;
@@ -540,54 +573,106 @@ async function reloadCategoryMetadata() {
   const confirmed = await confirmReloadCategoryMetadata(totalCount, categoryName);
   if (!confirmed) return;
 
-  state.categoryMetadataReloadRunning = true;
+  const abortController = new AbortController();
+  state.categoryMetadataReload = {
+    running: true,
+    navId,
+    categoryName,
+    totalCount,
+    processedCount: 0,
+    updatedCount: 0,
+    errorCount: 0,
+    currentBookmarkId: null,
+    currentBookmarkLabel: "",
+    cancelled: false,
+    abortController
+  };
   render();
 
-  const progressBody = document.createElement("div");
-  progressBody.className = "category-metadata-progress";
-  const progressSpinner = document.createElement("span");
-  progressSpinner.className = "spinner";
-  progressSpinner.setAttribute("aria-hidden", "true");
-  const progressText = document.createElement("p");
-  progressText.className = "category-metadata-progress__text";
-  progressBody.append(progressSpinner, progressText);
-
-  const updateProgress = (current) => {
-    progressText.textContent = interpolateLabel(t("ui.reloadCategoryMetadataProgress"), {
-      current,
-      total: totalCount
-    });
-  };
-
-  showStatusModal({
-    title: t("ui.reloadCategoryMetadata"),
-    content: progressBody
+  showToast({
+    id: CATEGORY_METADATA_TOAST_ID,
+    ...buildCategoryMetadataToastProgress(state.categoryMetadataReload)
   });
-  updateProgress(0);
 
   pushUndo();
-  let updatedCount = 0;
+  let activeItem = null;
 
-  for (let index = 0; index < bookmarks.length; index += 1) {
-    const bookmark = bookmarks[index];
-    try {
-      const metadata = await api.fetchBookmarkMetadata(bookmark.url);
-      applyMetadataToBookmark(bookmark, metadata);
-      updatedCount += 1;
-    } catch {
-      // Bestehende Werte beibehalten und mit dem nächsten Lesezeichen fortfahren.
+  try {
+    for (let index = 0; index < bookmarks.length; index += 1) {
+      const reload = state.categoryMetadataReload;
+      if (!reload?.running || reload.cancelled) break;
+
+      const bookmark = bookmarks[index];
+      if (activeItem) {
+        setBookmarkMetadataLoading(activeItem, false);
+        activeItem = null;
+      }
+
+      reload.processedCount = index + 1;
+      reload.currentBookmarkId = bookmark.id;
+      reload.currentBookmarkLabel = getBookmarkMetadataLabel(bookmark);
+      updateToast(CATEGORY_METADATA_TOAST_ID, buildCategoryMetadataToastProgress(reload));
+
+      activeItem = findBookmarkItemElement(bookmark.id);
+      if (activeItem) setBookmarkMetadataLoading(activeItem, true);
+
+      try {
+        const metadata = await api.fetchBookmarkMetadata(bookmark.url, { signal: abortController.signal });
+        if (reload.cancelled) break;
+        applyMetadataToBookmark(bookmark, metadata);
+        reload.updatedCount += 1;
+      } catch (error) {
+        if (error?.name === "AbortError" || reload.cancelled) break;
+        reload.errorCount += 1;
+      } finally {
+        if (activeItem) {
+          setBookmarkMetadataLoading(activeItem, false);
+          activeItem = null;
+        }
+        reload.currentBookmarkId = null;
+        reload.currentBookmarkLabel = "";
+      }
     }
-    updateProgress(index + 1);
+  } finally {
+    if (activeItem) setBookmarkMetadataLoading(activeItem, false);
+
+    const reload = state.categoryMetadataReload;
+    const updatedCount = reload?.updatedCount ?? 0;
+    const total = reload?.totalCount ?? totalCount;
+    const errorCount = reload?.errorCount ?? 0;
+    const wasCancelled = reload?.cancelled ?? false;
+    const errorDetail = errorCount > 0
+      ? interpolateLabel(t("ui.reloadCategoryMetadataErrors"), { errors: errorCount })
+      : "";
+
+    await persistConfig();
+
+    state.categoryMetadataReload = null;
+    render();
+
+    if (wasCancelled) {
+      updateToast(CATEGORY_METADATA_TOAST_ID, {
+        title: t("ui.reloadCategoryMetadataCancelled"),
+        description: interpolateLabel(t("ui.reloadCategoryMetadataCancelledDetail"), {
+          updated: updatedCount,
+          total
+        }),
+        detail: errorDetail,
+        showCancel: false
+      });
+    } else {
+      updateToast(CATEGORY_METADATA_TOAST_ID, {
+        title: t("ui.reloadCategoryMetadataDoneTitle"),
+        description: interpolateLabel(t("ui.reloadCategoryMetadataDoneDetail"), {
+          updated: updatedCount,
+          total
+        }),
+        detail: errorDetail,
+        showCancel: false
+      });
+    }
+    closeToast(CATEGORY_METADATA_TOAST_ID, { delayMs: 4500 });
   }
-
-  dismissActiveModalListeners();
-  const root = document.getElementById("modal-root");
-  if (root) root.innerHTML = "";
-
-  await persistConfig();
-  state.categoryMetadataReloadRunning = false;
-  render();
-  await showCategoryMetadataCompletionFeedback(updatedCount, totalCount);
 }
 
 function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false } = {}) {
@@ -1346,7 +1431,7 @@ function renderBookmarkCollection(bookmarks, navId, viewMode) {
 function renderViewModeToggle(viewMode, { showCategorySync = false } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "view-mode-toggle";
-  const syncDisabled = state.categoryMetadataReloadRunning ? "disabled" : "";
+  const syncDisabled = isCategoryMetadataReloadRunning() ? "disabled" : "";
   wrap.innerHTML = `
     ${button({
       label: t("ui.viewList"),
@@ -1450,6 +1535,7 @@ function render() {
     if (state.editMode) {
       elements.categories.append(renderAddCategoryCard());
     }
+    syncCategoryMetadataReloadBookmarkLoading();
     return;
   }
 
@@ -1457,6 +1543,7 @@ function render() {
   elements.navView?.classList.remove("hidden");
   elements.categories.classList.add("hidden");
   elements.navView?.append(renderNavView());
+  syncCategoryMetadataReloadBookmarkLoading();
 }
 
 function updateDocumentLanguage() {

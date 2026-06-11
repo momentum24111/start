@@ -65,4 +65,7 @@ body {
   --bookmark-chip-bg: #2a3746;
   --bookmark-chip-fg: #dce7f5;
   --bookmark-menu-bg: #212c38;
+  --toast-bg: #212c38;
+  --toast-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+  --toast-detail-fg: #a8b6c5;
 }
