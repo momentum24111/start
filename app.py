@@ -715,36 +715,36 @@ def is_valid_image_bytes(data: bytes) -> bool:
     return False
 
 
-def _meta_tag_content(html: str, *keys: str) -> str:
+def _meta_tag_content(page_html: str, *keys: str) -> str:
     for key in keys:
         patterns = (
             rf'<meta[^>]+(?:property|name)\s*=\s*["\']{re.escape(key)}["\'][^>]+content\s*=\s*["\']([^"\']+)["\']',
             rf'<meta[^>]+content\s*=\s*["\']([^"\']+)["\'][^>]+(?:property|name)\s*=\s*["\']{re.escape(key)}["\']',
         )
         for pattern in patterns:
-            match = re.search(pattern, html, flags=re.IGNORECASE)
+            match = re.search(pattern, page_html, flags=re.IGNORECASE)
             if match:
                 return html.unescape(match.group(1).strip())
     return ""
 
 
-def extract_page_title(html: str) -> str:
-    meta_title = _meta_tag_content(html, "og:title", "twitter:title")
+def extract_page_title(page_html: str) -> str:
+    meta_title = _meta_tag_content(page_html, "og:title", "twitter:title")
     if meta_title:
         return meta_title
-    match = re.search(r"<title[^>]*>([^<]+)</title>", html, flags=re.IGNORECASE | re.DOTALL)
+    match = re.search(r"<title[^>]*>([^<]+)</title>", page_html, flags=re.IGNORECASE | re.DOTALL)
     if not match:
         return ""
     return html.unescape(re.sub(r"\s+", " ", match.group(1)).strip())
 
 
-def extract_page_description(html: str) -> str:
-    return _meta_tag_content(html, "og:description", "twitter:description", "description")
+def extract_page_description(page_html: str) -> str:
+    return _meta_tag_content(page_html, "og:description", "twitter:description", "description")
 
 
-def extract_preview_image_url(html: str, base_url: str) -> str:
+def extract_preview_image_url(page_html: str, base_url: str) -> str:
     for key in ("og:image", "og:image:url", "twitter:image", "twitter:image:src"):
-        raw = _meta_tag_content(html, key)
+        raw = _meta_tag_content(page_html, key)
         if raw:
             return urljoin(base_url, raw)
     return ""
