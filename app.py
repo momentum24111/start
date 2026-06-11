@@ -75,6 +75,18 @@ class BookmarkMetadataRequest(BaseModel):
     url: str = Field(min_length=3, max_length=4096)
 
 
+FETCH_HEADERS = {
+    "accept": (
+        "text/html,application/xhtml+xml;q=0.9,"
+        "text/plain;q=0.8,*/*;q=0.5"
+    ),
+    "user-agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+}
+
+
 def ensure_directories() -> None:
     for directory in (DATA_DIR, BACKUP_DIR, FAVICON_CACHE_DIR, THEMES_DIR, LANGUAGES_DIR):
         directory.mkdir(parents=True, exist_ok=True)
@@ -837,17 +849,24 @@ def format_hostname_domain(hostname: str) -> str:
     return host
 
 
+def bookmark_metadata_failure(page_url: str) -> dict:
+    parsed = urlparse(page_url)
+    return {
+        "ok": False,
+        "title": "",
+        "description": "",
+        "image": "",
+        "imageSource": "",
+        "domain": format_hostname_domain(parsed.hostname or ""),
+    }
+
+
 async def fetch_page_html(raw_url: str) -> tuple[str, str]:
     page_url = normalize_page_url(raw_url)
     async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
         response = await client.get(
             page_url,
-            headers={
-                "accept": (
-                    "text/html,application/xhtml+xml;q=0.9,"
-                    "text/plain;q=0.8,*/*;q=0.5"
-                )
-            },
+            headers=FETCH_HEADERS,
         )
         response.raise_for_status()
         return response.text, str(response.url)
@@ -877,12 +896,7 @@ async def resolve_favicon_candidates(raw_url: str) -> list[str]:
         async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
             response = await client.get(
                 page_url,
-                headers={
-                    "accept": (
-                        "text/html,application/xhtml+xml;q=0.9,"
-                        "text/plain;q=0.8,*/*;q=0.5"
-                    )
-                },
+                headers=FETCH_HEADERS,
             )
             response.raise_for_status()
             final = urlparse(str(response.url))
@@ -1069,6 +1083,7 @@ async def post_bookmark_metadata(payload: BookmarkMetadataRequest) -> dict:
     if is_probably_image_url(page_url):
         parsed = urlparse(page_url)
         return {
+            "ok": True,
             "title": "",
             "description": "",
             "image": page_url,
@@ -1077,22 +1092,17 @@ async def post_bookmark_metadata(payload: BookmarkMetadataRequest) -> dict:
         }
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
             response = await client.get(
                 page_url,
-                headers={
-                    "accept": (
-                        "text/html,application/xhtml+xml;q=0.9,"
-                        "text/plain;q=0.8,*/*;q=0.5"
-                    )
-                },
+                headers=FETCH_HEADERS,
             )
             response.raise_for_status()
             final_url = str(response.url)
             html = response.text
             image, image_source = await resolve_bookmark_preview_image(client, html, final_url)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Metadata fetch failed: {exc}") from exc
+    except Exception:
+        return bookmark_metadata_failure(page_url)
 
     title = extract_page_title(html)
     description = extract_page_description(html)
@@ -1100,6 +1110,7 @@ async def post_bookmark_metadata(payload: BookmarkMetadataRequest) -> dict:
     domain = format_hostname_domain(parsed.hostname or "")
 
     return {
+        "ok": True,
         "title": title,
         "description": description,
         "image": image,

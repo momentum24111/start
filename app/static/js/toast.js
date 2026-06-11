@@ -40,13 +40,15 @@ function createToastElement(id) {
   element.setAttribute("role", "status");
   element.setAttribute("aria-live", "polite");
   element.innerHTML = `
-    <div class="toast__body">
+    <header class="toast__header">
       <h3 class="toast__title" data-toast-title></h3>
+      <div class="toast__actions hidden">
+        <button type="button" class="btn btn--ghost btn--compact" data-toast-cancel></button>
+      </div>
+    </header>
+    <div class="toast__body">
       <p class="toast__description" data-toast-description></p>
       <p class="toast__detail hidden" data-toast-detail></p>
-    </div>
-    <div class="toast__actions hidden">
-      <button type="button" class="btn btn--ghost btn--compact" data-toast-cancel></button>
     </div>
   `;
   element.querySelector("[data-toast-cancel]")?.addEventListener("click", (event) => {

@@ -503,7 +503,7 @@ function syncCategoryMetadataReloadBookmarkLoading() {
 }
 
 function applyMetadataToBookmark(bookmark, metadata) {
-  if (!bookmark || !metadata) return;
+  if (!bookmark || !metadata || metadata.ok === false) return;
   if (metadata.title) bookmark.title = String(metadata.title).trim();
   bookmark.description = String(metadata.description || "").trim();
   if (metadata.domain) bookmark.domain = String(metadata.domain).trim();
@@ -521,6 +521,9 @@ async function applyBookmarkMetadata(
   if (item instanceof HTMLElement) setBookmarkMetadataLoading(item, true);
   try {
     const metadata = await api.fetchBookmarkMetadata(bookmark.url);
+    if (metadata?.ok === false) {
+      throw new Error("metadata fetch failed");
+    }
     if (pushUndoOnChange) pushUndo();
     applyMetadataToBookmark(bookmark, metadata);
     if (!skipPersistAndRender) {
@@ -619,6 +622,10 @@ async function reloadCategoryMetadata() {
       try {
         const metadata = await api.fetchBookmarkMetadata(bookmark.url, { signal: abortController.signal });
         if (reload.cancelled) break;
+        if (metadata?.ok === false) {
+          reload.errorCount += 1;
+          continue;
+        }
         applyMetadataToBookmark(bookmark, metadata);
         reload.updatedCount += 1;
       } catch (error) {
