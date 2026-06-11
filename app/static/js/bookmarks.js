@@ -57,6 +57,19 @@ function finalizeSidebarCategorySlugs(categories) {
 export const BOOKMARK_SOURCE_OPTIONS = ["manual", "browser-import"];
 export const DEFAULT_BOOKMARK_SOURCE = "manual";
 
+export const BOOKMARK_IMAGE_SOURCE_OPTIONS = [
+  "og_image",
+  "twitter_image",
+  "apple_touch_icon",
+  "png_favicon",
+  "favicon"
+];
+
+export function normalizeBookmarkImageSource(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return BOOKMARK_IMAGE_SOURCE_OPTIONS.includes(normalized) ? normalized : "";
+}
+
 const CATEGORY_TYPE_OPTIONS = ["service-list", "iframe"];
 const DEFAULT_CATEGORY_TYPE = "service-list";
 const CATEGORY_SLOT_OPTIONS = [1, 2, 3];
@@ -122,6 +135,8 @@ function normalizeBookmarkEntry(raw) {
     url: String(raw?.url || "").trim(),
     description: String(raw?.description || "").trim(),
     image: String(raw?.image || legacyServiceToImage(raw) || "").trim(),
+    domain: String(raw?.domain || "").trim(),
+    imageSource: normalizeBookmarkImageSource(raw?.imageSource),
     categoryIds,
     sidebarCategoryIds,
     favorite: Boolean(raw?.favorite),
@@ -440,6 +455,12 @@ export function formatBookmarkDomain(url) {
   } catch {
     return "";
   }
+}
+
+export function getBookmarkDisplayDomain(bookmark) {
+  const stored = String(bookmark?.domain || "").trim();
+  if (stored) return stored;
+  return formatBookmarkDomain(bookmark?.url);
 }
 
 export function getBookmarkDisplayCategoryLabels(config, bookmark, labelForFavorites) {

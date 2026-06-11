@@ -750,6 +750,86 @@ def extract_preview_image_url(page_html: str, base_url: str) -> str:
     return ""
 
 
+def _extract_og_image_url(page_html: str, base_url: str) -> str:
+    for key in ("og:image", "og:image:url"):
+        raw = _meta_tag_content(page_html, key)
+        if raw:
+            return urljoin(base_url, raw)
+    return ""
+
+
+def _extract_twitter_image_url(page_html: str, base_url: str) -> str:
+    for key in ("twitter:image", "twitter:image:src"):
+        raw = _meta_tag_content(page_html, key)
+        if raw:
+            return urljoin(base_url, raw)
+    return ""
+
+
+def _html_link_apple_icon_entries(html: str, base_url: str) -> list[tuple[int, str]]:
+    """Largest apple-touch icons (any image format)."""
+    out: list[tuple[int, str]] = []
+    for tag in _link_tags(html):
+        parsed = _parse_link_tag(tag)
+        if not parsed:
+            continue
+        href_raw, rel_raw, _, sizes_val = parsed
+        tokens = _rel_tokens(rel_raw)
+        if "manifest" in tokens:
+            continue
+        if not _rel_is_apple_touch(tokens):
+            continue
+        absolute = urljoin(base_url, href_raw)
+        size = _entry_size_from_link(sizes_val, absolute)
+        out.append((size, absolute))
+    return out
+
+
+def _largest_png_favicon_url(
+    html: str, base_url: str, manifest_entries: list[tuple[int, int, str]]
+) -> str:
+    scored: list[tuple[int, str]] = [
+        (size, url) for _, size, url in _html_link_png_non_apple_entries(html, base_url)
+    ]
+    scored.extend((size, url) for _, size, url in manifest_entries)
+    if not scored:
+        return ""
+    scored.sort(key=lambda row: -row[0])
+    return scored[0][1]
+
+
+async def resolve_bookmark_preview_image(
+    client: httpx.AsyncClient, html: str, final_url: str
+) -> tuple[str, str]:
+    """
+    Preview image URL and source key with priority:
+    og:image, twitter:image, apple-touch-icon, largest PNG favicon, favicon.ico
+    """
+    base = final_url
+    parsed_final = urlparse(final_url)
+    page_favicon_ico = f"{parsed_final.scheme}://{parsed_final.netloc}/favicon.ico"
+
+    image = _extract_og_image_url(html, base)
+    if image:
+        return image, "og_image"
+
+    image = _extract_twitter_image_url(html, base)
+    if image:
+        return image, "twitter_image"
+
+    apple_entries = _html_link_apple_icon_entries(html, base)
+    if apple_entries:
+        apple_entries.sort(key=lambda row: -row[0])
+        return apple_entries[0][1], "apple_touch_icon"
+
+    manifest_entries = await _collect_manifest_png_entries(client, html, base)
+    image = _largest_png_favicon_url(html, base, manifest_entries)
+    if image:
+        return image, "png_favicon"
+
+    return page_favicon_ico, "favicon"
+
+
 def format_hostname_domain(hostname: str) -> str:
     host = str(hostname or "").strip().lower()
     if host.startswith("www."):
@@ -986,25 +1066,44 @@ def get_languages() -> dict:
 @app.post("/api/bookmark-metadata")
 async def post_bookmark_metadata(payload: BookmarkMetadataRequest) -> dict:
     page_url = normalize_page_url(payload.url)
+    if is_probably_image_url(page_url):
+        parsed = urlparse(page_url)
+        return {
+            "title": "",
+            "description": "",
+            "image": page_url,
+            "imageSource": "favicon",
+            "domain": format_hostname_domain(parsed.hostname or ""),
+        }
+
     try:
-        html, final_url = await fetch_page_html(payload.url)
+        async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
+            response = await client.get(
+                page_url,
+                headers={
+                    "accept": (
+                        "text/html,application/xhtml+xml;q=0.9,"
+                        "text/plain;q=0.8,*/*;q=0.5"
+                    )
+                },
+            )
+            response.raise_for_status()
+            final_url = str(response.url)
+            html = response.text
+            image, image_source = await resolve_bookmark_preview_image(client, html, final_url)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Metadata fetch failed: {exc}") from exc
 
     title = extract_page_title(html)
     description = extract_page_description(html)
-    image = extract_preview_image_url(html, final_url)
-    if not image:
-        candidates = await resolve_favicon_candidates(payload.url)
-        image = candidates[0] if candidates else ""
-
-    parsed = urlparse(page_url)
+    parsed = urlparse(final_url)
     domain = format_hostname_domain(parsed.hostname or "")
 
     return {
         "title": title,
         "description": description,
         "image": image,
+        "imageSource": image_source,
         "domain": domain,
     }
 

@@ -290,6 +290,17 @@ textarea {
   flex: 0 0 auto;
 }
 
+.category-metadata-progress {
+  display: grid;
+  justify-items: center;
+  gap: calc(0.65rem * var(--element-scale));
+  text-align: center;
+}
+
+.category-metadata-progress__text {
+  margin: 0;
+}
+
 .bookmark-collection {
   display: grid;
   gap: var(--size-gap-services);
@@ -1735,12 +1746,21 @@ textarea {
   display: grid;
   grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr);
   gap: var(--size-bookmark-gap);
-  align-items: center;
+  align-items: stretch;
   min-width: 0;
   min-height: var(--size-bookmark-list-height);
   padding: calc(0.55rem * var(--element-scale));
   color: inherit;
   text-decoration: none;
+}
+
+.bookmark-item--nav .bookmark-thumb--list {
+  width: auto;
+  height: 100%;
+  min-height: var(--size-bookmark-list-thumb);
+  max-width: var(--size-bookmark-list-thumb);
+  aspect-ratio: 1 / 1;
+  align-self: stretch;
 }
 
 .bookmark-item--nav.is-edit-mode .bookmark-item__nav-link {

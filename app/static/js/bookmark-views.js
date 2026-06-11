@@ -1,7 +1,7 @@
 /** Lesezeichen-Darstellung: Listen- und Kartenansicht. */
 
 import { t } from "./i18n.js";
-import { formatBookmarkDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites } from "./bookmarks.js";
+import { getBookmarkDisplayDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites } from "./bookmarks.js";
 import { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS } from "./navigation.js";
 
 export { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS };
@@ -220,7 +220,7 @@ function renderNavListBookmark(options, deps) {
   const description = escapeHtml(bookmark.description || "");
   const url = String(bookmark.url || "").trim();
   const urlAttr = escapeHtml(url);
-  const domain = escapeHtml(formatBookmarkDomain(url));
+  const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
   const categoryLabels = getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"));
   const categoryChips = renderCategoryChips(categoryLabels);
 

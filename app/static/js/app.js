@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { showModal, showStatusModal } from "./modal.js";
+import { showModal, showStatusModal, dismissActiveModalListeners } from "./modal.js";
 import { initI18n, t } from "./i18n.js";
 import { applyTheme } from "./themes.js";
 import {
@@ -16,6 +16,7 @@ import {
   getBookmarkSidebarPlacementIds,
   findBookmarkById,
   findSidebarCategoryById,
+  normalizeBookmarkImageSource,
   ensureBookmarkInCategoryOrder,
   ensureBookmarkInSidebarCategoryOrder,
   removeBookmarkFromCategoryOrder,
@@ -88,7 +89,8 @@ const state = {
   undoStack: [],
   themes: [],
   languages: [],
-  faviconLoading: false
+  faviconLoading: false,
+  categoryMetadataReloadRunning: false
 };
 
 function categoryEffectiveCollapsed(category) {
@@ -129,6 +131,7 @@ const ICONS = {
   menu: "M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z",
   viewList: "M3 5h18v2H3V5m0 6h18v2H3v-2m0 6h18v2H3v-2z",
   viewCards: "M3 5h8v8H3V5m10 0h8v4H13V5m0 6h8v8H13v-8M3 13h8v6H3v-6z",
+  sync: "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
   open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
   dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
 };
@@ -450,7 +453,19 @@ function setBookmarkMetadataLoading(item, loading) {
   item.querySelector("[data-bookmark-menu-trigger]")?.toggleAttribute("disabled", loading);
 }
 
-async function applyBookmarkMetadata(bookmarkId, { item = null, pushUndoOnChange = true } = {}) {
+function applyMetadataToBookmark(bookmark, metadata) {
+  if (!bookmark || !metadata) return;
+  if (metadata.title) bookmark.title = String(metadata.title).trim();
+  bookmark.description = String(metadata.description || "").trim();
+  if (metadata.domain) bookmark.domain = String(metadata.domain).trim();
+  if (metadata.image) bookmark.image = normalizeBookmarkImageValue(metadata.image);
+  if (metadata.imageSource) bookmark.imageSource = normalizeBookmarkImageSource(metadata.imageSource);
+}
+
+async function applyBookmarkMetadata(
+  bookmarkId,
+  { item = null, pushUndoOnChange = true, skipPersistAndRender = false } = {}
+) {
   const bookmark = findBookmarkById(state.config, bookmarkId);
   if (!bookmark?.url) return false;
   if (item instanceof HTMLElement && item.classList.contains("is-reloading-metadata")) return false;
@@ -458,11 +473,11 @@ async function applyBookmarkMetadata(bookmarkId, { item = null, pushUndoOnChange
   try {
     const metadata = await api.fetchBookmarkMetadata(bookmark.url);
     if (pushUndoOnChange) pushUndo();
-    if (metadata.title) bookmark.title = String(metadata.title).trim();
-    bookmark.description = String(metadata.description || "").trim();
-    if (metadata.image) bookmark.image = String(metadata.image).trim();
-    await persistConfig();
-    render();
+    applyMetadataToBookmark(bookmark, metadata);
+    if (!skipPersistAndRender) {
+      await persistConfig();
+      render();
+    }
     return true;
   } catch {
     if (item instanceof HTMLElement) {
@@ -476,6 +491,103 @@ async function applyBookmarkMetadata(bookmarkId, { item = null, pushUndoOnChange
   } finally {
     if (item instanceof HTMLElement) setBookmarkMetadataLoading(item, false);
   }
+}
+
+async function confirmReloadCategoryMetadata(bookmarkCount, categoryName) {
+  let confirmed = false;
+  const body = document.createElement("p");
+  body.textContent = interpolateLabel(t("ui.reloadCategoryMetadataConfirm"), {
+    count: bookmarkCount,
+    category: categoryName
+  });
+  await showModal({
+    title: t("ui.reloadCategoryMetadata"),
+    content: body,
+    saveLabel: t("ui.confirm"),
+    cancelLabel: t("ui.cancel"),
+    onSave: async () => {
+      confirmed = true;
+    }
+  });
+  return confirmed;
+}
+
+async function showCategoryMetadataCompletionFeedback(updatedCount, totalCount) {
+  const body = document.createElement("p");
+  body.textContent = interpolateLabel(t("ui.reloadCategoryMetadataDone"), {
+    updated: updatedCount,
+    total: totalCount
+  });
+  showStatusModal({
+    title: t("ui.reloadCategoryMetadata"),
+    content: body
+  });
+  await new Promise((resolve) => window.setTimeout(resolve, 2400));
+  dismissActiveModalListeners();
+  const root = document.getElementById("modal-root");
+  if (root) root.innerHTML = "";
+}
+
+async function reloadCategoryMetadata() {
+  const navId = getActiveNavId();
+  if (navId === NAV_ALL || state.categoryMetadataReloadRunning) return;
+
+  const bookmarks = getBookmarksForNav(state.config, navId).filter((bookmark) => String(bookmark.url || "").trim());
+  const totalCount = bookmarks.length;
+  if (!totalCount) return;
+
+  const categoryName = getNavTitle(navId);
+  const confirmed = await confirmReloadCategoryMetadata(totalCount, categoryName);
+  if (!confirmed) return;
+
+  state.categoryMetadataReloadRunning = true;
+  render();
+
+  const progressBody = document.createElement("div");
+  progressBody.className = "category-metadata-progress";
+  const progressSpinner = document.createElement("span");
+  progressSpinner.className = "spinner";
+  progressSpinner.setAttribute("aria-hidden", "true");
+  const progressText = document.createElement("p");
+  progressText.className = "category-metadata-progress__text";
+  progressBody.append(progressSpinner, progressText);
+
+  const updateProgress = (current) => {
+    progressText.textContent = interpolateLabel(t("ui.reloadCategoryMetadataProgress"), {
+      current,
+      total: totalCount
+    });
+  };
+
+  showStatusModal({
+    title: t("ui.reloadCategoryMetadata"),
+    content: progressBody
+  });
+  updateProgress(0);
+
+  pushUndo();
+  let updatedCount = 0;
+
+  for (let index = 0; index < bookmarks.length; index += 1) {
+    const bookmark = bookmarks[index];
+    try {
+      const metadata = await api.fetchBookmarkMetadata(bookmark.url);
+      applyMetadataToBookmark(bookmark, metadata);
+      updatedCount += 1;
+    } catch {
+      // Bestehende Werte beibehalten und mit dem nächsten Lesezeichen fortfahren.
+    }
+    updateProgress(index + 1);
+  }
+
+  dismissActiveModalListeners();
+  const root = document.getElementById("modal-root");
+  if (root) root.innerHTML = "";
+
+  await persistConfig();
+  state.categoryMetadataReloadRunning = false;
+  render();
+  await showCategoryMetadataCompletionFeedback(updatedCount, totalCount);
 }
 
 function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false } = {}) {
@@ -1231,9 +1343,10 @@ function renderBookmarkCollection(bookmarks, navId, viewMode) {
   return root;
 }
 
-function renderViewModeToggle(viewMode) {
+function renderViewModeToggle(viewMode, { showCategorySync = false } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "view-mode-toggle";
+  const syncDisabled = state.categoryMetadataReloadRunning ? "disabled" : "";
   wrap.innerHTML = `
     ${button({
       label: t("ui.viewList"),
@@ -1251,13 +1364,29 @@ function renderViewModeToggle(viewMode) {
       className: `btn--compact ${viewMode === VIEW_CARDS ? "is-active" : ""}`,
       iconOnly: true
     })}
+    ${showCategorySync ? button({
+      label: t("ui.reloadCategoryMetadata"),
+      icon: iconSvg(ICONS.sync, "inline-icon"),
+      dataAttr: `data-reload-category-metadata ${syncDisabled}`,
+      variant: "btn--ghost",
+      className: "btn--compact",
+      iconOnly: true
+    }) : ""}
   `;
   const listButton = wrap.querySelector(`[data-view-mode="${VIEW_LIST}"]`);
   const cardsButton = wrap.querySelector(`[data-view-mode="${VIEW_CARDS}"]`);
+  const syncButton = wrap.querySelector("[data-reload-category-metadata]");
   listButton?.setAttribute("aria-label", t("ui.viewList"));
   listButton?.setAttribute("title", t("ui.viewList"));
   cardsButton?.setAttribute("aria-label", t("ui.viewCards"));
   cardsButton?.setAttribute("title", t("ui.viewCards"));
+  if (syncButton instanceof HTMLButtonElement) {
+    syncButton.setAttribute("aria-label", t("ui.reloadCategoryMetadata"));
+    syncButton.setAttribute("title", t("ui.reloadCategoryMetadata"));
+    syncButton.addEventListener("click", () => {
+      void reloadCategoryMetadata();
+    });
+  }
   listButton?.addEventListener("click", () => {
     void setNavViewModeForActive(VIEW_LIST);
   });
@@ -1275,7 +1404,7 @@ function renderNavView() {
 
   const header = document.createElement("div");
   header.className = "nav-view-header nav-view-header--toggle-only";
-  header.append(renderViewModeToggle(viewMode));
+  header.append(renderViewModeToggle(viewMode, { showCategorySync: true }));
   panel.append(header);
 
   const bookmarks = getBookmarksForNav(state.config, navId);
@@ -1361,6 +1490,10 @@ function refreshStaticLocalizedTexts() {
     const mode = button.dataset.viewMode;
     button.title = mode === VIEW_LIST ? t("ui.viewList") : t("ui.viewCards");
     button.setAttribute("aria-label", button.title);
+  });
+  elements.navView?.querySelectorAll("[data-reload-category-metadata]").forEach((button) => {
+    button.title = t("ui.reloadCategoryMetadata");
+    button.setAttribute("aria-label", t("ui.reloadCategoryMetadata"));
   });
   document.querySelectorAll("[data-add-bookmark] .service-name").forEach((entry) => {
     entry.textContent = t("ui.addBookmark");
