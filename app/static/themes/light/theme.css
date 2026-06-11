@@ -67,4 +67,10 @@ body {
   --toast-bg: #ffffff;
   --toast-shadow: 0 12px 28px rgba(15, 35, 60, 0.14);
   --toast-detail-fg: #5f7389;
+  --search-input-bg: #ffffff;
+  --search-input-border: color-mix(in srgb, var(--text) 14%, transparent);
+  --search-results-bg: #ffffff;
+  --search-results-shadow: 0 12px 28px rgba(15, 35, 60, 0.14);
+  --search-results-empty-fg: #516379;
+  --search-result-active-bg: #e6edf4;
 }

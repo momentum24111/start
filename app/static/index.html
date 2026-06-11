@@ -27,7 +27,21 @@
             </button>
             <h1 id="app-title">__START_PKG_INITIAL_APP_TITLE__</h1>
           </div>
+          <div id="bookmark-search-root" class="topbar-search">
+            <div id="bookmark-search-panel" class="topbar-search__panel">
+              <input
+                id="bookmark-search-input"
+                class="topbar-search__input"
+                type="search"
+                enterkeyhint="search"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div id="bookmark-search-results" class="bookmark-search-results hidden" role="listbox"></div>
+            </div>
+          </div>
           <div class="actions">
+            <button id="bookmark-search-toggle" class="btn btn--ghost btn--icon topbar-search__toggle" type="button" aria-controls="bookmark-search-panel" aria-expanded="false"></button>
             <button id="undo-btn" class="btn btn--ghost hidden" type="button"></button>
             <button id="edit-btn" class="btn btn--ghost" type="button"></button>
             <button id="settings-btn" class="btn btn--ghost" type="button"></button>

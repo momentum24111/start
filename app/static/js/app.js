@@ -58,6 +58,7 @@ import {
   ensureBookmarkMenuDismiss,
   escapeHtml
 } from "./bookmark-views.js";
+import { initBookmarkSearch, refreshBookmarkSearchTexts } from "./bookmark-search.js";
 
 const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
@@ -136,7 +137,8 @@ const ICONS = {
   viewCards: "M3 5h8v8H3V5m10 0h8v4H13V5m0 6h8v8H13v-8M3 13h8v6H3v-6z",
   sync: "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
   open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
-  dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
+  dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  search: "M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 3.23-.87l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
 };
 
 const FALLBACK_MDI_ICON = "folder";
@@ -382,6 +384,16 @@ function triggerBookmarkLaunch(bookmarkId) {
   const tile = document.querySelector(`.bookmark-item[data-bookmark-id="${bookmarkId}"] [data-bookmark-open]`);
   if (!(tile instanceof HTMLAnchorElement)) return;
   tile.click();
+}
+
+function openBookmarkFromSearch(bookmark) {
+  const url = String(bookmark?.url || "").trim();
+  if (!url) return;
+  if (bookmark.openMode === "current-tab") {
+    window.location.assign(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function createBookmarkUiDeps() {
@@ -1039,6 +1051,18 @@ async function bootstrap() {
     historyMode: "replace"
   });
   ensureBookmarkMenuDismiss();
+  initBookmarkSearch({
+    getBookmarks: () => state.config.bookmarks || [],
+    bookmarkStoredImageSrc,
+    mdiIcon,
+    iconSvg,
+    t,
+    openBookmark: openBookmarkFromSearch
+  });
+  const searchToggle = document.getElementById("bookmark-search-toggle");
+  if (searchToggle) {
+    searchToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.search, "inline-icon")}</span>`;
+  }
   wireEvents();
   render();
 }
@@ -1595,6 +1619,7 @@ function refreshStaticLocalizedTexts() {
   document.querySelectorAll("[data-add-category] .btn__label").forEach((entry) => {
     entry.textContent = t("ui.addCategory");
   });
+  refreshBookmarkSearchTexts();
 }
 
 function refreshSettingsModalTexts(form) {
