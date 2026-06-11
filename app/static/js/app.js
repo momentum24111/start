@@ -397,6 +397,23 @@ function openBookmarkFromSearch(bookmark, { newTab = false } = {}) {
   openBookmarkUrl(bookmark, { newTab });
 }
 
+async function confirmDropToUnsorted(bookmark) {
+  let confirmed = false;
+  const body = document.createElement("p");
+  const label = bookmark?.title || bookmark?.url || "";
+  body.textContent = interpolateLabel(t("ui.dropToUnsortedConfirm"), { title: label });
+  await showModal({
+    title: t("ui.dropToUnsorted"),
+    content: body,
+    saveLabel: t("ui.confirm"),
+    cancelLabel: t("ui.cancel"),
+    onSave: async () => {
+      confirmed = true;
+    }
+  });
+  return confirmed;
+}
+
 async function pickHomepageCategoryForDrop() {
   const categories = listBookmarkListCategories(state.config);
   if (!categories.length) return null;
@@ -1104,7 +1121,8 @@ async function bootstrap() {
       await persistConfig();
       render();
     },
-    pickHomepageCategory: pickHomepageCategoryForDrop
+    pickHomepageCategory: pickHomepageCategoryForDrop,
+    confirmDropToUnsorted
   });
   initSidebarResponsiveBehavior();
   const searchToggle = document.getElementById("bookmark-search-toggle");

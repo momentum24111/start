@@ -2076,8 +2076,16 @@ textarea {
   text-overflow: ellipsis;
 }
 
-.bookmark-item--nav.is-dragging {
+.bookmark-item.is-dragging {
   opacity: 0.45;
+}
+
+body.bookmark-drag-active {
+  cursor: grabbing;
+}
+
+body.bookmark-drag-active .sidebar-link.is-drop-target {
+  cursor: copy;
 }
 
 .bookmark-drag-ghost {

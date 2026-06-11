@@ -14,6 +14,7 @@ import { NAV_ALL, NAV_FAVORITES, NAV_UNSORTED } from "./navigation.js";
 const DRAG_MIME = "application/x-start-bookmark-id";
 let deps = null;
 let activeDropTarget = null;
+let activeDragBookmarkId = null;
 
 function clearDropTarget() {
   if (!(activeDropTarget instanceof HTMLElement)) return;
@@ -28,6 +29,16 @@ function setDropTarget(link) {
     activeDropTarget = link;
     link.classList.add("is-drop-target");
   }
+}
+
+function isActiveBookmarkDrag() {
+  return Boolean(activeDragBookmarkId);
+}
+
+function markNonDraggableChildren(item) {
+  item.querySelectorAll("a, button, input, select, textarea, img").forEach((element) => {
+    element.setAttribute("draggable", "false");
+  });
 }
 
 function buildDragGhost(bookmark) {
@@ -45,9 +56,6 @@ function buildDragGhost(bookmark) {
       ${domain ? `<span class="bookmark-drag-ghost__domain">${domain}</span>` : ""}
     </div>
   `;
-  ghost.style.position = "fixed";
-  ghost.style.top = "-1000px";
-  ghost.style.left = "-1000px";
   document.body.append(ghost);
   return ghost;
 }
@@ -57,17 +65,21 @@ async function applyDrop(bookmarkId, navId) {
   const bookmark = findBookmarkById(config, bookmarkId);
   if (!bookmark) return;
 
-  deps.pushUndo();
-
   if (navId === NAV_UNSORTED) {
+    const confirmed = await deps.confirmDropToUnsorted(bookmark);
+    if (!confirmed) return;
+    deps.pushUndo();
     assignBookmarkToUnsorted(config, bookmark);
   } else if (navId === NAV_FAVORITES) {
+    deps.pushUndo();
     assignBookmarkToFavorites(bookmark);
   } else if (navId === NAV_ALL) {
     const categoryId = await deps.pickHomepageCategory();
     if (!categoryId) return;
+    deps.pushUndo();
     assignBookmarkToHomepageCategory(config, bookmark, categoryId);
   } else {
+    deps.pushUndo();
     assignBookmarkToCustomSidebarCategory(config, bookmark, navId);
   }
 
@@ -78,18 +90,19 @@ export function bindBookmarkDrag(item, bookmark) {
   if (!(item instanceof HTMLElement) || !bookmark?.id || !deps) return;
   if (!item.hasAttribute("data-bookmark-drag")) return;
 
+  markNonDraggableChildren(item);
+
   item.addEventListener("dragstart", (event) => {
-    if (event.target instanceof Element && event.target.closest("a, button, [data-bookmark-menu-trigger]")) {
-      event.preventDefault();
-      return;
-    }
     if (!(event.dataTransfer instanceof DataTransfer)) return;
+    activeDragBookmarkId = bookmark.id;
+    event.dataTransfer.clearData();
     event.dataTransfer.setData(DRAG_MIME, bookmark.id);
     event.dataTransfer.setData("text/plain", bookmark.id);
     event.dataTransfer.effectAllowed = "move";
 
     const ghost = buildDragGhost(bookmark);
-    event.dataTransfer.setDragImage(ghost, 24, 24);
+    const rect = ghost.getBoundingClientRect();
+    event.dataTransfer.setDragImage(ghost, Math.round(rect.width / 2), Math.round(rect.height / 2));
     window.setTimeout(() => ghost.remove(), 0);
 
     item.classList.add("is-dragging");
@@ -97,6 +110,7 @@ export function bindBookmarkDrag(item, bookmark) {
   });
 
   item.addEventListener("dragend", () => {
+    activeDragBookmarkId = null;
     item.classList.remove("is-dragging");
     document.body.classList.remove("bookmark-drag-active");
     clearDropTarget();
@@ -111,32 +125,47 @@ export function initBookmarkDragDrop(options) {
   sidebar.dataset.dragDropBound = "true";
 
   sidebar.addEventListener("dragover", (event) => {
+    if (!isActiveBookmarkDrag()) return;
     const link = event.target.closest("[data-sidebar-drop]");
     if (!(link instanceof HTMLElement)) {
       clearDropTarget();
       return;
     }
-    const types = event.dataTransfer?.types || [];
-    const hasBookmark = Array.from(types).includes(DRAG_MIME) || Array.from(types).includes("text/plain");
-    if (!hasBookmark) return;
     event.preventDefault();
+    event.stopPropagation();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    setDropTarget(link);
+  });
+
+  sidebar.addEventListener("dragenter", (event) => {
+    if (!isActiveBookmarkDrag()) return;
+    const link = event.target.closest("[data-sidebar-drop]");
+    if (!(link instanceof HTMLElement)) return;
+    event.preventDefault();
     setDropTarget(link);
   });
 
   sidebar.addEventListener("dragleave", (event) => {
     const related = event.relatedTarget;
     if (related instanceof Node && sidebar.contains(related)) return;
+    const link = event.target.closest("[data-sidebar-drop]");
+    if (link && related instanceof Node && link.contains(related)) return;
     clearDropTarget();
   });
 
   sidebar.addEventListener("drop", (event) => {
+    if (!isActiveBookmarkDrag()) return;
     const link = event.target.closest("[data-sidebar-drop]");
     if (!(link instanceof HTMLElement)) return;
     event.preventDefault();
+    event.stopPropagation();
     clearDropTarget();
-    const bookmarkId = event.dataTransfer?.getData(DRAG_MIME) || event.dataTransfer?.getData("text/plain");
+
+    const bookmarkId = event.dataTransfer?.getData(DRAG_MIME)
+      || event.dataTransfer?.getData("text/plain")
+      || activeDragBookmarkId;
     const navId = link.dataset.sidebarDrop;
+    activeDragBookmarkId = null;
     if (!bookmarkId || !navId) return;
     void applyDrop(bookmarkId, navId);
   });

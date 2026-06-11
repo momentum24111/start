@@ -87,6 +87,8 @@
     "searchNoResults": "Keine Lesezeichen gefunden",
     "dropToHomepage": "Auf Startseite platzieren",
     "dropToHomepageLabel": "Startseiten-Kategorie",
+    "dropToUnsorted": "Nach Unsortiert verschieben",
+    "dropToUnsortedConfirm": "„{title}“ aus allen Sidebar-Kategorien entfernen und unter Unsortiert anzeigen?",
     "actions": "Aktionen",
     "restartApp": "Anwendung neu starten",
     "restartingAppTitle": "Neustart",

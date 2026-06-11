@@ -563,13 +563,11 @@ export function assignBookmarkToFavorites(bookmark) {
 
 export function assignBookmarkToHomepageCategory(config, bookmark, categoryId) {
   const listCategoryIds = new Set(listBookmarkListCategories(config).map((category) => category.id));
-  const preserved = (bookmark.categoryIds || []).filter((id) => !listCategoryIds.has(id));
-  for (const previousId of bookmark.categoryIds || []) {
-    if (listCategoryIds.has(previousId) && previousId !== categoryId) {
-      removeBookmarkFromCategoryOrder(config, previousId, bookmark.id);
-    }
+  if (!listCategoryIds.has(categoryId)) return;
+  if (!bookmark.categoryIds) bookmark.categoryIds = [];
+  if (!bookmark.categoryIds.includes(categoryId)) {
+    bookmark.categoryIds.push(categoryId);
   }
-  bookmark.categoryIds = [...preserved, categoryId];
   ensureBookmarkInCategoryOrder(config, categoryId, bookmark.id);
 }
 

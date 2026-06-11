@@ -171,6 +171,7 @@ function renderHomepageCardBookmark(options, deps) {
       class="bookmark-item bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
+      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
     >
       <a
         class="bookmark-card__link"
@@ -204,6 +205,7 @@ function renderHomepageBookmark(options, deps) {
       class="bookmark-item bookmark-item--homepage service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
+      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
     >
       <a
         class="bookmark-homepage__main"

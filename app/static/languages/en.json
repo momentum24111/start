@@ -87,6 +87,8 @@
     "searchNoResults": "No bookmarks found",
     "dropToHomepage": "Place on homepage",
     "dropToHomepageLabel": "Homepage category",
+    "dropToUnsorted": "Move to unsorted",
+    "dropToUnsortedConfirm": "Remove “{title}” from all sidebar categories and show it under Unsorted?",
     "actions": "Actions",
     "restartApp": "Restart application",
     "restartingAppTitle": "Restart",
