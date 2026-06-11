@@ -203,6 +203,15 @@ body[data-element-size="large"] .topbar-search {
   font: inherit;
 }
 
+.bookmark-search-result[draggable="true"] {
+  cursor: grab;
+}
+
+.bookmark-search-result.is-dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
 .bookmark-search-result:hover,
 .bookmark-search-result.is-active {
   background: var(--search-result-active-bg);

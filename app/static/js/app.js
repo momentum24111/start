@@ -1105,14 +1105,6 @@ async function bootstrap() {
     historyMode: "replace"
   });
   ensureBookmarkMenuDismiss();
-  initBookmarkSearch({
-    getBookmarks: () => state.config.bookmarks || [],
-    bookmarkStoredImageSrc,
-    mdiIcon,
-    iconSvg,
-    t,
-    openBookmark: openBookmarkFromSearch
-  });
   initBookmarkDragDrop({
     getConfig: () => state.config,
     bookmarkStoredImageSrc,
@@ -1123,6 +1115,14 @@ async function bootstrap() {
     },
     pickHomepageCategory: pickHomepageCategoryForDrop,
     confirmDropToUnsorted
+  });
+  initBookmarkSearch({
+    getBookmarks: () => state.config.bookmarks || [],
+    bookmarkStoredImageSrc,
+    mdiIcon,
+    iconSvg,
+    t,
+    openBookmark: openBookmarkFromSearch
   });
   initSidebarResponsiveBehavior();
   const searchToggle = document.getElementById("bookmark-search-toggle");

@@ -2,6 +2,7 @@
 
 import { escapeHtml } from "./bookmark-views.js";
 import { getBookmarkDisplayDomain } from "./bookmarks.js";
+import { bindBookmarkDrag } from "./bookmark-drag.js";
 
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 120;
@@ -98,11 +99,13 @@ function renderResultItem(bookmark, index) {
   const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
   const selected = index === selectedIndex ? " is-active" : "";
   return `
-    <button
-      type="button"
+    <div
       class="bookmark-search-result${selected}"
       role="option"
+      tabindex="-1"
       aria-selected="${index === selectedIndex ? "true" : "false"}"
+      draggable="true"
+      data-bookmark-drag
       data-search-result
       data-result-index="${index}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
@@ -113,12 +116,16 @@ function renderResultItem(bookmark, index) {
         ${description ? `<span class="bookmark-search-result__description">${description}</span>` : ""}
         ${domain ? `<span class="bookmark-search-result__domain">${domain}</span>` : ""}
       </span>
-    </button>
+    </div>
   `;
 }
 
 function isMobileLayout() {
   return Boolean(mobileQuery?.matches);
+}
+
+function isBookmarkDragActive() {
+  return document.body.classList.contains("bookmark-drag-active");
 }
 
 function setMobileOpen(open) {
@@ -181,28 +188,31 @@ function renderResults() {
     bindResultThumb(image);
   });
 
-  resultsEl.querySelectorAll("[data-search-result]").forEach((button) => {
-    button.addEventListener("mousedown", (event) => {
-      event.preventDefault();
-    });
-    button.addEventListener("click", (event) => {
+  resultsEl.querySelectorAll("[data-search-result]").forEach((entry) => {
+    const index = Number(entry.getAttribute("data-result-index"));
+    const bookmark = currentResults[index];
+    if (bookmark) bindBookmarkDrag(entry, bookmark);
+
+    entry.addEventListener("mousedown", (event) => {
       if (event.button !== 0) return;
       event.preventDefault();
-      const index = Number(button.getAttribute("data-result-index"));
+    });
+    entry.addEventListener("click", (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
       openBookmarkAt(index, { newTab: false });
     });
-    button.addEventListener("auxclick", (event) => {
+    entry.addEventListener("auxclick", (event) => {
       if (event.button !== 1) return;
       event.preventDefault();
-      const index = Number(button.getAttribute("data-result-index"));
       openBookmarkAt(index, { newTab: true });
     });
-    button.addEventListener("mouseenter", () => {
-      selectedIndex = Number(button.getAttribute("data-result-index"));
-      resultsEl.querySelectorAll("[data-search-result]").forEach((entry) => {
-        const active = Number(entry.getAttribute("data-result-index")) === selectedIndex;
-        entry.classList.toggle("is-active", active);
-        entry.setAttribute("aria-selected", active ? "true" : "false");
+    entry.addEventListener("mouseenter", () => {
+      selectedIndex = index;
+      resultsEl.querySelectorAll("[data-search-result]").forEach((item) => {
+        const active = Number(item.getAttribute("data-result-index")) === selectedIndex;
+        item.classList.toggle("is-active", active);
+        item.setAttribute("aria-selected", active ? "true" : "false");
       });
     });
   });
@@ -263,17 +273,21 @@ function onInputKeydown(event) {
 }
 
 function onDocumentPointerDown(event) {
+  if (isBookmarkDragActive()) return;
   const target = event.target;
   if (!(target instanceof Node)) return;
   if (root?.contains(target)) return;
   if (toggleBtn?.contains(target)) return;
+  if (document.getElementById("sidebar")?.contains(target)) return;
   closeSearch({ clearInput: false, keepMobileOpen: false });
 }
 
 function onInputBlur() {
   window.setTimeout(() => {
+    if (isBookmarkDragActive()) return;
     const active = document.activeElement;
     if (root?.contains(active) || toggleBtn === active) return;
+    if (document.getElementById("sidebar")?.contains(active)) return;
     closeSearch({ clearInput: false, keepMobileOpen: false });
   }, 0);
 }
