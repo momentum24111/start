@@ -83,6 +83,7 @@
     "faviconFailed": "Favicon konnte nicht geladen werden",
     "search": "Suchen",
     "searchPlaceholder": "Lesezeichen suchen…",
+    "searchClear": "Suche löschen",
     "searchResults": "Suchergebnisse",
     "searchNoResults": "Keine Lesezeichen gefunden",
     "dropToHomepage": "Auf Startseite platzieren",

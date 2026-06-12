@@ -29,14 +29,23 @@
           </div>
           <div id="bookmark-search-root" class="topbar-search">
             <div id="bookmark-search-panel" class="topbar-search__panel">
-              <input
-                id="bookmark-search-input"
-                class="topbar-search__input"
-                type="search"
-                enterkeyhint="search"
-                autocomplete="off"
-                spellcheck="false"
-              />
+              <div class="topbar-search__field">
+                <input
+                  id="bookmark-search-input"
+                  class="topbar-search__input"
+                  type="text"
+                  enterkeyhint="search"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button
+                  id="bookmark-search-clear"
+                  class="btn btn--ghost btn--icon topbar-search__clear hidden"
+                  type="button"
+                  tabindex="-1"
+                  aria-hidden="true"
+                ></button>
+              </div>
               <div id="bookmark-search-results" class="bookmark-search-results hidden" role="listbox"></div>
             </div>
           </div>

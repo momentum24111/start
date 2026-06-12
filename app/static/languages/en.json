@@ -83,6 +83,7 @@
     "faviconFailed": "Could not load favicon",
     "search": "Search",
     "searchPlaceholder": "Search bookmarks…",
+    "searchClear": "Clear search",
     "searchResults": "Search results",
     "searchNoResults": "No bookmarks found",
     "dropToHomepage": "Place on homepage",

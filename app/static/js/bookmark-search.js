@@ -14,6 +14,7 @@ let panel = null;
 let input = null;
 let resultsEl = null;
 let toggleBtn = null;
+let clearBtn = null;
 let debounceTimer = null;
 let currentResults = [];
 let selectedIndex = -1;
@@ -137,12 +138,20 @@ function resetSelection() {
   selectedIndex = -1;
 }
 
+function syncClearButton() {
+  const hasText = Boolean(normalizeSearchText(input?.value));
+  clearBtn?.classList.toggle("hidden", !hasText);
+  clearBtn?.setAttribute("aria-hidden", hasText ? "false" : "true");
+  clearBtn?.setAttribute("tabindex", hasText ? "0" : "-1");
+}
+
 function closeSearch({ clearInput = true, keepMobileOpen = false } = {}) {
   if (clearInput && input) input.value = "";
   currentResults = [];
   resetSelection();
   resultsEl?.classList.add("hidden");
   resultsEl?.replaceChildren();
+  syncClearButton();
   if (!keepMobileOpen) {
     setMobileOpen(false);
   }
@@ -278,11 +287,17 @@ function onDocumentPointerDown(event) {
   closeSearch({ clearInput: false, keepMobileOpen: false });
 }
 
+function onInputFocus() {
+  const query = normalizeSearchText(input?.value);
+  if (!query) return;
+  renderResults();
+}
+
 function onInputBlur() {
   window.setTimeout(() => {
     if (isBookmarkDragActive()) return;
     const active = document.activeElement;
-    if (root?.contains(active) || toggleBtn === active) return;
+    if (root?.contains(active) || toggleBtn === active || clearBtn === active) return;
     if (document.getElementById("sidebar")?.contains(active)) return;
     closeSearch({ clearInput: false, keepMobileOpen: false });
   }, 0);
@@ -298,6 +313,11 @@ function refreshTexts() {
     toggleBtn.setAttribute("aria-label", label);
     toggleBtn.setAttribute("title", label);
   }
+  if (clearBtn) {
+    const clearLabel = deps.t("ui.searchClear");
+    clearBtn.setAttribute("aria-label", clearLabel);
+    clearBtn.setAttribute("title", clearLabel);
+  }
 }
 
 export function refreshBookmarkSearchTexts() {
@@ -311,8 +331,13 @@ export function initBookmarkSearch(options) {
   input = document.getElementById("bookmark-search-input");
   resultsEl = document.getElementById("bookmark-search-results");
   toggleBtn = document.getElementById("bookmark-search-toggle");
+  clearBtn = document.getElementById("bookmark-search-clear");
   if (!(root instanceof HTMLElement) || !(input instanceof HTMLInputElement) || !(resultsEl instanceof HTMLElement)) {
     return;
+  }
+
+  if (clearBtn instanceof HTMLButtonElement && deps.iconSvg && deps.clearIcon) {
+    clearBtn.innerHTML = `<span class="btn__icon" aria-hidden="true">${deps.iconSvg(deps.clearIcon, "inline-icon")}</span>`;
   }
 
   mobileQuery = window.matchMedia("(max-width: 900px)");
@@ -321,8 +346,10 @@ export function initBookmarkSearch(options) {
   });
 
   refreshTexts();
+  syncClearButton();
 
   input.addEventListener("input", () => {
+    syncClearButton();
     const query = normalizeSearchText(input.value);
     if (!query) {
       closeSearch({ clearInput: false, keepMobileOpen: isMobileLayout() });
@@ -332,7 +359,16 @@ export function initBookmarkSearch(options) {
   });
 
   input.addEventListener("keydown", onInputKeydown);
+  input.addEventListener("focus", onInputFocus);
   input.addEventListener("blur", onInputBlur);
+
+  clearBtn?.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  clearBtn?.addEventListener("click", () => {
+    closeSearch({ clearInput: true, keepMobileOpen: isMobileLayout() });
+    input?.focus();
+  });
 
   toggleBtn?.addEventListener("click", () => {
     const open = !root.classList.contains("is-mobile-open");
