@@ -292,7 +292,7 @@ function refreshTexts() {
   if (!deps || !input) return;
   const label = deps.t("ui.search");
   input.setAttribute("aria-label", label);
-  input.setAttribute("placeholder", deps.t("ui.searchPlaceholder"));
+  input.removeAttribute("placeholder");
   resultsEl?.setAttribute("aria-label", deps.t("ui.searchResults"));
   if (toggleBtn) {
     toggleBtn.setAttribute("aria-label", label);
@@ -315,7 +315,7 @@ export function initBookmarkSearch(options) {
     return;
   }
 
-  mobileQuery = window.matchMedia("(max-width: 768px)");
+  mobileQuery = window.matchMedia("(max-width: 900px)");
   mobileQuery.addEventListener("change", () => {
     if (!isMobileLayout()) setMobileOpen(false);
   });

@@ -196,13 +196,16 @@ function renderHomepageCardBookmark(options, deps) {
 }
 
 function renderHomepageBookmark(options, deps) {
-  const { bookmark, editMode } = options;
+  const { bookmark, editMode, hasShortcut } = options;
   const title = escapeHtml(bookmark.title || "");
   const url = escapeHtml(bookmark.url || "");
+  const shortcutMarkup = !editMode && hasShortcut
+    ? `<div class="service-shortcut">${deps.renderShortcutChips(bookmark.shortcut)}</div>`
+    : "";
 
   return `
     <article
-      class="bookmark-item bookmark-item--homepage service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--homepage service ${editMode ? "is-edit-mode" : ""} ${hasShortcut ? "has-shortcut" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
       ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
@@ -217,6 +220,7 @@ function renderHomepageBookmark(options, deps) {
         ${renderThumbnail(bookmark, deps, "homepage")}
         <h3 class="bookmark-item__title">${title}</h3>
       </a>
+      ${shortcutMarkup}
       ${editMode ? `
         <div class="bookmark-item__edit-actions bookmark-item__edit-actions--homepage">
           ${renderActionButtons(options, deps, { editOnly: true })}

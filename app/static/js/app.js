@@ -84,7 +84,8 @@ const state = {
     elementSize: "medium",
     globalShortcuts: {},
     activeNavId: NAV_ALL,
-    navViewModes: {}
+    navViewModes: {},
+    sidebarOpen: false
   },
   editMode: false,
   sidebarOpen: false,
@@ -102,7 +103,6 @@ const state = {
 const CATEGORY_METADATA_TOAST_ID = "category-metadata-reload";
 const SIDEBAR_MOBILE_BREAKPOINT = "(max-width: 900px)";
 let sidebarMobileQuery = null;
-let desktopSidebarOpen = false;
 let sidebarOpenBeforeDrag = null;
 
 function categoryEffectiveCollapsed(category) {
@@ -1087,11 +1087,16 @@ async function bootstrap() {
     elementSize: normalizeElementSize(settings?.elementSize),
     globalShortcuts: normalizeGlobalShortcuts(settings?.globalShortcuts),
     browserSync: normalizeBrowserSyncSettings(settings?.browserSync),
-    navViewModes: normalizeNavViewModes(settings?.navViewModes)
+    navViewModes: normalizeNavViewModes(settings?.navViewModes),
+    sidebarOpen: Boolean(settings?.sidebarOpen)
   };
   state.settings.activeNavId = resolveNavIdFromHash(state.config, window.location.hash, state.settings);
   state.themes = themes.themes;
   state.languages = languages.languages;
+  const sidebarMobileOnLoad = window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT).matches;
+  state.sidebarOpen = sidebarMobileOnLoad ? false : state.settings.sidebarOpen;
+  ensureSidebarShell();
+  setSidebarOpen(state.sidebarOpen);
   await initI18n(state.settings.language);
   applyTheme(state.settings.theme);
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
@@ -1200,7 +1205,8 @@ async function persistSettings() {
     globalShortcuts: normalizeGlobalShortcuts(saved?.globalShortcuts),
     browserSync: normalizeBrowserSyncSettings(saved?.browserSync),
     activeNavId: resolveActiveNavId(state.config, saved),
-    navViewModes: normalizeNavViewModes(saved?.navViewModes)
+    navViewModes: normalizeNavViewModes(saved?.navViewModes),
+    sidebarOpen: Boolean(saved?.sidebarOpen)
   };
 }
 
@@ -1340,7 +1346,7 @@ function bindSidebarEvents() {
     if (!event.target.closest("#nav-toggle-btn")) return;
     event.preventDefault();
     queryNavigationElements();
-    setSidebarOpen(!state.sidebarOpen);
+    setSidebarOpen(!state.sidebarOpen, { persist: !isSidebarMobileLayout() });
   });
 }
 
@@ -1352,13 +1358,14 @@ function getActiveNavViewMode() {
   return getNavViewMode(state.settings, getActiveNavId());
 }
 
-function setSidebarOpen(open) {
+function setSidebarOpen(open, { persist = false } = {}) {
   ensureSidebarShell();
   queryNavigationElements();
   const nextOpen = Boolean(open);
   state.sidebarOpen = nextOpen;
-  if (!isSidebarMobileLayout()) {
-    desktopSidebarOpen = nextOpen;
+  if (persist && !isSidebarMobileLayout()) {
+    state.settings.sidebarOpen = nextOpen;
+    void persistSettings();
   }
   if (elements.sidebar) {
     elements.sidebar.classList.toggle("is-open", nextOpen);
@@ -1376,12 +1383,11 @@ function initSidebarResponsiveBehavior() {
   const applyLayout = () => {
     document.body.classList.toggle("sidebar-mobile", isSidebarMobileLayout());
     if (isSidebarMobileLayout()) {
-      desktopSidebarOpen = state.sidebarOpen;
       if (state.sidebarOpen) setSidebarOpen(false);
       else syncSidebarBackdrop();
       return;
     }
-    setSidebarOpen(desktopSidebarOpen);
+    setSidebarOpen(Boolean(state.settings.sidebarOpen));
   };
   sidebarMobileQuery.addEventListener("change", applyLayout);
   applyLayout();

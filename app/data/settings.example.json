@@ -16,5 +16,6 @@
     "syncIntervalHours": 6
   },
   "activeNavId": "all",
-  "navViewModes": {}
+  "navViewModes": {},
+  "sidebarOpen": false
 }
