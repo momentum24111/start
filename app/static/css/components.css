@@ -317,6 +317,10 @@ body[data-element-size="large"] .topbar-search {
   border-right-color: var(--sidebar-divider, color-mix(in srgb, var(--text) 12%, transparent));
 }
 
+.sidebar.sidebar--instant {
+  transition: none;
+}
+
 .sidebar-nav {
   flex: 1 1 auto;
   min-height: 0;
@@ -1700,6 +1704,10 @@ textarea {
 
   body.sidebar-mobile .sidebar.is-open {
     transform: translateX(0);
+  }
+
+  body.sidebar-mobile .sidebar.sidebar--instant {
+    transition: none;
   }
 
   body.sidebar-mobile .app-main {

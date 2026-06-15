@@ -1097,7 +1097,9 @@ async function bootstrap() {
   const sidebarMobileOnLoad = window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT).matches;
   state.sidebarOpen = sidebarMobileOnLoad ? false : state.settings.sidebarOpen;
   ensureSidebarShell();
-  setSidebarOpen(state.sidebarOpen);
+  setSidebarOpen(state.sidebarOpen, {
+    instant: !sidebarMobileOnLoad && state.sidebarOpen
+  });
   await initI18n(state.settings.language);
   applyTheme(state.settings.theme);
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
@@ -1360,7 +1362,11 @@ function getActiveNavViewMode() {
   return getNavViewMode(state.settings, getActiveNavId());
 }
 
-function setSidebarOpen(open, { persist = false } = {}) {
+function releaseSidebarInstantTransition() {
+  elements.sidebar?.classList.remove("sidebar--instant");
+}
+
+function setSidebarOpen(open, { persist = false, instant = false } = {}) {
   ensureSidebarShell();
   queryNavigationElements();
   const nextOpen = Boolean(open);
@@ -1368,6 +1374,9 @@ function setSidebarOpen(open, { persist = false } = {}) {
   if (persist && !isSidebarMobileLayout()) {
     state.settings.sidebarOpen = nextOpen;
     void persistSettings();
+  }
+  if (instant && elements.sidebar) {
+    elements.sidebar.classList.add("sidebar--instant");
   }
   if (elements.sidebar) {
     elements.sidebar.classList.toggle("is-open", nextOpen);
@@ -1378,6 +1387,12 @@ function setSidebarOpen(open, { persist = false } = {}) {
   document.body.classList.toggle("sidebar-open", nextOpen && !isSidebarMobileLayout());
   document.body.classList.toggle("sidebar-mobile", isSidebarMobileLayout());
   syncSidebarBackdrop();
+  if (instant && elements.sidebar) {
+    void elements.sidebar.offsetWidth;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(releaseSidebarInstantTransition);
+    });
+  }
 }
 
 function initSidebarResponsiveBehavior() {
