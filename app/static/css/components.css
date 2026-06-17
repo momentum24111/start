@@ -1794,10 +1794,6 @@ textarea {
     overflow: hidden;
   }
 
-  body.sidebar-mobile .topbar-leading {
-    padding-left: calc(36px + 0.55rem);
-  }
-
   body.sidebar-mobile .sidebar.is-open {
     transform: translateX(0);
   }
@@ -1806,24 +1802,8 @@ textarea {
     transition: none;
   }
 
-  body.sidebar-mobile:not(.sidebar-mobile-open) .sidebar-header {
-    position: fixed;
-    top: calc(0.85rem + env(safe-area-inset-top, 0px));
-    left: 1rem;
-    z-index: 301;
-    width: 36px;
-    min-height: 0;
-    padding: 0;
-    background: transparent;
-  }
-
-  body.sidebar-mobile:not(.sidebar-mobile-open) .sidebar-nav {
-    visibility: hidden;
-    pointer-events: none;
-  }
-
-  body.sidebar-mobile .sidebar.is-open .sidebar-nav {
-    padding-inline: 0.65rem;
+  body.sidebar-mobile .sidebar-header {
+    display: none;
   }
 
   body.sidebar-mobile .app-main {

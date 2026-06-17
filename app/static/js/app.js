@@ -1372,14 +1372,21 @@ function bindSidebarTooltipEvents() {
 
 function ensureSidebarHeader() {
   queryNavigationElements();
-  if (!elements.sidebar) return;
+  if (!elements.sidebar || !elements.navToggle) return;
   let header = elements.sidebar.querySelector(".sidebar-header");
   if (!header) {
     header = document.createElement("div");
     header.className = "sidebar-header";
     elements.sidebar.prepend(header);
   }
-  if (elements.navToggle && elements.navToggle.parentElement !== header) {
+  const topbarLeading = document.querySelector(".topbar-leading");
+  if (isSidebarMobileLayout()) {
+    if (topbarLeading instanceof HTMLElement && elements.navToggle.parentElement !== topbarLeading) {
+      topbarLeading.prepend(elements.navToggle);
+    }
+    return;
+  }
+  if (elements.navToggle.parentElement !== header) {
     header.append(elements.navToggle);
   }
 }
@@ -1476,6 +1483,12 @@ function bindSidebarEvents() {
     const navId = link.dataset.navId;
     if (navId) void selectNav(navId);
   });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!isSidebarMobileLayout() || !state.sidebarOpen) return;
+    event.preventDefault();
+    setSidebarOpen(false);
+  });
 }
 
 function getActiveNavId() {
@@ -1527,6 +1540,7 @@ function initSidebarResponsiveBehavior() {
   sidebarMobileQuery = window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT);
   const applyLayout = () => {
     document.body.classList.toggle("sidebar-mobile", isSidebarMobileLayout());
+    ensureSidebarHeader();
     if (isSidebarMobileLayout()) {
       if (state.sidebarOpen) setSidebarOpen(false);
       else syncSidebarBackdrop();
