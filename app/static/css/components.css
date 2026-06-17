@@ -1890,7 +1890,7 @@ textarea {
 
 .bookmark-item--list {
   display: grid;
-  grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: stretch;
   gap: var(--size-bookmark-gap);
   min-height: var(--size-bookmark-list-height);
@@ -1899,7 +1899,7 @@ textarea {
 }
 
 .bookmark-item--list.is-edit-mode {
-  grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .bookmark-item--homepage {
@@ -2068,8 +2068,10 @@ textarea {
 }
 
 .bookmark-thumb--list {
-  width: var(--size-bookmark-list-thumb);
-  height: var(--size-bookmark-list-thumb);
+  width: auto;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  align-self: stretch;
 }
 
 .bookmark-thumb--card {
@@ -2168,7 +2170,7 @@ textarea {
 
 .bookmark-item__nav-link {
   display: grid;
-  grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--size-bookmark-gap);
   align-items: stretch;
   min-width: 0;
@@ -2176,15 +2178,6 @@ textarea {
   padding: calc(0.55rem * var(--element-scale));
   color: inherit;
   text-decoration: none;
-}
-
-.bookmark-item--nav .bookmark-thumb--list {
-  width: auto;
-  height: 100%;
-  min-height: var(--size-bookmark-list-thumb);
-  max-width: var(--size-bookmark-list-thumb);
-  aspect-ratio: 1 / 1;
-  align-self: stretch;
 }
 
 .bookmark-item--nav.is-edit-mode .bookmark-item__nav-link {
@@ -2597,17 +2590,18 @@ body.bookmark-drag-active .sidebar-link.is-drop-target {
 
 @media (max-width: 650px) {
   .bookmark-item--list {
-    grid-template-columns: calc(60px * var(--element-scale)) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto auto;
   }
 
   .bookmark-item--list.is-edit-mode {
-    grid-template-columns: calc(60px * var(--element-scale)) minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .bookmark-thumb--list {
     width: calc(60px * var(--element-scale));
-    height: calc(60px * var(--element-scale));
+    height: auto;
+    aspect-ratio: 1 / 1;
   }
 
   .bookmark-item__edit-actions {
