@@ -340,11 +340,8 @@ body[data-element-size="large"] .topbar-search {
   min-height: 0;
   width: 100%;
   overflow: auto;
-  padding: 0.35rem 0 1rem;
-}
-
-body:not(.sidebar-mobile) .sidebar.is-open .sidebar-nav {
-  padding-inline: 0.65rem;
+  overflow-x: hidden;
+  padding: 0.35rem 0.65rem 1rem;
 }
 
 body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__details {
@@ -354,6 +351,11 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__details {
   opacity: 0;
   padding: 0;
   pointer-events: none;
+}
+
+body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__icon {
+  flex-basis: 100%;
+  width: 100%;
 }
 
 body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
@@ -408,6 +410,8 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
   text-align: left;
   cursor: pointer;
   font: inherit;
+  box-sizing: border-box;
+  overflow: hidden;
   transition: background-color 120ms ease, color 120ms ease;
 }
 
