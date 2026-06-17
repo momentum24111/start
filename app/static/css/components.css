@@ -429,9 +429,10 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
   min-height: var(--sidebar-link-height, 2.28rem);
 }
 
-.sidebar-link__icon .inline-icon {
+.sidebar-link__icon .mdi-icon {
   width: 18px;
   height: 18px;
+  flex: 0 0 18px;
 }
 
 .sidebar-link__details {
@@ -468,6 +469,11 @@ body:not(.sidebar-mobile) .sidebar.sidebar--instant .sidebar-link__details {
   text-align: right;
   font-size: 0.82rem;
   color: var(--nav-item-count-fg, var(--muted));
+}
+
+.sidebar-link__count:empty {
+  display: none;
+  min-width: 0;
 }
 
 .sidebar-link.is-active .sidebar-link__count {
