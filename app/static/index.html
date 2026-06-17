@@ -10,7 +10,14 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside id="sidebar" class="sidebar" aria-hidden="true">
+      <aside id="sidebar" class="sidebar" aria-hidden="false">
+        <div class="sidebar-header">
+          <button id="nav-toggle-btn" class="btn btn--ghost btn--icon sidebar-header__toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Navigation">
+            <span class="btn__icon" aria-hidden="true">
+              <svg class="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"></path></svg>
+            </span>
+          </button>
+        </div>
         <nav class="sidebar-nav" aria-label="Navigation">
           <ul id="sidebar-system" class="sidebar-list"></ul>
           <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
@@ -20,11 +27,6 @@
       <div class="app-main">
         <header class="topbar">
           <div class="topbar-leading">
-            <button id="nav-toggle-btn" class="btn btn--ghost btn--icon" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Navigation">
-              <span class="btn__icon" aria-hidden="true">
-                <svg class="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"></path></svg>
-              </span>
-            </button>
             <h1 id="app-title">__START_PKG_INITIAL_APP_TITLE__</h1>
           </div>
           <div id="bookmark-search-root" class="topbar-search">

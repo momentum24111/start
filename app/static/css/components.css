@@ -275,38 +275,40 @@ body[data-element-size="large"] .topbar-search {
   text-overflow: ellipsis;
 }
 
-#nav-toggle-btn.is-active {
+#nav-toggle-btn.is-active,
+.sidebar-header__toggle.is-active {
   background: var(--control-active-bg);
   color: var(--control-active-fg);
 }
 
-#nav-toggle-btn .btn__icon {
+#nav-toggle-btn .btn__icon,
+.sidebar-header__toggle .btn__icon {
   width: 18px;
   height: 18px;
 }
 
-#nav-toggle-btn .btn__icon svg {
+#nav-toggle-btn .btn__icon svg,
+.sidebar-header__toggle .btn__icon svg {
   display: block;
   width: 100%;
   height: 100%;
 }
 
 .sidebar {
-  flex: 0 0 0;
+  flex: 0 0 var(--sidebar-width-collapsed, 56px);
   flex-shrink: 0;
-  width: 0;
-  min-width: 0;
+  width: var(--sidebar-width-collapsed, 56px);
+  min-width: var(--sidebar-width-collapsed, 56px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   align-self: stretch;
   background: var(--sidebar-bg, var(--surface));
-  border-right: 1px solid transparent;
+  border-right: 1px solid var(--sidebar-divider, color-mix(in srgb, var(--text) 12%, transparent));
   transition:
     flex-basis 220ms cubic-bezier(0.22, 1, 0.36, 1),
     width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    min-width 220ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: flex-basis, width;
 }
 
@@ -314,19 +316,62 @@ body[data-element-size="large"] .topbar-search {
   flex: 0 0 var(--sidebar-width, 280px);
   width: var(--sidebar-width, 280px);
   min-width: var(--sidebar-width, 280px);
-  border-right-color: var(--sidebar-divider, color-mix(in srgb, var(--text) 12%, transparent));
 }
 
 .sidebar.sidebar--instant {
   transition: none;
 }
 
+.sidebar-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: calc(38px + 1.7rem);
+  padding: 0.85rem 0.65rem 0.35rem;
+}
+
+.sidebar-header__toggle {
+  flex: 0 0 auto;
+}
+
 .sidebar-nav {
   flex: 1 1 auto;
   min-height: 0;
-  width: var(--sidebar-width, 280px);
+  width: 100%;
   overflow: auto;
-  padding: 0.85rem 0.65rem 1rem;
+  padding: 0.35rem 0.65rem 1rem;
+}
+
+body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__label,
+body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__count {
+  display: none;
+}
+
+body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link {
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0.35rem;
+}
+
+body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
+  display: none;
+}
+
+.sidebar-tooltip {
+  position: fixed;
+  z-index: 400;
+  margin-left: 0.45rem;
+  padding: 0.38rem 0.62rem;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
+  background: var(--sidebar-tooltip-bg);
+  color: var(--sidebar-tooltip-fg);
+  box-shadow: var(--sidebar-tooltip-shadow);
 }
 
 .sidebar-list {
@@ -1693,13 +1738,18 @@ textarea {
     left: 0;
     bottom: 0;
     z-index: 300;
-    flex: none;
+    flex: 0 0 0;
     width: min(var(--sidebar-width, 280px), 88vw);
     min-width: 0;
     max-width: min(var(--sidebar-width, 280px), 88vw);
     transform: translateX(-105%);
     transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
     border-right-color: var(--sidebar-divider, color-mix(in srgb, var(--text) 12%, transparent));
+    overflow: hidden;
+  }
+
+  body.sidebar-mobile .topbar-leading {
+    padding-left: calc(36px + 0.55rem);
   }
 
   body.sidebar-mobile .sidebar.is-open {
@@ -1708,6 +1758,22 @@ textarea {
 
   body.sidebar-mobile .sidebar.sidebar--instant {
     transition: none;
+  }
+
+  body.sidebar-mobile:not(.sidebar-mobile-open) .sidebar-header {
+    position: fixed;
+    top: calc(0.85rem + env(safe-area-inset-top, 0px));
+    left: 1rem;
+    z-index: 301;
+    width: 36px;
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  body.sidebar-mobile:not(.sidebar-mobile-open) .sidebar-nav {
+    visibility: hidden;
+    pointer-events: none;
   }
 
   body.sidebar-mobile .app-main {

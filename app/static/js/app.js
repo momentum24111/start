@@ -104,6 +104,8 @@ const CATEGORY_METADATA_TOAST_ID = "category-metadata-reload";
 const SIDEBAR_MOBILE_BREAKPOINT = "(max-width: 900px)";
 let sidebarMobileQuery = null;
 let sidebarOpenBeforeDrag = null;
+let sidebarTooltipEl = null;
+let sidebarTooltipAnchor = null;
 
 function categoryEffectiveCollapsed(category) {
   if (state.editMode) return false;
@@ -147,7 +149,8 @@ const ICONS = {
   open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
   dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   search: "M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 3.23-.87l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
-  close: "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z"
+  close: "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z",
+  menuCollapse: "M3 6h21v2H3V6zm0 5h21v2H3v-2zm0 5h21v2H3v-2zm14 1l5-5-5-5v10z"
 };
 
 const FALLBACK_MDI_ICON = "folder";
@@ -1144,6 +1147,7 @@ async function bootstrap() {
     openBookmark: openBookmarkFromSearch
   });
   initSidebarResponsiveBehavior();
+  bindSidebarTooltipEvents();
   const searchToggle = document.getElementById("bookmark-search-toggle");
   if (searchToggle) {
     searchToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.search, "inline-icon")}</span>`;
@@ -1287,6 +1291,100 @@ function ensureAppShell() {
   }
 }
 
+function isSidebarCollapsedDesktop() {
+  return !isSidebarMobileLayout() && !state.sidebarOpen;
+}
+
+function ensureSidebarTooltip() {
+  if (sidebarTooltipEl instanceof HTMLElement) return sidebarTooltipEl;
+  const el = document.createElement("div");
+  el.id = "sidebar-tooltip";
+  el.className = "sidebar-tooltip";
+  el.hidden = true;
+  document.body.append(el);
+  sidebarTooltipEl = el;
+  return el;
+}
+
+function hideSidebarTooltip() {
+  sidebarTooltipAnchor = null;
+  if (!(sidebarTooltipEl instanceof HTMLElement)) return;
+  sidebarTooltipEl.hidden = true;
+  sidebarTooltipEl.textContent = "";
+}
+
+function showSidebarTooltip(anchor, label) {
+  if (!(anchor instanceof HTMLElement) || !label) {
+    hideSidebarTooltip();
+    return;
+  }
+  const tooltip = ensureSidebarTooltip();
+  if (sidebarTooltipAnchor === anchor && tooltip.textContent === label && !tooltip.hidden) return;
+  sidebarTooltipAnchor = anchor;
+  tooltip.textContent = label;
+  tooltip.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  tooltip.style.top = `${rect.top + rect.height / 2}px`;
+  tooltip.style.left = `${rect.left + rect.width}px`;
+}
+
+function bindSidebarTooltipEvents() {
+  if (document.documentElement.dataset.sidebarTooltipBound === "true") return;
+  document.documentElement.dataset.sidebarTooltipBound = "true";
+  queryNavigationElements();
+  ensureSidebarTooltip();
+  const showTooltipForLink = (link) => {
+    if (!isSidebarCollapsedDesktop()) {
+      hideSidebarTooltip();
+      return;
+    }
+    if (!(link instanceof HTMLElement) || link.classList.contains("sidebar-link--draft")) {
+      hideSidebarTooltip();
+      return;
+    }
+    const label = link.querySelector(".sidebar-link__label")?.textContent?.trim();
+    showSidebarTooltip(link, label || "");
+  };
+  elements.sidebar?.addEventListener("mouseover", (event) => {
+    const link = event.target.closest?.(".sidebar-link");
+    if (!(link instanceof HTMLElement) || !elements.sidebar?.contains(link)) {
+      hideSidebarTooltip();
+      return;
+    }
+    showTooltipForLink(link);
+  });
+  elements.sidebar?.addEventListener("mouseout", (event) => {
+    if (!isSidebarCollapsedDesktop()) return;
+    const link = event.target.closest?.(".sidebar-link");
+    const related = event.relatedTarget;
+    if (link instanceof HTMLElement && related instanceof Node && link.contains(related)) return;
+    hideSidebarTooltip();
+  });
+  elements.sidebar?.addEventListener("focusin", (event) => {
+    const link = event.target.closest?.(".sidebar-link");
+    if (link instanceof HTMLElement) showTooltipForLink(link);
+  });
+  elements.sidebar?.addEventListener("focusout", () => {
+    hideSidebarTooltip();
+  });
+  elements.sidebar?.querySelector(".sidebar-nav")?.addEventListener("scroll", hideSidebarTooltip, { passive: true });
+  window.addEventListener("resize", hideSidebarTooltip);
+}
+
+function ensureSidebarHeader() {
+  queryNavigationElements();
+  if (!elements.sidebar) return;
+  let header = elements.sidebar.querySelector(".sidebar-header");
+  if (!header) {
+    header = document.createElement("div");
+    header.className = "sidebar-header";
+    elements.sidebar.prepend(header);
+  }
+  if (elements.navToggle && elements.navToggle.parentElement !== header) {
+    header.append(elements.navToggle);
+  }
+}
+
 function ensureSidebarShell() {
   ensureAppShell();
   queryNavigationElements();
@@ -1295,8 +1393,9 @@ function ensureSidebarShell() {
     const sidebar = document.createElement("aside");
     sidebar.id = "sidebar";
     sidebar.className = "sidebar";
-    sidebar.setAttribute("aria-hidden", "true");
+    sidebar.setAttribute("aria-hidden", "false");
     sidebar.innerHTML = `
+      <div class="sidebar-header"></div>
       <nav class="sidebar-nav" aria-label="Navigation">
         <ul id="sidebar-system" class="sidebar-list"></ul>
         <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
@@ -1330,6 +1429,7 @@ function ensureSidebarShell() {
     }
   }
 
+  ensureSidebarHeader();
   if (elements.navToggle) {
     elements.navToggle.setAttribute("aria-controls", "sidebar");
   }
@@ -1338,7 +1438,23 @@ function ensureSidebarShell() {
 function updateNavToggleIcon() {
   queryNavigationElements();
   if (!elements.navToggle) return;
-  elements.navToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.menu, "inline-icon")}</span>`;
+  const mobile = isSidebarMobileLayout();
+  const iconPath = mobile || !state.sidebarOpen ? ICONS.menu : ICONS.menuCollapse;
+  elements.navToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(iconPath, "inline-icon")}</span>`;
+}
+
+function updateNavToggleLabels() {
+  queryNavigationElements();
+  if (!elements.navToggle) return;
+  const mobile = isSidebarMobileLayout();
+  const expanded = state.sidebarOpen;
+  const label = mobile
+    ? t("ui.navToggle")
+    : expanded
+      ? t("ui.navToggleCollapse")
+      : t("ui.navToggleExpand");
+  elements.navToggle.title = label;
+  elements.navToggle.setAttribute("aria-label", label);
 }
 
 function bindSidebarEvents() {
@@ -1369,9 +1485,10 @@ function releaseSidebarInstantTransition() {
 function setSidebarOpen(open, { persist = false, instant = false } = {}) {
   ensureSidebarShell();
   queryNavigationElements();
+  const mobile = isSidebarMobileLayout();
   const nextOpen = Boolean(open);
   state.sidebarOpen = nextOpen;
-  if (persist && !isSidebarMobileLayout()) {
+  if (persist && !mobile) {
     state.settings.sidebarOpen = nextOpen;
     void persistSettings();
   }
@@ -1380,13 +1497,16 @@ function setSidebarOpen(open, { persist = false, instant = false } = {}) {
   }
   if (elements.sidebar) {
     elements.sidebar.classList.toggle("is-open", nextOpen);
-    elements.sidebar.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+    elements.sidebar.setAttribute("aria-hidden", mobile && !nextOpen ? "true" : "false");
   }
   elements.navToggle?.setAttribute("aria-expanded", nextOpen ? "true" : "false");
-  elements.navToggle?.classList.toggle("is-active", nextOpen);
-  document.body.classList.toggle("sidebar-open", nextOpen && !isSidebarMobileLayout());
-  document.body.classList.toggle("sidebar-mobile", isSidebarMobileLayout());
+  elements.navToggle?.classList.toggle("is-active", mobile && nextOpen);
+  document.body.classList.toggle("sidebar-open", nextOpen && !mobile);
+  document.body.classList.toggle("sidebar-mobile", mobile);
   syncSidebarBackdrop();
+  updateNavToggleIcon();
+  updateNavToggleLabels();
+  if (!nextOpen || mobile) hideSidebarTooltip();
   if (instant && elements.sidebar) {
     void elements.sidebar.offsetWidth;
     requestAnimationFrame(() => {
@@ -1473,10 +1593,7 @@ function renderSidebarLink(navId, label, count, iconName) {
 function renderSidebar() {
   ensureSidebarShell();
   updateNavToggleIcon();
-  if (elements.navToggle) {
-    elements.navToggle.title = t("ui.navToggle");
-    elements.navToggle.setAttribute("aria-label", t("ui.navToggle"));
-  }
+  updateNavToggleLabels();
   if (!elements.sidebarSystem || !elements.sidebarCategories) return;
   setSidebarOpen(state.sidebarOpen);
 

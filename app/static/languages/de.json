@@ -122,6 +122,8 @@
     "navUnsorted": "Unsortiert",
     "addSidebarCategory": "Kategorie hinzufügen",
     "navToggle": "Navigation",
+    "navToggleExpand": "Navigation ausklappen",
+    "navToggleCollapse": "Navigation einklappen",
     "viewList": "Listenansicht",
     "viewCards": "Kartenansicht",
     "open": "Öffnen",

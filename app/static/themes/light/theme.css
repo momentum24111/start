@@ -51,6 +51,7 @@ body {
   --cat-orange: #e47a36;
   --cat-slate: #6e879f;
   --sidebar-width: 280px;
+  --sidebar-width-collapsed: 56px;
   --sidebar-bg: #ffffff;
   --sidebar-divider: rgba(81, 99, 121, 0.16);
   --sidebar-item-hover-bg: #e6edf4;
@@ -80,6 +81,9 @@ body {
   --sidebar-backdrop-bg: rgba(15, 35, 60, 0.32);
   --sidebar-drop-target-bg: #e6edf4;
   --sidebar-drop-target-border: color-mix(in srgb, var(--primary) 45%, transparent);
+  --sidebar-tooltip-bg: #ffffff;
+  --sidebar-tooltip-fg: #17376f;
+  --sidebar-tooltip-shadow: 0 8px 20px rgba(15, 35, 60, 0.14);
   --bookmark-drag-ghost-bg: #ffffff;
   --bookmark-drag-ghost-shadow: 0 10px 24px rgba(15, 35, 60, 0.16);
 }
