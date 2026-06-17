@@ -340,18 +340,20 @@ body[data-element-size="large"] .topbar-search {
   min-height: 0;
   width: 100%;
   overflow: auto;
-  padding: 0.35rem 0.65rem 1rem;
+  padding: 0.35rem 0 1rem;
 }
 
-body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__label,
-body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__count {
-  display: none;
+body:not(.sidebar-mobile) .sidebar.is-open .sidebar-nav {
+  padding-inline: 0.65rem;
 }
 
-body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link {
-  justify-content: center;
-  gap: 0;
-  padding-inline: 0.35rem;
+body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link__details {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  padding: 0;
+  pointer-events: none;
 }
 
 body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
@@ -395,13 +397,14 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
 .sidebar-link {
   width: 100%;
   display: flex;
-  align-items: center;
-  gap: 0.55rem;
+  align-items: stretch;
+  gap: 0;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--text);
-  padding: 0.55rem 0.65rem;
+  padding: 0;
+  min-height: var(--sidebar-link-height, 2.28rem);
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -418,9 +421,37 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
 }
 
 .sidebar-link__icon {
-  flex: 0 0 auto;
+  flex: 0 0 var(--sidebar-width-collapsed, 56px);
+  width: var(--sidebar-width-collapsed, 56px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--sidebar-link-height, 2.28rem);
+}
+
+.sidebar-link__icon .inline-icon {
   width: 18px;
   height: 18px;
+}
+
+.sidebar-link__details {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  overflow: hidden;
+  padding-right: 0.65rem;
+  transition:
+    opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    flex-basis 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    min-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body:not(.sidebar-mobile) .sidebar.sidebar--instant .sidebar-link__details {
+  transition: none;
 }
 
 .sidebar-link__label {
@@ -1774,6 +1805,10 @@ textarea {
   body.sidebar-mobile:not(.sidebar-mobile-open) .sidebar-nav {
     visibility: hidden;
     pointer-events: none;
+  }
+
+  body.sidebar-mobile .sidebar.is-open .sidebar-nav {
+    padding-inline: 0.65rem;
   }
 
   body.sidebar-mobile .app-main {

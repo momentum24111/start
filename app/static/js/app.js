@@ -149,8 +149,7 @@ const ICONS = {
   open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
   dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   search: "M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 3.23-.87l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
-  close: "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z",
-  menuCollapse: "M3 6h21v2H3V6zm0 5h21v2H3v-2zm0 5h21v2H3v-2zm14 1l5-5-5-5v10z"
+  close: "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z"
 };
 
 const FALLBACK_MDI_ICON = "folder";
@@ -1439,7 +1438,7 @@ function updateNavToggleIcon() {
   queryNavigationElements();
   if (!elements.navToggle) return;
   const mobile = isSidebarMobileLayout();
-  const iconPath = mobile || !state.sidebarOpen ? ICONS.menu : ICONS.menuCollapse;
+  const iconPath = mobile || !state.sidebarOpen ? ICONS.menu : ICONS.arrowLeft;
   elements.navToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(iconPath, "inline-icon")}</span>`;
 }
 
@@ -1569,24 +1568,89 @@ function getNavTitle(navId) {
   return findSidebarCategoryById(state.config, navId)?.name || "";
 }
 
-function renderSidebarLink(navId, label, count, iconName) {
-  const li = document.createElement("li");
-  li.className = "sidebar-item";
+function patchSidebarLink(button, { navId, label, count, iconName }) {
+  if (!(button instanceof HTMLButtonElement)) return;
   const isActive = getActiveNavId() === navId;
-  const button = document.createElement("button");
-  button.type = "button";
   button.className = `sidebar-link ${isActive ? "is-active" : ""}`;
   button.dataset.navId = navId;
   button.dataset.sidebarDrop = navId;
-  button.innerHTML = `
-    <span class="sidebar-link__icon">${mdiIcon(iconName, "inline-icon")}</span>
-    <span class="sidebar-link__label">${label}</span>
-    <span class="sidebar-link__count">${count}</span>
-  `;
-  button.addEventListener("click", () => {
-    void selectNav(navId);
+
+  let iconWrap = button.querySelector(".sidebar-link__icon");
+  let details = button.querySelector(".sidebar-link__details");
+  let labelEl = button.querySelector(".sidebar-link__label");
+  let countEl = button.querySelector(".sidebar-link__count");
+
+  if (!iconWrap || !details || !labelEl || !countEl) {
+    button.replaceChildren();
+    iconWrap = document.createElement("span");
+    iconWrap.className = "sidebar-link__icon";
+    details = document.createElement("span");
+    details.className = "sidebar-link__details";
+    labelEl = document.createElement("span");
+    labelEl.className = "sidebar-link__label";
+    countEl = document.createElement("span");
+    countEl.className = "sidebar-link__count";
+    details.append(labelEl, countEl);
+    button.append(iconWrap, details);
+    if (button.dataset.sidebarBound !== "true") {
+      button.addEventListener("click", () => {
+        const id = button.dataset.navId;
+        if (id) void selectNav(id);
+      });
+      button.dataset.sidebarBound = "true";
+    }
+  }
+
+  if (button.dataset.sidebarIcon !== iconName) {
+    iconWrap.innerHTML = mdiIcon(iconName, "inline-icon");
+    button.dataset.sidebarIcon = iconName;
+  }
+  labelEl.textContent = label;
+  countEl.textContent = String(count);
+  button.classList.toggle("is-active", isActive);
+}
+
+function findSidebarItemByNavId(list, navId) {
+  for (const child of list.children) {
+    if (!(child instanceof HTMLElement)) continue;
+    const link = child.querySelector(".sidebar-link");
+    if (link?.dataset.navId === navId) return child;
+  }
+  return null;
+}
+
+function syncSidebarNavList(list, entries) {
+  const seen = new Set();
+  entries.forEach((entry, index) => {
+    let li = findSidebarItemByNavId(list, entry.navId);
+    if (!(li instanceof HTMLElement)) {
+      li = document.createElement("li");
+      li.className = "sidebar-item";
+      const button = document.createElement("button");
+      button.type = "button";
+      li.append(button);
+    }
+    patchSidebarLink(li.querySelector(".sidebar-link"), entry);
+    seen.add(entry.navId);
+    if (list.children[index] !== li) {
+      list.insertBefore(li, list.children[index] || null);
+    }
   });
+  [...list.children].forEach((child) => {
+    if (!(child instanceof HTMLElement)) return;
+    if (child.dataset.sidebarExtra === "true") return;
+    const navId = child.querySelector(".sidebar-link")?.dataset.navId;
+    if (navId && !seen.has(navId)) child.remove();
+  });
+}
+
+function renderSidebarLink(navId, label, count, iconName) {
+  const li = document.createElement("li");
+  li.className = "sidebar-item";
+  const button = document.createElement("button");
+  button.type = "button";
   li.append(button);
+  patchSidebarLink(button, { navId, label, count, iconName });
   return li;
 }
 
@@ -1595,32 +1659,42 @@ function renderSidebar() {
   updateNavToggleIcon();
   updateNavToggleLabels();
   if (!elements.sidebarSystem || !elements.sidebarCategories) return;
-  setSidebarOpen(state.sidebarOpen);
 
-  elements.sidebarSystem.replaceChildren();
-  for (const item of SYSTEM_NAV_ITEMS) {
-    const label = item.id === NAV_ALL ? getHomepageName() : t(item.labelKey);
-    elements.sidebarSystem.append(
-      renderSidebarLink(item.id, label, getBookmarkCountForNav(state.config, item.id), item.icon)
-    );
-  }
+  syncSidebarNavList(
+    elements.sidebarSystem,
+    SYSTEM_NAV_ITEMS.map((item) => ({
+      navId: item.id,
+      label: item.id === NAV_ALL ? getHomepageName() : t(item.labelKey),
+      count: getBookmarkCountForNav(state.config, item.id),
+      iconName: item.icon
+    }))
+  );
 
-  elements.sidebarCategories.replaceChildren();
-  for (const category of getSidebarCategories(state.config)) {
-    elements.sidebarCategories.append(
-      renderSidebarLink(
-        category.id,
-        category.name,
-        getBookmarkCountForNav(state.config, category.id),
-        category.icon || FALLBACK_MDI_ICON
-      )
-    );
-  }
+  syncSidebarNavList(
+    elements.sidebarCategories,
+    getSidebarCategories(state.config).map((category) => ({
+      navId: category.id,
+      label: category.name,
+      count: getBookmarkCountForNav(state.config, category.id),
+      iconName: category.icon || FALLBACK_MDI_ICON
+    }))
+  );
+
+  [...elements.sidebarCategories.children].forEach((child) => {
+    if (child instanceof HTMLElement && child.dataset.sidebarExtra === "true") {
+      child.remove();
+    }
+  });
+
   if (state.editMode) {
     if (state.sidebarCategoryDraft) {
-      elements.sidebarCategories.append(renderSidebarCategoryDraftRow());
+      const li = renderSidebarCategoryDraftRow();
+      li.dataset.sidebarExtra = "true";
+      elements.sidebarCategories.append(li);
     } else {
-      elements.sidebarCategories.append(renderSidebarAddCategoryTrigger());
+      const li = renderSidebarAddCategoryTrigger();
+      li.dataset.sidebarExtra = "true";
+      elements.sidebarCategories.append(li);
     }
   }
 }
@@ -1633,7 +1707,9 @@ function renderSidebarAddCategoryTrigger() {
   button.className = "sidebar-link sidebar-link--add";
   button.innerHTML = `
     <span class="sidebar-link__icon">${mdiIcon("plus", "inline-icon")}</span>
-    <span class="sidebar-link__label">${t("ui.addSidebarCategory")}</span>
+    <span class="sidebar-link__details">
+      <span class="sidebar-link__label">${t("ui.addSidebarCategory")}</span>
+    </span>
   `;
   button.addEventListener("click", () => {
     state.sidebarCategoryDraft = true;
