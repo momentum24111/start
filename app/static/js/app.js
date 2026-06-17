@@ -1075,6 +1075,9 @@ function setEditMode(nextEditMode, { syncHistory = true } = {}) {
 async function bootstrap() {
   ensureSidebarShell();
   bindSidebarEvents();
+  sidebarMobileQuery = window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT);
+  document.body.classList.toggle("sidebar-mobile", sidebarMobileQuery.matches);
+  setSidebarOpen(false, { instant: true });
   await loadMdiRegistry();
   const [config, settings, themes, languages] = await Promise.all([
     api.getConfig(),
@@ -1096,11 +1099,11 @@ async function bootstrap() {
   state.settings.activeNavId = resolveNavIdFromHash(state.config, window.location.hash, state.settings);
   state.themes = themes.themes;
   state.languages = languages.languages;
-  const sidebarMobileOnLoad = window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT).matches;
+  const sidebarMobileOnLoad = sidebarMobileQuery.matches;
   state.sidebarOpen = sidebarMobileOnLoad ? false : state.settings.sidebarOpen;
   ensureSidebarShell();
   setSidebarOpen(state.sidebarOpen, {
-    instant: !sidebarMobileOnLoad && state.sidebarOpen
+    instant: true
   });
   await initI18n(state.settings.language);
   applyTheme(state.settings.theme);
@@ -1481,7 +1484,13 @@ function bindSidebarEvents() {
     if (link.classList.contains("sidebar-link--add") || link.classList.contains("sidebar-link--draft")) return;
     event.preventDefault();
     const navId = link.dataset.navId;
-    if (navId) void selectNav(navId);
+    if (!navId) return;
+    void (async () => {
+      await selectNav(navId);
+      if (isSidebarMobileLayout()) {
+        setSidebarOpen(false);
+      }
+    })();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
@@ -1537,16 +1546,17 @@ function setSidebarOpen(open, { persist = false, instant = false } = {}) {
 }
 
 function initSidebarResponsiveBehavior() {
-  sidebarMobileQuery = window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT);
+  sidebarMobileQuery ??= window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT);
   const applyLayout = () => {
+    ensureSidebarShell();
+    elements.sidebar?.classList.add("sidebar--instant");
     document.body.classList.toggle("sidebar-mobile", isSidebarMobileLayout());
     ensureSidebarHeader();
     if (isSidebarMobileLayout()) {
-      if (state.sidebarOpen) setSidebarOpen(false);
-      else syncSidebarBackdrop();
+      setSidebarOpen(false, { instant: true });
       return;
     }
-    setSidebarOpen(Boolean(state.settings.sidebarOpen));
+    setSidebarOpen(Boolean(state.settings.sidebarOpen), { instant: true });
   };
   sidebarMobileQuery.addEventListener("change", applyLayout);
   applyLayout();
