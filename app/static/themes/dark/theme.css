@@ -82,6 +82,9 @@ body {
   --search-results-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
   --search-results-empty-fg: #a8b6c5;
   --search-result-active-bg: #2a3746;
+  --search-result-title-fg: #ecf2fb;
+  --search-result-description-fg: #a8b6c5;
+  --search-result-domain-fg: #7f92a8;
   --sidebar-backdrop-bg: rgba(0, 0, 0, 0.52);
   --sidebar-drop-target-bg: #2a3746;
   --sidebar-drop-target-border: color-mix(in srgb, var(--primary) 55%, transparent);

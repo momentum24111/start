@@ -109,14 +109,16 @@ textarea {
 
 .topbar-search {
   --element-scale: 1;
-  --size-bookmark-list-thumb: calc(48px * var(--element-scale));
-  --size-bookmark-list-height: calc(64px * var(--element-scale));
+  --size-search-thumb: calc(72px * var(--element-scale));
+  --size-search-gap: calc(0.85rem * var(--element-scale));
+  --size-search-main-gap: calc(0.32rem * var(--element-scale));
+  --size-search-result-pad: calc(0.55rem * var(--element-scale));
+  --size-search-result-min-height: calc(var(--size-search-thumb) + var(--size-search-result-pad) * 2);
   --size-bookmark-card-radius: calc(6px * var(--element-scale));
-  --size-bookmark-gap: calc(0.5rem * var(--element-scale));
   --size-service-font: calc(1rem * var(--element-scale));
   position: relative;
   justify-self: center;
-  width: min(100%, 34rem);
+  width: min(100%, 52rem);
   min-width: 0;
 }
 
@@ -203,12 +205,12 @@ body[data-element-size="large"] .topbar-search {
   left: 0;
   right: 0;
   z-index: 210;
-  max-height: min(60vh, 24rem);
+  max-height: min(60vh, 28rem);
   overflow: auto;
   border-radius: 6px;
   background: var(--search-results-bg);
   box-shadow: var(--search-results-shadow);
-  padding: 0.3rem;
+  padding: 0.35rem;
 }
 
 .bookmark-search-results.hidden {
@@ -224,18 +226,18 @@ body[data-element-size="large"] .topbar-search {
 
 .bookmark-search-result {
   display: grid;
-  grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr);
-  align-items: stretch;
-  gap: var(--size-bookmark-gap);
+  grid-template-columns: var(--size-search-thumb) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--size-search-gap);
   width: 100%;
-  min-height: var(--size-bookmark-list-height);
+  min-height: var(--size-search-result-min-height);
   border: 0;
   border-radius: calc(var(--size-bookmark-card-radius) - 1px);
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
-  padding: calc(0.45rem * var(--element-scale));
+  padding: var(--size-search-result-pad);
   font: inherit;
 }
 
@@ -253,32 +255,51 @@ body[data-element-size="large"] .topbar-search {
   background: var(--search-result-active-bg);
 }
 
-.bookmark-search-result__thumb {
-  width: var(--size-bookmark-list-thumb);
-  height: var(--size-bookmark-list-thumb);
+.topbar-search .bookmark-search-result__thumb.bookmark-thumb--list {
+  width: var(--size-search-thumb);
+  height: var(--size-search-thumb);
+  min-width: var(--size-search-thumb);
+  min-height: var(--size-search-thumb);
+  max-width: var(--size-search-thumb);
+  max-height: var(--size-search-thumb);
+  aspect-ratio: 1 / 1;
+  align-self: center;
   flex: 0 0 auto;
+}
+
+.topbar-search .bookmark-search-result__thumb .bookmark-thumb__img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.topbar-search .bookmark-search-result__thumb .bookmark-thumb__placeholder-icon {
+  width: calc(36px * var(--element-scale));
+  height: calc(36px * var(--element-scale));
 }
 
 .bookmark-search-result__main {
   min-width: 0;
-  display: grid;
-  gap: calc(0.15rem * var(--element-scale));
-  align-content: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-search-main-gap);
+  align-self: center;
+  padding-block: calc(0.1rem * var(--element-scale));
 }
 
 .bookmark-search-result__title {
   font-size: var(--size-service-font, 1rem);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
+  color: var(--search-result-title-fg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .bookmark-search-result__description {
-  color: var(--bookmark-description-fg);
+  color: var(--search-result-description-fg);
   font-size: calc(0.86rem * var(--element-scale));
-  line-height: 1.35;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -286,9 +307,9 @@ body[data-element-size="large"] .topbar-search {
 }
 
 .bookmark-search-result__domain {
-  color: var(--bookmark-url-fg);
+  color: var(--search-result-domain-fg);
   font-size: calc(0.78rem * var(--element-scale));
-  line-height: 1.25;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
