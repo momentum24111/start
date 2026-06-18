@@ -236,20 +236,22 @@ function renderHomepageBookmark(options, deps) {
   `;
 }
 
-function renderNavListBookmark(options, deps) {
-  const { bookmark, editMode, showBrowserFolderPath } = options;
+function renderNavBookmark(options, deps) {
+  const { bookmark, editMode, showBrowserFolderPath, showCategoryChips } = options;
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = String(bookmark.url || "").trim();
   const urlAttr = escapeHtml(url);
   const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
   const browserFolderPath = showBrowserFolderPath ? getBookmarkBrowserFolderPath(bookmark) : "";
-  const categoryLabels = getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"));
+  const categoryLabels = showCategoryChips
+    ? getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"))
+    : [];
   const categoryChips = renderCategoryChips(categoryLabels);
 
   return `
     <article
-      class="bookmark-item bookmark-item--list bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
       ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
@@ -267,61 +269,19 @@ function renderNavListBookmark(options, deps) {
           ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
           ${browserFolderPath ? renderBrowserFolderPath(browserFolderPath) : ""}
           ${domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : ""}
-          ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
         </div>
       </a>
-      ${editMode ? "" : renderOverflowMenu(deps, { nav: true })}
-      ${editMode ? `
-        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--nav">
-          ${renderActionButtons(options, deps, { editOnly: true })}
-          ${renderReorderActions(options, deps)}
-        </div>
-      ` : ""}
-      <div class="bookmark-item__loading hidden" data-bookmark-loading aria-hidden="true">
-        <span class="spinner" aria-hidden="true"></span>
+      <div class="bookmark-item__aside">
+        ${editMode ? `
+          <div class="bookmark-item__edit-actions bookmark-item__edit-actions--nav">
+            ${renderActionButtons(options, deps, { editOnly: true })}
+            ${renderReorderActions(options, deps)}
+          </div>
+        ` : `
+          ${categoryChips ? `<div class="bookmark-item__categories bookmark-item__categories--aside">${categoryChips}</div>` : ""}
+          ${renderOverflowMenu(deps, { nav: true })}
+        `}
       </div>
-    </article>
-  `;
-}
-
-function renderNavCardBookmark(options, deps) {
-  const { bookmark, editMode, showBrowserFolderPath } = options;
-  const title = escapeHtml(bookmark.title || "");
-  const description = escapeHtml(bookmark.description || "");
-  const url = escapeHtml(bookmark.url || "");
-  const browserFolderPath = showBrowserFolderPath ? getBookmarkBrowserFolderPath(bookmark) : "";
-  const categoryLabels = getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"));
-  const categoryChips = renderCategoryChips(categoryLabels);
-
-  return `
-    <article
-      class="bookmark-item bookmark-item--card bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
-      data-bookmark-id="${escapeHtml(bookmark.id)}"
-      data-category-id="${escapeHtml(options.category.id)}"
-      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
-    >
-      <a
-        class="bookmark-card__link"
-        href="${url}"
-        target="${bookmarkLinkTarget(bookmark, { navList: true })}"
-        rel="noreferrer"
-        data-bookmark-open
-        aria-label="${title}"
-      ></a>
-      ${renderThumbnail(bookmark, deps, "card")}
-      <div class="bookmark-card__body">
-        <h3 class="bookmark-item__title">${title}</h3>
-        ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-        ${browserFolderPath ? renderBrowserFolderPath(browserFolderPath) : ""}
-        ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
-      </div>
-      ${editMode ? "" : renderOverflowMenu(deps, { nav: true })}
-      ${editMode ? `
-        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--card">
-          ${renderActionButtons(options, deps, { editOnly: true })}
-          ${renderReorderActions(options, deps)}
-        </div>
-      ` : ""}
       <div class="bookmark-item__loading hidden" data-bookmark-loading aria-hidden="true">
         <span class="spinner" aria-hidden="true"></span>
       </div>
@@ -422,8 +382,7 @@ export function renderBookmarkMarkup(options, deps) {
   }
   const view = normalizeBookmarkView(options.view);
   if (options.navList) {
-    if (view === "cards") return renderNavCardBookmark(options, deps);
-    return renderNavListBookmark(options, deps);
+    return renderNavBookmark(options, deps);
   }
   if (view === "cards") return renderCardBookmark(options, deps);
   return renderListBookmark(options, deps);

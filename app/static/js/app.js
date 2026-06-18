@@ -791,6 +791,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       editMode: state.editMode,
       config: state.config,
       showBrowserFolderPath: navId === NAV_UNSORTED && shouldShowBrowserFolderPath(bookmark, state.config),
+      showCategoryChips: navId !== NAV_UNSORTED,
       hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
       canMoveLeft: reorder.canMoveLeft,
       canMoveRight: reorder.canMoveRight
