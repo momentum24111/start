@@ -104,6 +104,35 @@ body {
   --browser-sync-status-stat-value-fg: #ecf2fb;
   --browser-sync-status-empty-fg: #a8b6c5;
   --browser-sync-status-error-fg: #ee6a6a;
+  --bookmark-browser-path-fg: #7f92a8;
+  --unsorted-filter-dropdown-bg: #212c38;
+  --unsorted-filter-dropdown-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+  --unsorted-filter-reset-fg: #a8b6c5;
+  --unsorted-filter-reset-hover-fg: #ecf2fb;
+  --unsorted-filter-option-fg: #ecf2fb;
+  --unsorted-filter-option-hover-bg: #2a3746;
+  --unsorted-filter-empty-fg: #a8b6c5;
+  --bookmark-sort-dropdown-bg: #212c38;
+  --bookmark-sort-dropdown-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+  --bookmark-sort-divider-bg: rgba(168, 182, 197, 0.18);
+  --bookmark-sort-option-fg: #ecf2fb;
+  --bookmark-sort-option-hover-bg: #2a3746;
+  --bookmark-sort-option-active-bg: color-mix(in srgb, var(--primary) 22%, #212c38);
+  --bookmark-sort-option-active-fg: #ecf2fb;
+  --bookmark-sort-option-icon-fg: #a8b6c5;
+  --bookmark-sort-option-active-icon-fg: #6ea6ff;
+  --checkbox-bg: #18202a;
+  --checkbox-border: rgba(168, 182, 197, 0.35);
+  --checkbox-checked-bg: #6ea6ff;
+  --checkbox-checked-border: #6ea6ff;
+  --checkbox-check-fg: #0f141a;
+  --fab-bg: var(--primary);
+  --fab-fg: #0f141a;
+  --fab-hover-bg: color-mix(in srgb, var(--primary) 88%, white);
+  --fab-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
+  --fab-disabled-bg: color-mix(in srgb, var(--primary) 45%, var(--surface-2));
+  --fab-disabled-fg: color-mix(in srgb, var(--fab-fg) 55%, transparent);
+  --metadata-status-error-fg: var(--danger);
 }
 
 .topbar-search__input::placeholder {
@@ -139,4 +168,25 @@ body {
 
 .browser-sync-status--error {
   color: var(--browser-sync-status-error-fg);
+}
+
+.fab {
+  background: var(--fab-bg);
+  color: var(--fab-fg);
+  border-color: transparent;
+}
+
+.fab:hover:not(:disabled) {
+  background: var(--fab-hover-bg);
+  color: var(--fab-fg);
+}
+
+.fab:disabled {
+  background: var(--fab-disabled-bg);
+  color: var(--fab-disabled-fg);
+}
+
+#metadata-status.is-error,
+#favicon-status.is-error {
+  color: var(--metadata-status-error-fg);
 }

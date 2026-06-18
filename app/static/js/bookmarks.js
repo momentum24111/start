@@ -75,6 +75,20 @@ const DEFAULT_CATEGORY_TYPE = "service-list";
 const CATEGORY_SLOT_OPTIONS = [1, 2, 3];
 const DEFAULT_CATEGORY_SLOTS = 1;
 
+export function normalizeCreatedAt(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const time = Date.parse(raw);
+  if (Number.isNaN(time)) return "";
+  return raw;
+}
+
+export function bookmarkTimestampNow() {
+  const date = new Date();
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 export function normalizeBookmarkSource(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return BOOKMARK_SOURCE_OPTIONS.includes(normalized) ? normalized : DEFAULT_BOOKMARK_SOURCE;
@@ -146,6 +160,10 @@ function normalizeBookmarkEntry(raw) {
   if (raw?.shortcut) bookmark.shortcut = raw.shortcut;
   const browserId = String(raw?.browserId || "").trim();
   if (browserId) bookmark.browserId = browserId;
+  const browserFolderPath = String(raw?.browserFolderPath || "").trim();
+  if (browserFolderPath) bookmark.browserFolderPath = browserFolderPath;
+  const createdAt = normalizeCreatedAt(raw?.createdAt);
+  if (createdAt) bookmark.createdAt = createdAt;
   return bookmark;
 }
 
@@ -363,6 +381,35 @@ export function isUnsortedBookmark(bookmark, config) {
   if (!bookmark) return true;
   if (getBookmarkHomepageCategoryId(config, bookmark)) return false;
   return getBookmarkSidebarPlacementIds(bookmark).length === 0;
+}
+
+export function getBookmarkBrowserFolderPath(bookmark) {
+  return String(bookmark?.browserFolderPath || "").trim();
+}
+
+export function shouldShowBrowserFolderPath(bookmark, config) {
+  if (normalizeBookmarkSource(bookmark?.source) !== "browser-import") return false;
+  if (!isUnsortedBookmark(bookmark, config)) return false;
+  return Boolean(getBookmarkBrowserFolderPath(bookmark));
+}
+
+export function collectUnsortedBrowserFolderPaths(bookmarks, config) {
+  const paths = new Set();
+  for (const bookmark of bookmarks || []) {
+    if (normalizeBookmarkSource(bookmark?.source) !== "browser-import") continue;
+    if (!isUnsortedBookmark(bookmark, config)) continue;
+    const path = getBookmarkBrowserFolderPath(bookmark);
+    if (path) paths.add(path);
+  }
+  return [...paths].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+export function filterBookmarksByBrowserFolderPaths(bookmarks, selectedPaths) {
+  if (!(selectedPaths instanceof Set) || selectedPaths.size === 0) return bookmarks;
+  return (bookmarks || []).filter((bookmark) => {
+    const path = getBookmarkBrowserFolderPath(bookmark);
+    return path && selectedPaths.has(path);
+  });
 }
 
 export function getBookmarksOnHomepage(config) {

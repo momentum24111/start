@@ -177,6 +177,12 @@ def _normalize_bookmark(raw: dict, *, category_id: str | None = None) -> dict:
     browser_id = str(raw.get("browserId") or "").strip()
     if browser_id:
         bookmark["browserId"] = browser_id
+    folder_path = str(raw.get("browserFolderPath") or "").strip()
+    if folder_path:
+        bookmark["browserFolderPath"] = folder_path
+    created_at = str(raw.get("createdAt") or "").strip()
+    if created_at:
+        bookmark["createdAt"] = created_at
     return bookmark
 
 

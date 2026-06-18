@@ -207,6 +207,49 @@ def download_xbel_file(url: str, pat: str) -> str:
         return response.text
 
 
+def _element_local_tag(element: ET.Element) -> str:
+    tag = element.tag
+    return tag.split("}")[-1] if "}" in tag else tag
+
+
+def _element_title(element: ET.Element) -> str:
+    for child in element:
+        if _element_local_tag(child) == "title":
+            text = (child.text or "").strip()
+            if text:
+                return text
+    return (element.get("title") or "").strip()
+
+
+def _parse_xbel_node(
+    element: ET.Element,
+    folder_path: list[str],
+    bookmarks: list[dict[str, str]],
+    seen_ids: set[str],
+) -> None:
+    tag = _element_local_tag(element)
+    if tag == "folder":
+        title = _element_title(element)
+        child_path = [*folder_path, title] if title else folder_path
+        for child in element:
+            _parse_xbel_node(child, child_path, bookmarks, seen_ids)
+        return
+    if tag != "bookmark":
+        for child in element:
+            _parse_xbel_node(child, folder_path, bookmarks, seen_ids)
+        return
+    browser_id = (element.get("id") or "").strip()
+    href = (element.get("href") or "").strip()
+    if not browser_id or not href or browser_id in seen_ids:
+        return
+    seen_ids.add(browser_id)
+    title = (element.text or "").strip() or _element_title(element) or href
+    entry: dict[str, str] = {"id": browser_id, "href": href, "title": title}
+    if folder_path:
+        entry["folderPath"] = " / ".join(folder_path)
+    bookmarks.append(entry)
+
+
 def parse_xbel_bookmarks(content: str) -> list[dict[str, str]]:
     try:
         root = ET.fromstring(content)
@@ -215,19 +258,8 @@ def parse_xbel_bookmarks(content: str) -> list[dict[str, str]]:
 
     bookmarks: list[dict[str, str]] = []
     seen_ids: set[str] = set()
-    for element in root.iter():
-        tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
-        if tag != "bookmark":
-            continue
-        browser_id = (element.get("id") or "").strip()
-        href = (element.get("href") or "").strip()
-        if not browser_id or not href:
-            continue
-        if browser_id in seen_ids:
-            continue
-        seen_ids.add(browser_id)
-        title = (element.text or "").strip() or (element.get("title") or "").strip()
-        bookmarks.append({"id": browser_id, "href": href, "title": title or href})
+    for child in root:
+        _parse_xbel_node(child, [], bookmarks, seen_ids)
     return bookmarks
 
 
@@ -258,7 +290,7 @@ def _find_bookmark_by_id(config: dict, bookmark_id: str | None) -> dict | None:
 
 
 def _new_imported_bookmark(entry: dict[str, str]) -> dict:
-    return {
+    bookmark = {
         "id": _generate_bookmark_id(),
         "title": entry["title"],
         "url": entry["href"],
@@ -269,8 +301,13 @@ def _new_imported_bookmark(entry: dict[str, str]) -> dict:
         "favorite": False,
         "source": "browser-import",
         "openMode": "new-tab",
+        "createdAt": _timestamp_now(),
         "browserId": entry["id"],
     }
+    folder_path = str(entry.get("folderPath") or "").strip()
+    if folder_path:
+        bookmark["browserFolderPath"] = folder_path
+    return bookmark
 
 
 def _append_bookmark_to_config(config: dict, bookmark: dict) -> None:

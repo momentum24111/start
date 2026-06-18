@@ -125,6 +125,14 @@
     "navStart": "Start",
     "navFavorites": "Favoriten",
     "navUnsorted": "Unsortiert",
+    "unsortedFilter": "Filter",
+    "unsortedFilterReset": "Filter zurücksetzen",
+    "unsortedFilterEmpty": "Keine Browser-Ordner in Unsortiert vorhanden.",
+    "sort": "Sortieren",
+    "sortAscending": "Aufsteigend",
+    "sortDescending": "Absteigend",
+    "sortName": "Name",
+    "sortCreatedDate": "Erstellungsdatum",
     "addSidebarCategory": "Kategorie hinzufügen",
     "navToggle": "Navigation",
     "navToggleExpand": "Navigation ausklappen",
@@ -132,6 +140,13 @@
     "viewList": "Listenansicht",
     "viewCards": "Kartenansicht",
     "open": "Öffnen",
+    "newBookmark": "Neues Lesezeichen",
+    "loadInformation": "Informationen laden",
+    "loadInformationFailed": "Informationen konnten nicht geladen werden",
+    "discardChangesTitle": "Änderungen verwerfen?",
+    "discardChangesText": "Die eingegebenen Daten gehen verloren. Möchtest du wirklich abbrechen?",
+    "yes": "Ja",
+    "no": "Nein",
     "deleteBookmarkConfirm": "„{title}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
   }
 }

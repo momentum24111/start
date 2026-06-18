@@ -1,7 +1,7 @@
 /** Lesezeichen-Darstellung: Listen- und Kartenansicht. */
 
 import { t } from "./i18n.js";
-import { getBookmarkDisplayDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites } from "./bookmarks.js";
+import { getBookmarkDisplayDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites, getBookmarkBrowserFolderPath } from "./bookmarks.js";
 import { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS } from "./navigation.js";
 
 export { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS };
@@ -37,6 +37,11 @@ function renderCategoryChips(labels) {
   return labels
     .map((label) => `<span class="bookmark-category-chip">${escapeHtml(label)}</span>`)
     .join("");
+}
+
+function renderBrowserFolderPath(path) {
+  if (!path) return "";
+  return `<span class="bookmark-item__browser-path">${escapeHtml(path)}</span>`;
 }
 
 function renderThumbnail(bookmark, deps, variant = "") {
@@ -232,12 +237,13 @@ function renderHomepageBookmark(options, deps) {
 }
 
 function renderNavListBookmark(options, deps) {
-  const { bookmark, editMode } = options;
+  const { bookmark, editMode, showBrowserFolderPath } = options;
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = String(bookmark.url || "").trim();
   const urlAttr = escapeHtml(url);
   const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
+  const browserFolderPath = showBrowserFolderPath ? getBookmarkBrowserFolderPath(bookmark) : "";
   const categoryLabels = getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"));
   const categoryChips = renderCategoryChips(categoryLabels);
 
@@ -259,6 +265,7 @@ function renderNavListBookmark(options, deps) {
         <div class="bookmark-item__main">
           <h3 class="bookmark-item__title">${title}</h3>
           ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
+          ${browserFolderPath ? renderBrowserFolderPath(browserFolderPath) : ""}
           ${domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : ""}
           ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
         </div>
@@ -278,10 +285,11 @@ function renderNavListBookmark(options, deps) {
 }
 
 function renderNavCardBookmark(options, deps) {
-  const { bookmark, editMode } = options;
+  const { bookmark, editMode, showBrowserFolderPath } = options;
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = escapeHtml(bookmark.url || "");
+  const browserFolderPath = showBrowserFolderPath ? getBookmarkBrowserFolderPath(bookmark) : "";
   const categoryLabels = getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"));
   const categoryChips = renderCategoryChips(categoryLabels);
 
@@ -304,6 +312,7 @@ function renderNavCardBookmark(options, deps) {
       <div class="bookmark-card__body">
         <h3 class="bookmark-item__title">${title}</h3>
         ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
+        ${browserFolderPath ? renderBrowserFolderPath(browserFolderPath) : ""}
         ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
       </div>
       ${editMode ? "" : renderOverflowMenu(deps, { nav: true })}

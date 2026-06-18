@@ -1,4 +1,5 @@
 let activeModal = null;
+let modalStack = [];
 let isClosing = false;
 const CANCEL_ICON = "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z";
 const SAVE_ICON = "M9 16.2l-3.5-3.5L4 14.2 9 19l12-12-1.5-1.5z";
@@ -24,8 +25,13 @@ function keyHandler(event) {
 }
 
 export function dismissActiveModalListeners() {
+  while (modalStack.length) {
+    const entry = modalStack.pop();
+    entry.overlay.remove();
+  }
   if (activeModal) {
     document.removeEventListener("keydown", keyHandler);
+    activeModal.overlay.remove();
     activeModal = null;
   }
   isClosing = false;
@@ -53,13 +59,26 @@ export function showStatusModal({ title = "", content }) {
 
 async function closeModal(reason = "cancel") {
   if (!activeModal || isClosing) return;
+  if (reason === "cancel") {
+    const cancelResult = await activeModal.onCancel?.();
+    if (cancelResult === false) return;
+  }
   isClosing = true;
-  const { overlay, modal, onCancel, resolve } = activeModal;
-  if (reason === "cancel") onCancel?.();
+  const { overlay, modal, resolve } = activeModal;
   overlay.classList.add("is-closing");
   modal.classList.add("is-closing");
   await new Promise((r) => window.setTimeout(r, 140));
   overlay.remove();
+
+  if (modalStack.length > 0) {
+    activeModal = modalStack.pop();
+    activeModal.overlay.classList.remove("is-behind");
+    activeModal.modal.focus();
+    document.addEventListener("keydown", keyHandler);
+    isClosing = false;
+    return;
+  }
+
   document.removeEventListener("keydown", keyHandler);
   activeModal = null;
   isClosing = false;
@@ -140,7 +159,14 @@ export function showModal({
     });
   });
 
-  root.innerHTML = "";
+  if (activeModal) {
+    document.removeEventListener("keydown", keyHandler);
+    activeModal.overlay.classList.add("is-behind");
+    modalStack.push(activeModal);
+    activeModal = null;
+  } else {
+    root.innerHTML = "";
+  }
   root.append(overlay);
   modal.focus();
   document.addEventListener("keydown", keyHandler);

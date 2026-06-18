@@ -125,6 +125,14 @@
     "navStart": "Start",
     "navFavorites": "Favorites",
     "navUnsorted": "Unsorted",
+    "unsortedFilter": "Filter",
+    "unsortedFilterReset": "Reset filters",
+    "unsortedFilterEmpty": "No browser folders in unsorted bookmarks.",
+    "sort": "Sort",
+    "sortAscending": "Ascending",
+    "sortDescending": "Descending",
+    "sortName": "Name",
+    "sortCreatedDate": "Created date",
     "addSidebarCategory": "Add category",
     "navToggle": "Navigation",
     "navToggleExpand": "Expand navigation",
@@ -132,6 +140,13 @@
     "viewList": "List view",
     "viewCards": "Card view",
     "open": "Open",
+    "newBookmark": "New bookmark",
+    "loadInformation": "Load information",
+    "loadInformationFailed": "Could not load information",
+    "discardChangesTitle": "Discard changes?",
+    "discardChangesText": "The entered data will be lost. Do you really want to cancel?",
+    "yes": "Yes",
+    "no": "No",
     "deleteBookmarkConfirm": "Delete “{title}”? This action cannot be undone."
   }
 }

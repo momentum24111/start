@@ -103,6 +103,35 @@ body {
   --browser-sync-status-stat-value-fg: #182332;
   --browser-sync-status-empty-fg: #516379;
   --browser-sync-status-error-fg: #b52d2d;
+  --bookmark-browser-path-fg: #6e879f;
+  --unsorted-filter-dropdown-bg: #ffffff;
+  --unsorted-filter-dropdown-shadow: 0 12px 28px rgba(15, 35, 60, 0.14);
+  --unsorted-filter-reset-fg: #516379;
+  --unsorted-filter-reset-hover-fg: #182332;
+  --unsorted-filter-option-fg: #182332;
+  --unsorted-filter-option-hover-bg: #e6edf4;
+  --unsorted-filter-empty-fg: #516379;
+  --bookmark-sort-dropdown-bg: #ffffff;
+  --bookmark-sort-dropdown-shadow: 0 12px 28px rgba(15, 35, 60, 0.14);
+  --bookmark-sort-divider-bg: rgba(81, 99, 121, 0.16);
+  --bookmark-sort-option-fg: #182332;
+  --bookmark-sort-option-hover-bg: #e6edf4;
+  --bookmark-sort-option-active-bg: color-mix(in srgb, var(--primary) 14%, #ffffff);
+  --bookmark-sort-option-active-fg: #182332;
+  --bookmark-sort-option-icon-fg: #516379;
+  --bookmark-sort-option-active-icon-fg: #2d65d6;
+  --checkbox-bg: #ffffff;
+  --checkbox-border: rgba(81, 99, 121, 0.35);
+  --checkbox-checked-bg: #2d65d6;
+  --checkbox-checked-border: #2d65d6;
+  --checkbox-check-fg: #ffffff;
+  --fab-bg: var(--primary);
+  --fab-fg: #ffffff;
+  --fab-hover-bg: color-mix(in srgb, var(--primary) 88%, black);
+  --fab-shadow: 0 8px 20px rgba(15, 35, 60, 0.22);
+  --fab-disabled-bg: color-mix(in srgb, var(--primary) 40%, var(--surface-2));
+  --fab-disabled-fg: color-mix(in srgb, var(--fab-fg) 55%, transparent);
+  --metadata-status-error-fg: var(--danger);
 }
 
 .topbar-search__input::placeholder {
@@ -138,4 +167,25 @@ body {
 
 .browser-sync-status--error {
   color: var(--browser-sync-status-error-fg);
+}
+
+.fab {
+  background: var(--fab-bg);
+  color: var(--fab-fg);
+  border-color: transparent;
+}
+
+.fab:hover:not(:disabled) {
+  background: var(--fab-hover-bg);
+  color: var(--fab-fg);
+}
+
+.fab:disabled {
+  background: var(--fab-disabled-bg);
+  color: var(--fab-disabled-fg);
+}
+
+#metadata-status.is-error,
+#favicon-status.is-error {
+  color: var(--metadata-status-error-fg);
 }

@@ -27,7 +27,11 @@ import {
   listBookmarkListCategories,
   listSidebarCategories,
   allocateSidebarCategorySlug,
-  getHomepageCategories
+  getHomepageCategories,
+  shouldShowBrowserFolderPath,
+  collectUnsortedBrowserFolderPaths,
+  filterBookmarksByBrowserFolderPaths,
+  bookmarkTimestampNow
 } from "./bookmarks.js";
 import {
   NAV_ALL,
@@ -40,6 +44,14 @@ import {
   normalizeActiveNavId,
   getNavViewMode,
   setNavViewMode,
+  normalizeNavSortSettings,
+  getNavSortSetting,
+  setNavSortSetting,
+  sortNavBookmarks,
+  SORT_FIELD_NAME,
+  SORT_FIELD_CREATED_AT,
+  SORT_ORDER_ASC,
+  SORT_ORDER_DESC,
   getSidebarCategories,
   getBookmarksForNav,
   getBookmarkCountForNav,
@@ -66,6 +78,11 @@ import { bindBookmarkDrag, initBookmarkDragDrop } from "./bookmark-drag.js";
 
 const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
+const unsortedBrowserFolderFilter = new Set();
+let unsortedFolderFilterDropdownOpen = false;
+let unsortedFolderFilterDismissBound = false;
+let bookmarkSortDropdownOpen = false;
+let bookmarkSortDismissBound = false;
 
 const state = {
   config: {
@@ -85,6 +102,7 @@ const state = {
     globalShortcuts: {},
     activeNavId: NAV_ALL,
     navViewModes: {},
+    navSortSettings: {},
     sidebarOpen: false
   },
   editMode: false,
@@ -119,7 +137,7 @@ const elements = {
   title: document.getElementById("app-title"),
   categories: document.getElementById("categories"),
   navView: document.getElementById("nav-view"),
-  addCategory: document.getElementById("add-category-btn"),
+  addBookmarkFab: document.getElementById("add-bookmark-fab"),
   undo: document.getElementById("undo-btn"),
   edit: document.getElementById("edit-btn"),
   settings: document.getElementById("settings-btn"),
@@ -149,7 +167,9 @@ const ICONS = {
   open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
   dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   search: "M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 3.23-.87l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
-  close: "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z"
+  close: "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z",
+  filter: "M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z",
+  sort: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"
 };
 
 const FALLBACK_MDI_ICON = "folder";
@@ -757,8 +777,8 @@ async function reloadCategoryMetadata() {
   }
 }
 
-function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false } = {}) {
-  const categoryContext = category || { id: resolveBookmarkModalCategoryId(bookmark, category) };
+function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false, navId = null } = {}) {
+  const categoryContext = category || { id: navId || resolveBookmarkModalCategoryId(bookmark, category) };
   const reorder = getBookmarkReorderState(category, bookmark);
   const normalizedView = normalizeBookmarkView(view);
   return createBookmarkElement(
@@ -770,6 +790,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       navList: !homepage,
       editMode: state.editMode,
       config: state.config,
+      showBrowserFolderPath: navId === NAV_UNSORTED && shouldShowBrowserFolderPath(bookmark, state.config),
       hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
       canMoveLeft: reorder.canMoveLeft,
       canMoveRight: reorder.canMoveRight
@@ -1012,6 +1033,7 @@ function applyStateFromUrl({ normalizeInvalidHash = false } = {}) {
   let changed = false;
 
   if (state.settings.activeNavId !== nextNavId) {
+    bookmarkSortDropdownOpen = false;
     state.settings.activeNavId = nextNavId;
     changed = true;
   }
@@ -1099,6 +1121,7 @@ async function bootstrap() {
     globalShortcuts: normalizeGlobalShortcuts(settings?.globalShortcuts),
     browserSync: normalizeBrowserSyncSettings(settings?.browserSync),
     navViewModes: normalizeNavViewModes(settings?.navViewModes),
+    navSortSettings: normalizeNavSortSettings(settings?.navSortSettings),
     sidebarOpen: Boolean(settings?.sidebarOpen)
   };
   state.settings.activeNavId = resolveNavIdFromHash(state.config, window.location.hash, state.settings);
@@ -1173,7 +1196,9 @@ function wireEvents() {
   });
   elements.undo.addEventListener("click", undo);
   elements.settings.addEventListener("click", openSettingsModal);
-  elements.addCategory?.addEventListener("click", () => openCategoryModal());
+  elements.addBookmarkFab?.addEventListener("click", () => {
+    openBookmarkModal({ navId: getActiveNavId() });
+  });
   bindSidebarEvents();
   document.addEventListener("keydown", (event) => {
     if (event.defaultPrevented) return;
@@ -1211,6 +1236,7 @@ async function persistConfig() {
 async function persistSettings() {
   state.settings.activeNavId = resolveActiveNavId(state.config, state.settings);
   state.settings.navViewModes = normalizeNavViewModes(state.settings.navViewModes);
+  state.settings.navSortSettings = normalizeNavSortSettings(state.settings.navSortSettings);
   await api.saveSettings(state.settings);
   const saved = await api.getSettings();
   state.settings = {
@@ -1222,6 +1248,7 @@ async function persistSettings() {
     browserSync: normalizeBrowserSyncSettings(saved?.browserSync),
     activeNavId: resolveActiveNavId(state.config, saved),
     navViewModes: normalizeNavViewModes(saved?.navViewModes),
+    navSortSettings: normalizeNavSortSettings(saved?.navSortSettings),
     sidebarOpen: Boolean(saved?.sidebarOpen)
   };
 }
@@ -1586,6 +1613,7 @@ async function selectNav(navId, { syncHistory = true, historyMode = "push" } = {
     }
     return;
   }
+  bookmarkSortDropdownOpen = false;
   state.settings.activeNavId = nextNavId;
   if (syncHistory) {
     syncAppUrl({ navId: nextNavId, historyMode });
@@ -1599,6 +1627,14 @@ async function setNavViewModeForActive(mode) {
   if (getNavViewMode(state.settings, navId) === mode) return;
   setNavViewMode(state.settings, navId, mode);
   await persistSettings();
+  render();
+}
+
+async function setNavSortForActive(partial) {
+  const navId = getActiveNavId();
+  setNavSortSetting(state.settings, navId, partial);
+  await persistSettings();
+  bookmarkSortDropdownOpen = true;
   render();
 }
 
@@ -1862,10 +1898,192 @@ function renderBookmarkCollection(bookmarks, navId, viewMode) {
       bookmark,
       resolveBookmarkCategoryForNav(bookmark, navId),
       normalizedView,
-      { homepage: navId === NAV_ALL }
+      { homepage: navId === NAV_ALL, navId }
     ));
   }
   return root;
+}
+
+function isUnsortedBrowserFolderFilterActive() {
+  return unsortedBrowserFolderFilter.size > 0;
+}
+
+function filterUnsortedNavBookmarks(bookmarks) {
+  return filterBookmarksByBrowserFolderPaths(bookmarks, unsortedBrowserFolderFilter);
+}
+
+function ensureUnsortedFolderFilterDismiss() {
+  if (unsortedFolderFilterDismissBound) return;
+  unsortedFolderFilterDismissBound = true;
+  document.addEventListener("pointerdown", (event) => {
+    if (!unsortedFolderFilterDropdownOpen) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest(".unsorted-folder-filter")) return;
+    unsortedFolderFilterDropdownOpen = false;
+    render();
+  });
+}
+
+function ensureBookmarkSortDismiss() {
+  if (bookmarkSortDismissBound) return;
+  bookmarkSortDismissBound = true;
+  document.addEventListener("pointerdown", (event) => {
+    if (!bookmarkSortDropdownOpen) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest(".bookmark-sort")) return;
+    bookmarkSortDropdownOpen = false;
+    render();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !bookmarkSortDropdownOpen) return;
+    bookmarkSortDropdownOpen = false;
+    render();
+  });
+}
+
+function renderBookmarkSortControl(navId) {
+  ensureBookmarkSortDismiss();
+  const sortSetting = getNavSortSetting(state.settings, navId);
+  const dropdownOpen = bookmarkSortDropdownOpen;
+  const wrap = document.createElement("div");
+  wrap.className = "bookmark-sort";
+
+  const orderOption = (order, icon, label) => `
+    <button
+      type="button"
+      class="bookmark-sort__option ${sortSetting.order === order ? "is-active" : ""}"
+      data-sort-order="${order}"
+      role="radio"
+      aria-checked="${sortSetting.order === order ? "true" : "false"}"
+    >
+      <span class="bookmark-sort__option-icon" aria-hidden="true">${iconSvg(icon, "inline-icon")}</span>
+      <span class="bookmark-sort__option-label">${escapeHtml(label)}</span>
+    </button>
+  `;
+
+  const fieldOption = (field, label) => `
+    <button
+      type="button"
+      class="bookmark-sort__option ${sortSetting.field === field ? "is-active" : ""}"
+      data-sort-field="${field}"
+      role="radio"
+      aria-checked="${sortSetting.field === field ? "true" : "false"}"
+    >
+      <span class="bookmark-sort__option-label">${escapeHtml(label)}</span>
+    </button>
+  `;
+
+  wrap.innerHTML = `
+    <button
+      type="button"
+      class="btn btn--ghost btn--compact bookmark-sort__toggle ${dropdownOpen ? "is-active" : ""}"
+      data-bookmark-sort-toggle
+      aria-expanded="${dropdownOpen ? "true" : "false"}"
+      aria-haspopup="true"
+    >
+      <span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.sort, "inline-icon")}</span>
+      <span class="btn__label">${escapeHtml(t("ui.sort"))}</span>
+    </button>
+    <div class="bookmark-sort__dropdown ${dropdownOpen ? "" : "hidden"}" data-bookmark-sort-dropdown>
+      <div class="bookmark-sort__section" role="radiogroup" aria-label="${escapeHtml(t("ui.sort"))}">
+        ${orderOption(SORT_ORDER_ASC, ICONS.arrowUp, t("ui.sortAscending"))}
+        ${orderOption(SORT_ORDER_DESC, ICONS.arrowDown, t("ui.sortDescending"))}
+      </div>
+      <div class="bookmark-sort__divider" aria-hidden="true"></div>
+      <div class="bookmark-sort__section" role="radiogroup" aria-label="${escapeHtml(t("ui.sort"))}">
+        ${fieldOption(SORT_FIELD_NAME, t("ui.sortName"))}
+        ${fieldOption(SORT_FIELD_CREATED_AT, t("ui.sortCreatedDate"))}
+      </div>
+    </div>
+  `;
+
+  wrap.querySelector("[data-bookmark-sort-toggle]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    bookmarkSortDropdownOpen = !bookmarkSortDropdownOpen;
+    render();
+  });
+  wrap.querySelectorAll("[data-sort-order]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void setNavSortForActive({ order: button.getAttribute("data-sort-order") });
+    });
+  });
+  wrap.querySelectorAll("[data-sort-field]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void setNavSortForActive({ field: button.getAttribute("data-sort-field") });
+    });
+  });
+
+  return wrap;
+}
+
+function renderUnsortedFolderFilter() {
+  ensureUnsortedFolderFilterDismiss();
+  const wrap = document.createElement("div");
+  wrap.className = "unsorted-folder-filter";
+  const allBookmarks = getBookmarksForNav(state.config, NAV_UNSORTED);
+  const paths = collectUnsortedBrowserFolderPaths(allBookmarks, state.config);
+  const filterActive = isUnsortedBrowserFolderFilterActive();
+  const dropdownOpen = unsortedFolderFilterDropdownOpen;
+
+  wrap.innerHTML = `
+    <button
+      type="button"
+      class="btn btn--ghost btn--compact unsorted-folder-filter__toggle ${filterActive ? "is-active" : ""}"
+      data-unsorted-filter-toggle
+      aria-expanded="${dropdownOpen ? "true" : "false"}"
+      aria-haspopup="true"
+    >
+      <span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.filter, "inline-icon")}</span>
+      <span class="btn__label" data-unsorted-filter-label>${escapeHtml(t("ui.unsortedFilter"))}</span>
+    </button>
+    <div class="unsorted-folder-filter__dropdown ${dropdownOpen ? "" : "hidden"}" data-unsorted-filter-dropdown>
+      <button type="button" class="unsorted-folder-filter__reset" data-unsorted-filter-reset>
+        ${escapeHtml(t("ui.unsortedFilterReset"))}
+      </button>
+      <div class="unsorted-folder-filter__options" role="group" aria-label="${escapeHtml(t("ui.unsortedFilter"))}">
+        ${paths.length
+    ? paths.map((path) => `
+            <label class="theme-checkbox unsorted-folder-filter__option">
+              <input
+                type="checkbox"
+                class="theme-checkbox__input"
+                value="${escapeHtml(path)}"
+                ${unsortedBrowserFolderFilter.has(path) ? "checked" : ""}
+              />
+              <span class="theme-checkbox__box" aria-hidden="true"></span>
+              <span class="theme-checkbox__label">${escapeHtml(path)}</span>
+            </label>
+          `).join("")
+    : `<p class="unsorted-folder-filter__empty">${escapeHtml(t("ui.unsortedFilterEmpty"))}</p>`}
+      </div>
+    </div>
+  `;
+
+  wrap.querySelector("[data-unsorted-filter-toggle]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    unsortedFolderFilterDropdownOpen = !unsortedFolderFilterDropdownOpen;
+    render();
+  });
+  wrap.querySelector("[data-unsorted-filter-reset]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    unsortedBrowserFolderFilter.clear();
+    unsortedFolderFilterDropdownOpen = true;
+    render();
+  });
+  wrap.querySelectorAll(".theme-checkbox__input").forEach((input) => {
+    input.addEventListener("change", () => {
+      const path = String(input.value || "").trim();
+      if (!path) return;
+      if (input.checked) unsortedBrowserFolderFilter.add(path);
+      else unsortedBrowserFolderFilter.delete(path);
+      unsortedFolderFilterDropdownOpen = true;
+      render();
+    });
+  });
+
+  return wrap;
 }
 
 function renderViewModeToggle(viewMode, { showCategorySync = false } = {}) {
@@ -1929,10 +2147,21 @@ function renderNavView() {
 
   const header = document.createElement("div");
   header.className = "nav-view-header nav-view-header--toggle-only";
-  header.append(renderViewModeToggle(viewMode, { showCategorySync: true }));
+  const actions = document.createElement("div");
+  actions.className = "nav-view-header__actions";
+  actions.append(renderBookmarkSortControl(navId));
+  if (navId === NAV_UNSORTED) {
+    actions.append(renderUnsortedFolderFilter());
+  }
+  actions.append(renderViewModeToggle(viewMode, { showCategorySync: isCategoryNavId(state.config, navId) }));
+  header.append(actions);
   panel.append(header);
 
-  const bookmarks = getBookmarksForNav(state.config, navId);
+  let bookmarks = getBookmarksForNav(state.config, navId);
+  if (navId === NAV_UNSORTED) {
+    bookmarks = filterUnsortedNavBookmarks(bookmarks);
+  }
+  bookmarks = sortNavBookmarks(bookmarks, getNavSortSetting(state.settings, navId));
   panel.append(renderBookmarkCollection(bookmarks, navId, viewMode));
   return panel;
 }
@@ -1948,7 +2177,11 @@ function render() {
   updateTopbarActionTexts();
   elements.edit.classList.toggle("is-active", state.editMode);
   elements.undo.classList.toggle("hidden", !state.editMode || state.undoStack.length === 0);
-  elements.addCategory.classList.add("hidden");
+  if (elements.addBookmarkFab) {
+    elements.addBookmarkFab.classList.toggle("hidden", !state.editMode);
+    elements.addBookmarkFab.setAttribute("aria-label", t("ui.newBookmark"));
+    elements.addBookmarkFab.innerHTML = iconSvg(ICONS.plus, "inline-icon");
+  }
   renderSidebar();
 
   const activeNavId = getActiveNavId();
@@ -2659,60 +2892,90 @@ function bookmarkSourceLabel(source) {
   return key ? t(key) : normalizeBookmarkSource(source);
 }
 
+function resolveBookmarkModalDefaults(options = {}) {
+  const navId = options.navId ?? getActiveNavId();
+  const defaults = {
+    homepageEnabled: false,
+    homepageCategoryId: "",
+    selectedSidebarIds: []
+  };
+
+  if (options.homepageCategoryId) {
+    defaults.homepageEnabled = true;
+    defaults.homepageCategoryId = options.homepageCategoryId;
+  } else if (navId === NAV_FAVORITES) {
+    defaults.selectedSidebarIds = [FAVORITES_CATEGORY_ID];
+  } else if (navId !== NAV_UNSORTED && navId !== NAV_ALL && isCategoryNavId(state.config, navId)) {
+    defaults.selectedSidebarIds = [navId];
+  }
+
+  if (options.selectedSidebarIds?.length) {
+    defaults.selectedSidebarIds = [...options.selectedSidebarIds];
+  }
+
+  return defaults;
+}
+
+function captureBookmarkFormSnapshot(form, shortcut) {
+  const fd = new FormData(form);
+  return JSON.stringify({
+    title: String(fd.get("title") || "").trim(),
+    url: String(fd.get("url") || "").trim(),
+    description: String(fd.get("description") || "").trim(),
+    image: String(fd.get("image") || "").trim(),
+    openMode: String(fd.get("openMode") || "").trim(),
+    shortcut: shortcut || "",
+    homepageEnabled: Boolean(form.querySelector("[data-homepage-toggle]")?.checked),
+    homepageCategoryId: String(form.querySelector("[data-homepage-category]")?.value || "").trim(),
+    sidebarCategoryIds: [...fd.getAll("sidebarCategoryIds")]
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+      .sort()
+  });
+}
+
+async function confirmDiscardBookmarkChanges() {
+  let confirmed = false;
+  const body = document.createElement("p");
+  body.textContent = t("ui.discardChangesText");
+  await showModal({
+    title: t("ui.discardChangesTitle"),
+    content: body,
+    saveLabel: t("ui.yes"),
+    cancelLabel: t("ui.no"),
+    onSave: async () => {
+      confirmed = true;
+    }
+  });
+  return confirmed;
+}
+
 function openBookmarkModal(arg = {}) {
   const options = typeof arg === "string" ? { homepageCategoryId: arg } : arg;
   const bookmark = options.bookmark ?? null;
   const defaultHomepageCategoryId = options.homepageCategoryId || "";
   const isEdit = Boolean(bookmark);
   const existing = isEdit ? findBookmarkById(state.config, bookmark.id) : null;
+  const navDefaults = isEdit ? null : resolveBookmarkModalDefaults(options);
   const homepageCategoryId = existing
     ? getBookmarkHomepageCategoryId(state.config, existing)
-    : defaultHomepageCategoryId;
-  const homepageEnabled = Boolean(homepageCategoryId);
+    : (defaultHomepageCategoryId || navDefaults?.homepageCategoryId || "");
+  const homepageEnabled = existing
+    ? Boolean(homepageCategoryId)
+    : Boolean(navDefaults?.homepageEnabled);
   const selectedSidebarIds = existing
     ? getBookmarkSidebarPlacementIds(existing)
-    : [];
+    : [...(navDefaults?.selectedSidebarIds || [])];
   const form = document.createElement("form");
   const previewImgSrc = existing ? bookmarkStoredImageSrc(existing) : resolveIconSrcForImgTag("");
-  form.innerHTML = `
-    <div class="form-row">
-      <label>${t("ui.title")}</label>
-      <input name="title" value="${existing?.title || ""}" required />
-    </div>
-    <div class="form-row">
-      <label>${t("ui.url")}</label>
-      <input name="url" type="url" value="${existing?.url || ""}" required />
-    </div>
-    <div class="form-row">
-      <label>${t("ui.description")}</label>
-      <textarea name="description" rows="2">${existing?.description || ""}</textarea>
-    </div>
-    <div class="form-row">
-      <label>${t("ui.image")}</label>
-      <div>
-        <div class="icon-url-controls">
-          <input name="image" value="${existing?.image || ""}" />
-          <div class="icon-preview-box">
-            <span id="favicon-spinner" class="spinner hidden" aria-hidden="true"></span>
-            <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
-          </div>
-          <button type="button" class="btn btn--ghost btn--compact" data-fetch-favicon>${t("ui.fetchFavicon")}</button>
-        </div>
-        <small id="favicon-status"></small>
-      </div>
-    </div>
+  const placementFields = renderBookmarkPlacementFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds });
+  const sharedTailFields = `
     <div class="form-row form-row--bookmark-placements">
       <label>${t("ui.bookmarkCategories")}</label>
       <div class="checkbox-group" data-bookmark-placements>
-        ${renderBookmarkPlacementFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds })}
+        ${placementFields}
       </div>
     </div>
-    ${isEdit ? `
-      <div class="form-row">
-        <label>${t("ui.source")}</label>
-        <input value="${bookmarkSourceLabel(existing?.source)}" readonly disabled />
-      </div>
-    ` : ""}
     <div class="form-row">
       <label>${t("ui.openMode")}</label>
       <select name="openMode">
@@ -2732,128 +2995,104 @@ function openBookmarkModal(arg = {}) {
     </div>
   `;
 
-  showModal({
-    title: isEdit ? `${t("ui.edit")} ${t("ui.bookmark")}` : t("ui.addBookmark"),
-    content: form,
-    saveLabel: t("ui.save"),
-    cancelLabel: t("ui.cancel"),
-    leadingActions: isEdit ? [{
-      label: t("ui.delete"),
-      icon: ICONS.trash,
-      onClick: async () => {
-        const confirmed = await confirmDeleteBookmark(existing);
-        if (!confirmed) return false;
-        pushUndo();
-        removeBookmarkFromConfig(state.config, existing.id);
-        await persistConfig();
-        render();
-      }
-    }] : [],
-    onSave: async () => {
-      if (!form.reportValidity()) return false;
-      if (!validateShortcut()) return false;
-      const fd = new FormData(form);
-      const homepageEnabled = Boolean(form.querySelector("[data-homepage-toggle]")?.checked);
-      const homepageCategorySelect = form.querySelector("[data-homepage-category]");
-      const homepageCategoryIdValue = String(homepageCategorySelect?.value || "").trim();
-      const listCategoryIds = new Set(listBookmarkListCategories(state.config).map((category) => category.id));
-      const sidebarCategoryIds = [
-        ...new Set(fd.getAll("sidebarCategoryIds").map((id) => String(id || "").trim()).filter(Boolean))
-      ];
-
-      form.querySelector("[data-bookmark-placements]")?.removeAttribute("data-invalid");
-      homepageCategorySelect?.removeAttribute("data-invalid");
-
-      let categoryIds = [];
-      if (homepageEnabled) {
-        if (!homepageCategoryIdValue || !listCategoryIds.has(homepageCategoryIdValue)) {
-          form.querySelector("[data-bookmark-placements]")?.setAttribute("data-invalid", "true");
-          homepageCategorySelect?.setAttribute("data-invalid", "true");
-          return false;
-        }
-        categoryIds = [homepageCategoryIdValue];
-      }
-
-      const image = normalizeBookmarkImageValue(fd.get("image"));
-
-      const applyPlacementUpdates = (entry, bookmarkId, previousCategoryIds, previousSidebarIds) => {
-        entry.title = String(fd.get("title") || "").trim();
-        entry.url = String(fd.get("url") || "").trim();
-        entry.description = String(fd.get("description") || "").trim();
-        entry.image = image;
-        entry.openMode = fd.get("openMode");
-        entry.shortcut = selectedShortcut;
-        entry.favorite = false;
-        entry.sidebarCategoryIds = sidebarCategoryIds;
-        const preservedNonListCategoryIds = (entry.categoryIds || []).filter((id) => !listCategoryIds.has(id));
-        entry.categoryIds = homepageEnabled
-          ? [...preservedNonListCategoryIds, ...categoryIds]
-          : preservedNonListCategoryIds;
-
-        for (const cid of categoryIds) {
-          ensureBookmarkInCategoryOrder(state.config, cid, bookmarkId);
-        }
-        for (const cid of previousCategoryIds) {
-          if (!categoryIds.includes(cid)) {
-            removeBookmarkFromCategoryOrder(state.config, cid, bookmarkId);
-          }
-        }
-        for (const cid of sidebarCategoryIds) {
-          if (cid === FAVORITES_CATEGORY_ID) continue;
-          if (findSidebarCategoryById(state.config, cid)) {
-            ensureBookmarkInSidebarCategoryOrder(state.config, cid, bookmarkId);
-          }
-        }
-        for (const cid of previousSidebarIds) {
-          if (sidebarCategoryIds.includes(cid) || cid === FAVORITES_CATEGORY_ID) continue;
-          removeBookmarkFromSidebarCategoryOrder(state.config, cid, bookmarkId);
-        }
-      };
-
-      pushUndo();
-      let createdBookmarkId = "";
-      if (isEdit) {
-        const previousCategoryIds = (existing.categoryIds || []).filter((id) => listCategoryIds.has(id));
-        const previousSidebarIds = getBookmarkSidebarPlacementIds(existing);
-        applyPlacementUpdates(existing, existing.id, previousCategoryIds, previousSidebarIds);
-      } else {
-        const created = {
-          id: uid(),
-          title: String(fd.get("title") || "").trim(),
-          url: String(fd.get("url") || "").trim(),
-          description: String(fd.get("description") || "").trim(),
-          image,
-          categoryIds: [],
-          sidebarCategoryIds,
-          favorite: false,
-          source: DEFAULT_BOOKMARK_SOURCE,
-          openMode: fd.get("openMode"),
-          shortcut: selectedShortcut
-        };
-        state.config.bookmarks.push(created);
-        createdBookmarkId = created.id;
-        applyPlacementUpdates(created, created.id, [], []);
-      }
-      await persistConfig();
-      render();
-      if (createdBookmarkId) {
-        void applyBookmarkMetadata(createdBookmarkId, { pushUndoOnChange: false });
-      }
-    }
-  });
+  if (isEdit) {
+    form.innerHTML = `
+      <div class="form-row">
+        <label>${t("ui.title")}</label>
+        <input name="title" value="${existing?.title || ""}" required />
+      </div>
+      <div class="form-row">
+        <label>${t("ui.url")}</label>
+        <input name="url" type="url" value="${existing?.url || ""}" required />
+      </div>
+      <div class="form-row">
+        <label>${t("ui.description")}</label>
+        <textarea name="description" rows="2">${existing?.description || ""}</textarea>
+      </div>
+      <div class="form-row">
+        <label>${t("ui.image")}</label>
+        <div>
+          <div class="icon-url-controls">
+            <input name="image" value="${existing?.image || ""}" />
+            <div class="icon-preview-box">
+              <span id="favicon-spinner" class="spinner hidden" aria-hidden="true"></span>
+              <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
+            </div>
+            <button type="button" class="btn btn--ghost btn--compact" data-fetch-favicon>${t("ui.fetchFavicon")}</button>
+          </div>
+          <small id="favicon-status"></small>
+        </div>
+      </div>
+      ${sharedTailFields.replace(
+        '<div class="form-row form-row--bookmark-placements">',
+        `<div class="form-row">
+        <label>${t("ui.source")}</label>
+        <input value="${bookmarkSourceLabel(existing?.source)}" readonly disabled />
+      </div>
+      <div class="form-row form-row--bookmark-placements">`
+      )}
+    `;
+  } else {
+    form.className = "bookmark-create-form";
+    form.innerHTML = `
+      <div class="form-row">
+        <label>${t("ui.url")}</label>
+        <input name="url" type="url" value="" required />
+      </div>
+      <div class="bookmark-metadata-section">
+        <div class="bookmark-metadata-fields">
+          <div class="form-row">
+            <label>${t("ui.title")}</label>
+            <input name="title" value="" required />
+          </div>
+          <div class="form-row">
+            <label>${t("ui.description")}</label>
+            <textarea name="description" rows="2"></textarea>
+          </div>
+          <div class="form-row">
+            <label>${t("ui.image")}</label>
+            <div>
+              <div class="icon-url-controls">
+                <input name="image" value="" />
+                <div class="icon-preview-box">
+                  <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
+                </div>
+              </div>
+              <small id="metadata-status"></small>
+            </div>
+          </div>
+        </div>
+        <div class="bookmark-metadata-action">
+          <button type="button" class="btn btn--load-metadata" data-load-metadata disabled>
+            <span class="spinner hidden" data-load-metadata-spinner aria-hidden="true"></span>
+            <span class="btn__label">${t("ui.loadInformation")}</span>
+          </button>
+        </div>
+      </div>
+      ${sharedTailFields}
+    `;
+  }
 
   const imageInput = form.querySelector("input[name='image']");
+  const titleInput = form.querySelector("input[name='title']");
+  const descriptionInput = form.querySelector("textarea[name='description']");
   const urlInput = form.querySelector("input[name='url']");
   const shortcutCapture = form.querySelector("[data-shortcut-capture]");
   const shortcutChips = shortcutCapture?.querySelector(".shortcut-input-chips");
   const shortcutPlaceholder = shortcutCapture?.querySelector(".shortcut-input-placeholder");
   const shortcutFeedback = form.querySelector("[data-shortcut-feedback]");
   const fetchFaviconButton = form.querySelector("[data-fetch-favicon]");
-  const status = form.querySelector("#favicon-status");
+  const loadMetadataButton = form.querySelector("[data-load-metadata]");
+  const loadMetadataSpinner = form.querySelector("[data-load-metadata-spinner]");
+  const status = form.querySelector("#favicon-status") || form.querySelector("#metadata-status");
   const spinner = form.querySelector("#favicon-spinner");
   const preview = form.querySelector("#favicon-preview");
 
   let selectedShortcut = normalizeServiceShortcut(existing?.shortcut || "");
+  let userEditedTitle = Boolean(existing?.title);
+  let userEditedDescription = Boolean(existing?.description);
+  let userEditedImage = Boolean(existing?.image);
+
   const updateShortcutFeedback = (message = "", isError = false) => {
     if (!shortcutFeedback) return;
     shortcutFeedback.textContent = message;
@@ -2881,6 +3120,23 @@ function openBookmarkModal(arg = {}) {
     updateShortcutFeedback("");
     return true;
   };
+
+  const setStatusMessage = (message = "", isError = false) => {
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("is-error", isError);
+  };
+
+  const syncIconPreviewFromField = () => {
+    const v = String(imageInput.value || "").trim();
+    preview.src = resolveBookmarkPreviewSrc(v);
+  };
+
+  const syncLoadMetadataButton = () => {
+    if (!loadMetadataButton) return;
+    loadMetadataButton.disabled = !String(urlInput?.value || "").trim() || loadMetadataButton.classList.contains("is-loading");
+  };
+
   shortcutCapture?.addEventListener("keydown", (event) => {
     event.preventDefault();
     if (event.key === "Backspace" || event.key === "Delete") {
@@ -2903,35 +3159,40 @@ function openBookmarkModal(arg = {}) {
     shortcutCapture.focus();
   });
 
-  const syncIconPreviewFromField = () => {
-    const v = String(imageInput.value || "").trim();
-    preview.src = resolveBookmarkPreviewSrc(v);
-  };
-
-  imageInput.addEventListener("input", () => {
-    status.textContent = "";
+  titleInput?.addEventListener("input", () => {
+    userEditedTitle = true;
+  });
+  descriptionInput?.addEventListener("input", () => {
+    userEditedDescription = true;
+  });
+  imageInput?.addEventListener("input", () => {
+    userEditedImage = true;
+    setStatusMessage("");
     syncIconPreviewFromField();
   });
+  urlInput?.addEventListener("input", () => {
+    syncLoadMetadataButton();
+  });
 
-  preview.addEventListener("error", () => {
+  preview?.addEventListener("error", () => {
     const manualValue = String(imageInput.value || "").trim();
     if (manualValue) {
-      status.textContent = t("ui.faviconFailed");
+      setStatusMessage(t("ui.faviconFailed"), true);
       return;
     }
     preview.src = resolveServiceIconDisplaySrc("");
   });
-  preview.addEventListener("load", () => {
-    status.textContent = "";
+  preview?.addEventListener("load", () => {
+    if (status?.id === "favicon-status") setStatusMessage("");
   });
 
   const triggerFaviconLoad = async () => {
     const value = String(urlInput.value || "").trim();
-    if (!value) return;
+    if (!value || !fetchFaviconButton) return;
     fetchFaviconButton.disabled = true;
     state.faviconLoading = true;
-    spinner.classList.remove("hidden");
-    status.textContent = "";
+    spinner?.classList.remove("hidden");
+    setStatusMessage("");
     try {
       const result = await api.cacheFavicon(value);
       const path = normalizeAppIconPath(String(result.path || "").trim());
@@ -2939,20 +3200,67 @@ function openBookmarkModal(arg = {}) {
         throw new Error("Missing cache path");
       }
       imageInput.value = path;
+      userEditedImage = true;
       syncIconPreviewFromField();
-      status.textContent = "";
+      setStatusMessage("");
     } catch (err) {
       const detail = err && typeof err.message === "string" ? err.message.trim() : "";
-      status.textContent = detail || t("ui.faviconFailed");
+      setStatusMessage(detail || t("ui.faviconFailed"), true);
       syncIconPreviewFromField();
     } finally {
       fetchFaviconButton.disabled = false;
       state.faviconLoading = false;
-      spinner.classList.add("hidden");
+      spinner?.classList.add("hidden");
     }
   };
 
-  fetchFaviconButton.addEventListener("click", triggerFaviconLoad);
+  fetchFaviconButton?.addEventListener("click", triggerFaviconLoad);
+
+  const triggerMetadataLoad = async () => {
+    const value = String(urlInput?.value || "").trim();
+    if (!value || !loadMetadataButton) return;
+    loadMetadataButton.disabled = true;
+    loadMetadataButton.classList.add("is-loading");
+    loadMetadataSpinner?.classList.remove("hidden");
+    setStatusMessage("");
+    try {
+      const metadata = await api.fetchBookmarkMetadata(value);
+      if (metadata?.ok === false) {
+        throw new Error(t("ui.loadInformationFailed"));
+      }
+      if (!userEditedTitle && metadata.title) {
+        titleInput.value = String(metadata.title).trim();
+      }
+      if (!userEditedDescription && metadata.description) {
+        descriptionInput.value = String(metadata.description).trim();
+      }
+      if (!userEditedImage && metadata.image) {
+        imageInput.value = normalizeBookmarkImageValue(metadata.image);
+        syncIconPreviewFromField();
+      } else if (!userEditedImage && !metadata.image) {
+        try {
+          const result = await api.cacheFavicon(value);
+          const path = normalizeAppIconPath(String(result.path || "").trim());
+          if (path.startsWith("/static/assets/favicon-cache/")) {
+            imageInput.value = path;
+            syncIconPreviewFromField();
+          }
+        } catch {
+          // Keep existing preview input when favicon fallback fails.
+        }
+      }
+      setStatusMessage("");
+    } catch (err) {
+      const detail = err && typeof err.message === "string" ? err.message.trim() : "";
+      setStatusMessage(detail || t("ui.loadInformationFailed"), true);
+    } finally {
+      loadMetadataButton.classList.remove("is-loading");
+      loadMetadataSpinner?.classList.add("hidden");
+      syncLoadMetadataButton();
+    }
+  };
+
+  loadMetadataButton?.addEventListener("click", triggerMetadataLoad);
 
   const homepageToggle = form.querySelector("[data-homepage-toggle]");
   const homepageCategorySelect = form.querySelector("[data-homepage-category]");
@@ -2989,6 +3297,122 @@ function openBookmarkModal(arg = {}) {
   syncIconPreviewFromField();
   updateShortcutUI();
   validateShortcut();
+  syncLoadMetadataButton();
+
+  const initialSnapshot = isEdit ? "" : captureBookmarkFormSnapshot(form, selectedShortcut);
+
+  showModal({
+    title: isEdit ? `${t("ui.edit")} ${t("ui.bookmark")}` : t("ui.newBookmark"),
+    content: form,
+    modalClass: isEdit ? "" : "modal--bookmark-create",
+    saveLabel: t("ui.save"),
+    cancelLabel: t("ui.cancel"),
+    leadingActions: isEdit ? [{
+      label: t("ui.delete"),
+      icon: ICONS.trash,
+      onClick: async () => {
+        const confirmed = await confirmDeleteBookmark(existing);
+        if (!confirmed) return false;
+        pushUndo();
+        removeBookmarkFromConfig(state.config, existing.id);
+        await persistConfig();
+        render();
+      }
+    }] : [],
+    onCancel: isEdit ? undefined : async () => {
+      const currentSnapshot = captureBookmarkFormSnapshot(form, selectedShortcut);
+      if (currentSnapshot === initialSnapshot) return;
+      const confirmed = await confirmDiscardBookmarkChanges();
+      if (!confirmed) return false;
+    },
+    onSave: async () => {
+      if (!form.reportValidity()) return false;
+      if (!validateShortcut()) return false;
+      const fd = new FormData(form);
+      const homepageEnabledValue = Boolean(form.querySelector("[data-homepage-toggle]")?.checked);
+      const homepageCategorySelectEl = form.querySelector("[data-homepage-category]");
+      const homepageCategoryIdValue = String(homepageCategorySelectEl?.value || "").trim();
+      const listCategoryIds = new Set(listBookmarkListCategories(state.config).map((category) => category.id));
+      const sidebarCategoryIds = [
+        ...new Set(fd.getAll("sidebarCategoryIds").map((id) => String(id || "").trim()).filter(Boolean))
+      ];
+
+      form.querySelector("[data-bookmark-placements]")?.removeAttribute("data-invalid");
+      homepageCategorySelectEl?.removeAttribute("data-invalid");
+
+      let categoryIds = [];
+      if (homepageEnabledValue) {
+        if (!homepageCategoryIdValue || !listCategoryIds.has(homepageCategoryIdValue)) {
+          form.querySelector("[data-bookmark-placements]")?.setAttribute("data-invalid", "true");
+          homepageCategorySelectEl?.setAttribute("data-invalid", "true");
+          return false;
+        }
+        categoryIds = [homepageCategoryIdValue];
+      }
+
+      const image = normalizeBookmarkImageValue(fd.get("image"));
+
+      const applyPlacementUpdates = (entry, bookmarkId, previousCategoryIds, previousSidebarIds) => {
+        entry.title = String(fd.get("title") || "").trim();
+        entry.url = String(fd.get("url") || "").trim();
+        entry.description = String(fd.get("description") || "").trim();
+        entry.image = image;
+        entry.openMode = fd.get("openMode");
+        entry.shortcut = selectedShortcut;
+        entry.favorite = false;
+        entry.sidebarCategoryIds = sidebarCategoryIds;
+        const preservedNonListCategoryIds = (entry.categoryIds || []).filter((id) => !listCategoryIds.has(id));
+        entry.categoryIds = homepageEnabledValue
+          ? [...preservedNonListCategoryIds, ...categoryIds]
+          : preservedNonListCategoryIds;
+
+        for (const cid of categoryIds) {
+          ensureBookmarkInCategoryOrder(state.config, cid, bookmarkId);
+        }
+        for (const cid of previousCategoryIds) {
+          if (!categoryIds.includes(cid)) {
+            removeBookmarkFromCategoryOrder(state.config, cid, bookmarkId);
+          }
+        }
+        for (const cid of sidebarCategoryIds) {
+          if (cid === FAVORITES_CATEGORY_ID) continue;
+          if (findSidebarCategoryById(state.config, cid)) {
+            ensureBookmarkInSidebarCategoryOrder(state.config, cid, bookmarkId);
+          }
+        }
+        for (const cid of previousSidebarIds) {
+          if (sidebarCategoryIds.includes(cid) || cid === FAVORITES_CATEGORY_ID) continue;
+          removeBookmarkFromSidebarCategoryOrder(state.config, cid, bookmarkId);
+        }
+      };
+
+      pushUndo();
+      if (isEdit) {
+        const previousCategoryIds = (existing.categoryIds || []).filter((id) => listCategoryIds.has(id));
+        const previousSidebarIds = getBookmarkSidebarPlacementIds(existing);
+        applyPlacementUpdates(existing, existing.id, previousCategoryIds, previousSidebarIds);
+      } else {
+        const created = {
+          id: uid(),
+          title: String(fd.get("title") || "").trim(),
+          url: String(fd.get("url") || "").trim(),
+          description: String(fd.get("description") || "").trim(),
+          image,
+          categoryIds: [],
+          sidebarCategoryIds,
+          favorite: false,
+          source: DEFAULT_BOOKMARK_SOURCE,
+          openMode: fd.get("openMode"),
+          shortcut: selectedShortcut,
+          createdAt: bookmarkTimestampNow()
+        };
+        state.config.bookmarks.push(created);
+        applyPlacementUpdates(created, created.id, [], []);
+      }
+      await persistConfig();
+      render();
+    }
+  });
 }
 
 function openSettingsModal() {
