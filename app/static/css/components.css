@@ -1083,6 +1083,16 @@ main {
   margin-bottom: 0;
 }
 
+.bookmark-metadata-fields .form-row > :not(label) {
+  min-width: 0;
+  width: 100%;
+}
+
+.bookmark-metadata-fields .form-row > input,
+.bookmark-metadata-fields .form-row > textarea {
+  width: 100%;
+}
+
 .bookmark-metadata-action {
   display: flex;
   align-items: stretch;
@@ -1630,39 +1640,57 @@ textarea {
   padding: 0.35rem;
 }
 
-.checkbox-option {
-  display: flex;
+.checkbox-group .theme-checkbox,
+.checkbox-group .bookmark-placement-option--with-select {
+  min-height: calc(2.125rem * var(--element-scale, 1));
+}
+
+.checkbox-group .theme-checkbox {
   align-items: center;
-  gap: 0.45rem;
+  padding: 0.15rem 0;
+  gap: 0.5rem;
   cursor: pointer;
+}
+
+.checkbox-group .theme-checkbox__box {
+  margin-top: 0;
+}
+
+.checkbox-group .theme-checkbox__label {
+  color: var(--text);
 }
 
 .form-row--bookmark-placements {
   align-items: start;
 }
 
-.bookmark-placement-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(10rem, 14rem);
-  gap: 0.5rem;
+.bookmark-placement-option--with-select {
+  display: flex;
   align-items: center;
+  gap: 0.5rem;
+  padding: 0;
 }
 
-.bookmark-placement-row__toggle {
+.bookmark-placement-option__toggle {
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
 }
 
-.bookmark-placement-row__select {
-  width: 100%;
-  min-width: 0;
+.bookmark-placement-option__select {
+  flex: 0 0 auto;
+  width: min(14rem, 42%);
+  min-width: 10rem;
+  min-height: calc(2.125rem * var(--element-scale, 1));
+  padding: 0.35rem 0.5rem;
 }
 
-.bookmark-placement-row__select:disabled {
+.bookmark-placement-option__select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.bookmark-placement-row__select[data-invalid="true"] {
+.bookmark-placement-option__select[data-invalid="true"] {
   outline: 1px solid var(--danger);
   outline-offset: 1px;
 }
@@ -1675,8 +1703,14 @@ textarea {
 }
 
 @media (max-width: 650px) {
-  .bookmark-placement-row {
-    grid-template-columns: 1fr;
+  .bookmark-placement-option--with-select {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bookmark-placement-option__select {
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -1897,19 +1931,23 @@ textarea {
 
 .icon-url-controls {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0.5rem;
   width: 100%;
+  min-width: 0;
 }
 
-.icon-url-controls input[name="iconUrl"] {
+.icon-url-controls > input {
   flex: 1 1 auto;
   min-width: 0;
+  width: auto;
 }
 
 .icon-preview-box {
   width: 38px;
-  height: 38px;
+  height: auto;
+  min-height: 38px;
+  align-self: stretch;
   flex: 0 0 38px;
   border-radius: 4px;
   background: var(--surface-2);

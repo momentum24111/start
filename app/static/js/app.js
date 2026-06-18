@@ -2824,6 +2824,32 @@ function openCategoryModal(category = null) {
   results.innerHTML = "";
 }
 
+function renderBookmarkThemeCheckbox({
+  name,
+  value = "",
+  checked = false,
+  label,
+  inputAttrs = "",
+  extraClass = ""
+} = {}) {
+  const valueAttr = value ? ` value="${escapeHtml(value)}"` : "";
+  const checkedAttr = checked ? " checked" : "";
+  const className = ["theme-checkbox", "bookmark-placement-option", extraClass].filter(Boolean).join(" ");
+  return `
+    <label class="${className}">
+      <input
+        type="checkbox"
+        class="theme-checkbox__input"
+        name="${escapeHtml(name)}"
+        ${valueAttr}${checkedAttr}
+        ${inputAttrs}
+      />
+      <span class="theme-checkbox__box" aria-hidden="true"></span>
+      <span class="theme-checkbox__label">${escapeHtml(label)}</span>
+    </label>
+  `;
+}
+
 function renderBookmarkPlacementFields({
   homepageEnabled,
   homepageCategoryId,
@@ -2838,47 +2864,39 @@ function renderBookmarkPlacementFields({
     })
     .join("");
   const sidebarOptions = listSidebarCategories(state.config)
-    .map((category) => {
-      const checked = sidebarSelected.has(category.id) ? "checked" : "";
-      return `
-        <label class="checkbox-option">
-          <input type="checkbox" name="sidebarCategoryIds" value="${escapeHtml(category.id)}" ${checked} />
-          <span>${escapeHtml(category.name)}</span>
-        </label>
-      `;
-    })
+    .map((category) => renderBookmarkThemeCheckbox({
+      name: "sidebarCategoryIds",
+      value: category.id,
+      checked: sidebarSelected.has(category.id),
+      label: category.name
+    }))
     .join("");
 
   return `
-    <div class="bookmark-placement-row">
-      <label class="checkbox-option bookmark-placement-row__toggle">
-        <input
-          type="checkbox"
-          name="homepageEnabled"
-          data-homepage-toggle
-          ${homepageEnabled ? "checked" : ""}
-        />
-        <span>${escapeHtml(getHomepageName())}</span>
-      </label>
+    <div class="bookmark-placement-option bookmark-placement-option--with-select">
+      ${renderBookmarkThemeCheckbox({
+    name: "homepageEnabled",
+    checked: homepageEnabled,
+    label: getHomepageName(),
+    inputAttrs: "data-homepage-toggle",
+    extraClass: "bookmark-placement-option__toggle"
+  })}
       <select
         name="homepageCategoryId"
         data-homepage-category
-        class="bookmark-placement-row__select"
+        class="bookmark-placement-option__select"
         ${homepageEnabled ? "" : "disabled"}
       >
         <option value="">${escapeHtml(t("ui.homepageCategoryPlaceholder"))}</option>
         ${homepageOptions}
       </select>
     </div>
-    <label class="checkbox-option">
-      <input
-        type="checkbox"
-        name="sidebarCategoryIds"
-        value="${FAVORITES_CATEGORY_ID}"
-        ${sidebarSelected.has(FAVORITES_CATEGORY_ID) ? "checked" : ""}
-      />
-      <span>${escapeHtml(t("ui.navFavorites"))}</span>
-    </label>
+    ${renderBookmarkThemeCheckbox({
+    name: "sidebarCategoryIds",
+    value: FAVORITES_CATEGORY_ID,
+    checked: sidebarSelected.has(FAVORITES_CATEGORY_ID),
+    label: t("ui.navFavorites")
+  })}
     ${sidebarOptions}
     <small class="bookmark-unsorted-hint hidden" data-unsorted-hint>${escapeHtml(t("ui.bookmarkUnsortedHint"))}</small>
   `;
@@ -2949,7 +2967,7 @@ function renderBookmarkFormMarkup({ existing, previewImgSrc, placementTailHtml }
         </div>
       </div>
       <div class="bookmark-metadata-action">
-        <button type="button" class="btn btn--load-metadata" data-load-metadata disabled>
+        <button type="button" class="btn btn--ghost btn--load-metadata" data-load-metadata disabled>
           <span class="spinner hidden" data-load-metadata-spinner aria-hidden="true"></span>
           <span class="btn__label">${t("ui.loadInformation")}</span>
         </button>
