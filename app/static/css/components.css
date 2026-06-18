@@ -1281,6 +1281,11 @@ main {
 
 .settings-actions-block {
   margin-top: 0;
+  margin-bottom: 0;
+}
+
+.settings-actions-block__anchor {
+  display: block;
 }
 
 input,
@@ -1947,6 +1952,7 @@ textarea {
   .services { grid-template-columns: 1fr; }
   .nav-view-header { align-items: flex-start; }
   .form-row { grid-template-columns: 1fr; gap: 0.3rem; }
+  .settings-actions-block__anchor { display: none; }
 }
 
 /* —— Lesezeichen: Listen- und Kartenansicht —— */

@@ -3088,18 +3088,19 @@ function openSettingsModal() {
       <input id="browser-sync-interval" name="syncIntervalHours" type="number" min="1" max="168" step="1" value="${browserSync.syncIntervalHours}" />
     </div>
     <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
-      <label>${t("ui.browserSyncStatus")}</label>
-      <div>
-        <small class="browser-sync-status" data-browser-sync-status>${t("ui.browserSyncLoading")}</small>
+      <label data-settings-browser-sync-status-label>${t("ui.browserSyncStatus")}</label>
+      <div class="browser-sync-actions">
         <button type="button" class="btn btn--ghost" data-browser-sync-run><span class="btn__label">${t("ui.browserSyncRunNow")}</span></button>
+        <div class="browser-sync-status browser-sync-status--loading" data-browser-sync-status>${t("ui.browserSyncLoading")}</div>
       </div>
     </div>
     <div class="settings-section-title" data-settings-shortcuts-label>${t("ui.shortcuts")}</div>
     <div class="settings-shortcuts-list">
       ${shortcutRows}
     </div>
-    <div class="form-row settings-actions-block" role="group" aria-labelledby="settings-actions-heading">
-      <label id="settings-actions-heading" data-settings-actions-label for="restart-app-btn">${t("ui.actions")}</label>
+    <div class="settings-section-title" data-settings-actions-label>${t("ui.actions")}</div>
+    <div class="form-row settings-actions-block">
+      <span class="settings-actions-block__anchor" aria-hidden="true"></span>
       <div>
         <button type="button" class="btn btn--ghost" id="restart-app-btn" data-restart-app><span class="btn__icon">${iconSvg(ICONS.restart, "inline-icon")}</span><span class="btn__label" data-settings-restart-label>${t("ui.restartApp")}</span></button>
       </div>
@@ -3110,15 +3111,21 @@ function openSettingsModal() {
   });
   const browserSyncEnabledInput = form.querySelector("input[name='browserSyncEnabled']");
   const browserSyncUrlInput = form.querySelector("input[name='githubFileUrl']");
-  const browserSyncPatInput = form.querySelector("input[name='githubPat']");
   const browserSyncIntervalInput = form.querySelector("input[name='syncIntervalHours']");
   const browserSyncStatusEl = form.querySelector("[data-browser-sync-status]");
   const browserSyncRunBtn = form.querySelector("[data-browser-sync-run]");
+  const browserSyncSecretField = initSecretField(form.querySelector("[data-secret-field]"), {
+    onChange: () => {
+      applyBrowserSyncToState();
+      scheduleSettingsPersist();
+    }
+  });
+  browserSyncSecretField?.setValue(browserSync.githubPat);
   const applyBrowserSyncToState = () => {
     state.settings.browserSync = normalizeBrowserSyncSettings({
       enabled: Boolean(browserSyncEnabledInput?.checked),
       githubFileUrl: browserSyncUrlInput?.value || "",
-      githubPat: browserSyncPatInput?.value || "",
+      githubPat: browserSyncSecretField?.getValue() || "",
       syncIntervalHours: browserSyncIntervalInput?.value || 6
     });
   };
@@ -3126,9 +3133,9 @@ function openSettingsModal() {
     if (!browserSyncStatusEl) return;
     try {
       const status = await api.getBrowserSyncStatus();
-      browserSyncStatusEl.textContent = formatBrowserSyncStatusLine(status);
+      renderBrowserSyncStatus(browserSyncStatusEl, status);
     } catch {
-      browserSyncStatusEl.textContent = t("ui.browserSyncStatusFailed");
+      setBrowserSyncStatusMessage(browserSyncStatusEl, "browser-sync-status--error", t("ui.browserSyncStatusFailed"));
     }
   };
   browserSyncEnabledInput?.addEventListener("change", () => {
@@ -3140,10 +3147,6 @@ function openSettingsModal() {
     applyBrowserSyncToState();
     scheduleSettingsPersist();
   });
-  browserSyncPatInput?.addEventListener("input", () => {
-    applyBrowserSyncToState();
-    scheduleSettingsPersist();
-  });
   browserSyncIntervalInput?.addEventListener("input", () => {
     applyBrowserSyncToState();
     scheduleSettingsPersist();
@@ -3152,7 +3155,7 @@ function openSettingsModal() {
     applyBrowserSyncToState();
     await api.saveSettings(deepClone(state.settings));
     browserSyncRunBtn.disabled = true;
-    browserSyncStatusEl.textContent = t("ui.browserSyncRunning");
+    setBrowserSyncStatusMessage(browserSyncStatusEl, "browser-sync-status--loading", t("ui.browserSyncRunning"));
     try {
       const result = await api.runBrowserSync();
       if (result?.ok) {
@@ -3161,7 +3164,7 @@ function openSettingsModal() {
       }
       await refreshBrowserSyncStatus();
     } catch {
-      browserSyncStatusEl.textContent = t("ui.browserSyncStatusFailed");
+      setBrowserSyncStatusMessage(browserSyncStatusEl, "browser-sync-status--error", t("ui.browserSyncStatusFailed"));
     } finally {
       browserSyncRunBtn.disabled = !state.settings.browserSync.enabled;
     }
