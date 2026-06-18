@@ -141,6 +141,7 @@
     "viewCards": "Kartenansicht",
     "open": "Öffnen",
     "newBookmark": "Neues Lesezeichen",
+    "editBookmark": "Lesezeichen bearbeiten",
     "loadInformation": "Informationen laden",
     "loadInformationFailed": "Informationen konnten nicht geladen werden",
     "discardChangesTitle": "Änderungen verwerfen?",

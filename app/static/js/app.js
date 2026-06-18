@@ -256,10 +256,6 @@ const CATEGORY_SLOT_OPTIONS = [1, 2, 3];
 const DEFAULT_CATEGORY_SLOTS = 1;
 const CATEGORY_TYPE_OPTIONS = ["service-list", "iframe"];
 const DEFAULT_CATEGORY_TYPE = "service-list";
-const BOOKMARK_SOURCE_LABEL_KEYS = {
-  manual: "ui.sourceManual",
-  "browser-import": "ui.sourceBrowserImport"
-};
 const SHORTCUT_VALID_KEY_REGEX = /^(?:[A-Z0-9]|F[1-9]|F1[0-2])$/;
 const RESERVED_SHORTCUTS = new Set([
   "Ctrl+T",
@@ -2888,9 +2884,79 @@ function renderBookmarkPlacementFields({
   `;
 }
 
-function bookmarkSourceLabel(source) {
-  const key = BOOKMARK_SOURCE_LABEL_KEYS[normalizeBookmarkSource(source)];
-  return key ? t(key) : normalizeBookmarkSource(source);
+function renderBookmarkPlacementTailFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds, existing }) {
+  const placementFields = renderBookmarkPlacementFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds });
+  const openMode = existing?.openMode;
+  return `
+    <div class="form-row form-row--bookmark-placements">
+      <label>${t("ui.bookmarkCategories")}</label>
+      <div class="checkbox-group" data-bookmark-placements>
+        ${placementFields}
+      </div>
+    </div>
+    <div class="form-row">
+      <label>${t("ui.openMode")}</label>
+      <select name="openMode">
+        <option value="current-tab" ${openMode !== "new-tab" ? "selected" : ""}>${t("ui.currentTab")}</option>
+        <option value="new-tab" ${openMode === "new-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
+      </select>
+    </div>
+    <div class="form-row form-row--shortcut">
+      <label>${t("ui.shortcut")}</label>
+      <div class="shortcut-input-wrap">
+        <button type="button" class="shortcut-input" data-shortcut-capture data-enter-submit="false">
+          <span class="shortcut-input-placeholder">${t("ui.shortcutPlaceholder")}</span>
+          <span class="shortcut-input-chips"></span>
+        </button>
+        <small class="shortcut-feedback" data-shortcut-feedback></small>
+      </div>
+    </div>
+  `;
+}
+
+function renderBookmarkFormMarkup({ existing, previewImgSrc, placementTailHtml }) {
+  const urlValue = escapeHtml(existing?.url || "");
+  const titleValue = escapeHtml(existing?.title || "");
+  const descriptionValue = escapeHtml(existing?.description || "");
+  const imageValue = escapeHtml(existing?.image || "");
+
+  return `
+    <div class="form-row">
+      <label>${t("ui.url")}</label>
+      <input name="url" type="url" value="${urlValue}" required />
+    </div>
+    <div class="bookmark-metadata-section">
+      <div class="bookmark-metadata-fields">
+        <div class="form-row">
+          <label>${t("ui.title")}</label>
+          <input name="title" value="${titleValue}" required />
+        </div>
+        <div class="form-row">
+          <label>${t("ui.description")}</label>
+          <textarea name="description" rows="2">${descriptionValue}</textarea>
+        </div>
+        <div class="form-row">
+          <label>${t("ui.image")}</label>
+          <div>
+            <div class="icon-url-controls">
+              <input name="image" value="${imageValue}" />
+              <div class="icon-preview-box">
+                <img id="favicon-preview" class="icon-preview" src="${escapeHtml(previewImgSrc)}" alt="" />
+              </div>
+            </div>
+            <small id="metadata-status" data-metadata-status></small>
+          </div>
+        </div>
+      </div>
+      <div class="bookmark-metadata-action">
+        <button type="button" class="btn btn--load-metadata" data-load-metadata disabled>
+          <span class="spinner hidden" data-load-metadata-spinner aria-hidden="true"></span>
+          <span class="btn__label">${t("ui.loadInformation")}</span>
+        </button>
+      </div>
+    </div>
+    ${placementTailHtml}
+  `;
 }
 
 function resolveBookmarkModalDefaults(options = {}) {
@@ -2968,111 +3034,19 @@ function openBookmarkModal(arg = {}) {
     ? getBookmarkSidebarPlacementIds(existing)
     : [...(navDefaults?.selectedSidebarIds || [])];
   const form = document.createElement("form");
+  form.className = "bookmark-form";
   const previewImgSrc = existing ? bookmarkStoredImageSrc(existing) : resolveIconSrcForImgTag("");
-  const placementFields = renderBookmarkPlacementFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds });
-  const sharedTailFields = `
-    <div class="form-row form-row--bookmark-placements">
-      <label>${t("ui.bookmarkCategories")}</label>
-      <div class="checkbox-group" data-bookmark-placements>
-        ${placementFields}
-      </div>
-    </div>
-    <div class="form-row">
-      <label>${t("ui.openMode")}</label>
-      <select name="openMode">
-        <option value="current-tab" ${existing?.openMode !== "new-tab" ? "selected" : ""}>${t("ui.currentTab")}</option>
-        <option value="new-tab" ${existing?.openMode === "new-tab" ? "selected" : ""}>${t("ui.newTab")}</option>
-      </select>
-    </div>
-    <div class="form-row form-row--shortcut">
-      <label>${t("ui.shortcut")}</label>
-      <div class="shortcut-input-wrap">
-        <button type="button" class="shortcut-input" data-shortcut-capture data-enter-submit="false">
-          <span class="shortcut-input-placeholder">${t("ui.shortcutPlaceholder")}</span>
-          <span class="shortcut-input-chips"></span>
-        </button>
-        <small class="shortcut-feedback" data-shortcut-feedback></small>
-      </div>
-    </div>
-  `;
-
-  if (isEdit) {
-    form.innerHTML = `
-      <div class="form-row">
-        <label>${t("ui.title")}</label>
-        <input name="title" value="${existing?.title || ""}" required />
-      </div>
-      <div class="form-row">
-        <label>${t("ui.url")}</label>
-        <input name="url" type="url" value="${existing?.url || ""}" required />
-      </div>
-      <div class="form-row">
-        <label>${t("ui.description")}</label>
-        <textarea name="description" rows="2">${existing?.description || ""}</textarea>
-      </div>
-      <div class="form-row">
-        <label>${t("ui.image")}</label>
-        <div>
-          <div class="icon-url-controls">
-            <input name="image" value="${existing?.image || ""}" />
-            <div class="icon-preview-box">
-              <span id="favicon-spinner" class="spinner hidden" aria-hidden="true"></span>
-              <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
-            </div>
-            <button type="button" class="btn btn--ghost btn--compact" data-fetch-favicon>${t("ui.fetchFavicon")}</button>
-          </div>
-          <small id="favicon-status"></small>
-        </div>
-      </div>
-      ${sharedTailFields.replace(
-        '<div class="form-row form-row--bookmark-placements">',
-        `<div class="form-row">
-        <label>${t("ui.source")}</label>
-        <input value="${bookmarkSourceLabel(existing?.source)}" readonly disabled />
-      </div>
-      <div class="form-row form-row--bookmark-placements">`
-      )}
-    `;
-  } else {
-    form.className = "bookmark-create-form";
-    form.innerHTML = `
-      <div class="form-row">
-        <label>${t("ui.url")}</label>
-        <input name="url" type="url" value="" required />
-      </div>
-      <div class="bookmark-metadata-section">
-        <div class="bookmark-metadata-fields">
-          <div class="form-row">
-            <label>${t("ui.title")}</label>
-            <input name="title" value="" required />
-          </div>
-          <div class="form-row">
-            <label>${t("ui.description")}</label>
-            <textarea name="description" rows="2"></textarea>
-          </div>
-          <div class="form-row">
-            <label>${t("ui.image")}</label>
-            <div>
-              <div class="icon-url-controls">
-                <input name="image" value="" />
-                <div class="icon-preview-box">
-                  <img id="favicon-preview" class="icon-preview" src="${previewImgSrc}" alt="" />
-                </div>
-              </div>
-              <small id="metadata-status"></small>
-            </div>
-          </div>
-        </div>
-        <div class="bookmark-metadata-action">
-          <button type="button" class="btn btn--load-metadata" data-load-metadata disabled>
-            <span class="spinner hidden" data-load-metadata-spinner aria-hidden="true"></span>
-            <span class="btn__label">${t("ui.loadInformation")}</span>
-          </button>
-        </div>
-      </div>
-      ${sharedTailFields}
-    `;
-  }
+  const placementTailHtml = renderBookmarkPlacementTailFields({
+    homepageEnabled,
+    homepageCategoryId,
+    selectedSidebarIds,
+    existing
+  });
+  form.innerHTML = renderBookmarkFormMarkup({
+    existing,
+    previewImgSrc,
+    placementTailHtml
+  });
 
   const imageInput = form.querySelector("input[name='image']");
   const titleInput = form.querySelector("input[name='title']");
@@ -3082,17 +3056,15 @@ function openBookmarkModal(arg = {}) {
   const shortcutChips = shortcutCapture?.querySelector(".shortcut-input-chips");
   const shortcutPlaceholder = shortcutCapture?.querySelector(".shortcut-input-placeholder");
   const shortcutFeedback = form.querySelector("[data-shortcut-feedback]");
-  const fetchFaviconButton = form.querySelector("[data-fetch-favicon]");
   const loadMetadataButton = form.querySelector("[data-load-metadata]");
   const loadMetadataSpinner = form.querySelector("[data-load-metadata-spinner]");
-  const status = form.querySelector("#favicon-status") || form.querySelector("#metadata-status");
-  const spinner = form.querySelector("#favicon-spinner");
+  const status = form.querySelector("[data-metadata-status]");
   const preview = form.querySelector("#favicon-preview");
 
   let selectedShortcut = normalizeServiceShortcut(existing?.shortcut || "");
-  let userEditedTitle = Boolean(existing?.title);
-  let userEditedDescription = Boolean(existing?.description);
-  let userEditedImage = Boolean(existing?.image);
+  let userEditedTitle = false;
+  let userEditedDescription = false;
+  let userEditedImage = false;
 
   const updateShortcutFeedback = (message = "", isError = false) => {
     if (!shortcutFeedback) return;
@@ -3184,38 +3156,8 @@ function openBookmarkModal(arg = {}) {
     preview.src = resolveServiceIconDisplaySrc("");
   });
   preview?.addEventListener("load", () => {
-    if (status?.id === "favicon-status") setStatusMessage("");
-  });
-
-  const triggerFaviconLoad = async () => {
-    const value = String(urlInput.value || "").trim();
-    if (!value || !fetchFaviconButton) return;
-    fetchFaviconButton.disabled = true;
-    state.faviconLoading = true;
-    spinner?.classList.remove("hidden");
     setStatusMessage("");
-    try {
-      const result = await api.cacheFavicon(value);
-      const path = normalizeAppIconPath(String(result.path || "").trim());
-      if (!path.startsWith("/static/assets/favicon-cache/")) {
-        throw new Error("Missing cache path");
-      }
-      imageInput.value = path;
-      userEditedImage = true;
-      syncIconPreviewFromField();
-      setStatusMessage("");
-    } catch (err) {
-      const detail = err && typeof err.message === "string" ? err.message.trim() : "";
-      setStatusMessage(detail || t("ui.faviconFailed"), true);
-      syncIconPreviewFromField();
-    } finally {
-      fetchFaviconButton.disabled = false;
-      state.faviconLoading = false;
-      spinner?.classList.add("hidden");
-    }
-  };
-
-  fetchFaviconButton?.addEventListener("click", triggerFaviconLoad);
+  });
 
   const triggerMetadataLoad = async () => {
     const value = String(urlInput?.value || "").trim();
@@ -3300,12 +3242,12 @@ function openBookmarkModal(arg = {}) {
   validateShortcut();
   syncLoadMetadataButton();
 
-  const initialSnapshot = isEdit ? "" : captureBookmarkFormSnapshot(form, selectedShortcut);
+  const initialSnapshot = captureBookmarkFormSnapshot(form, selectedShortcut);
 
   showModal({
-    title: isEdit ? `${t("ui.edit")} ${t("ui.bookmark")}` : t("ui.newBookmark"),
+    title: isEdit ? t("ui.editBookmark") : t("ui.newBookmark"),
     content: form,
-    modalClass: isEdit ? "" : "modal--bookmark-create",
+    modalClass: "modal--bookmark-form",
     saveLabel: t("ui.save"),
     cancelLabel: t("ui.cancel"),
     leadingActions: isEdit ? [{
@@ -3320,7 +3262,7 @@ function openBookmarkModal(arg = {}) {
         render();
       }
     }] : [],
-    onCancel: isEdit ? undefined : async () => {
+    onCancel: async () => {
       const currentSnapshot = captureBookmarkFormSnapshot(form, selectedShortcut);
       if (currentSnapshot === initialSnapshot) return;
       const confirmed = await confirmDiscardBookmarkChanges();

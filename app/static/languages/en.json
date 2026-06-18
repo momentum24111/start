@@ -141,6 +141,7 @@
     "viewCards": "Card view",
     "open": "Open",
     "newBookmark": "New bookmark",
+    "editBookmark": "Edit bookmark",
     "loadInformation": "Load information",
     "loadInformationFailed": "Could not load information",
     "discardChangesTitle": "Discard changes?",

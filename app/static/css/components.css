@@ -1063,7 +1063,7 @@ main {
   pointer-events: none;
 }
 
-.modal.modal--bookmark-create {
+.modal.modal--bookmark-form {
   width: min(720px, 100%);
 }
 
@@ -1905,11 +1905,6 @@ textarea {
 .icon-url-controls input[name="iconUrl"] {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.icon-url-controls [data-fetch-favicon] {
-  flex: 0 0 auto;
-  min-height: 38px;
 }
 
 .icon-preview-box {
