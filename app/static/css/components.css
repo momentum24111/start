@@ -152,7 +152,7 @@ body[data-element-size="large"] .topbar-search {
   font: inherit;
   font-size: 0.92rem;
   line-height: 1.3;
-  padding: 0.55rem 2.65rem 0.55rem 0.75rem;
+  padding: 0.55rem 4.75rem 0.55rem 0.75rem;
 }
 
 .topbar-search__input:focus {
@@ -160,9 +160,28 @@ body[data-element-size="large"] .topbar-search {
   box-shadow: var(--focus-ring);
 }
 
+.topbar-search__icon {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  transform: translateY(-50%);
+  color: var(--search-icon-fg);
+  pointer-events: none;
+}
+
+.topbar-search__icon .inline-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
 .topbar-search__clear {
   position: absolute;
-  right: 0.15rem;
+  right: 2.15rem;
   top: 50%;
   transform: translateY(-50%);
   background: var(--search-clear-bg);
@@ -1246,12 +1265,22 @@ main {
   margin-bottom: 0.95rem;
   align-items: center;
 }
+.settings-form {
+  --form-label-width: 220px;
+}
+
+.settings-form .form-row {
+  grid-template-columns: var(--form-label-width) minmax(0, 1fr);
+}
+
 .settings-form .form-row > label {
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.35;
+  padding-right: 0.25rem;
 }
 
 .settings-actions-block {
-  margin-top: 0.35rem;
+  margin-top: 0;
 }
 
 input,
@@ -1639,11 +1668,20 @@ textarea {
   gap: 0.45rem;
 }
 
+.settings-section-title,
+.settings-section-header {
+  margin-top: 1.15rem;
+  margin-bottom: 0.55rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--settings-section-divider);
+}
+
 .settings-section-title {
-  margin-top: 0.2rem;
-  margin-bottom: 0.45rem;
+  font-size: var(--settings-section-title-size);
   font-weight: 600;
-  color: var(--text);
+  letter-spacing: var(--settings-section-title-tracking);
+  text-transform: uppercase;
+  color: var(--settings-section-title-fg);
 }
 
 .settings-section-header {
@@ -1651,12 +1689,72 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 0.2rem;
-  margin-bottom: 0.45rem;
 }
 
 .settings-section-header .settings-section-title {
   margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.secret-field {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.secret-field__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.secret-field__input.is-locked {
+  cursor: default;
+  pointer-events: none;
+  color: var(--secret-field-mask-fg);
+  user-select: none;
+}
+
+.secret-field__edit {
+  flex: 0 0 auto;
+}
+
+.browser-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  min-width: 0;
+}
+
+.browser-sync-status {
+  flex: 1 1 auto;
+  min-width: min(100%, 12rem);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.browser-sync-status--ok {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.65rem;
+}
+
+.browser-sync-status__stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.browser-sync-status__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
 }
 
 .settings-shortcut-name {

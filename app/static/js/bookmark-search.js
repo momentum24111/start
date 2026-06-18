@@ -15,6 +15,7 @@ let input = null;
 let resultsEl = null;
 let toggleBtn = null;
 let clearBtn = null;
+let searchIconEl = null;
 let debounceTimer = null;
 let currentResults = [];
 let selectedIndex = -1;
@@ -307,7 +308,7 @@ function refreshTexts() {
   if (!deps || !input) return;
   const label = deps.t("ui.search");
   input.setAttribute("aria-label", label);
-  input.removeAttribute("placeholder");
+  input.setAttribute("placeholder", deps.t("ui.searchPlaceholder"));
   resultsEl?.setAttribute("aria-label", deps.t("ui.searchResults"));
   if (toggleBtn) {
     toggleBtn.setAttribute("aria-label", label);
@@ -332,12 +333,16 @@ export function initBookmarkSearch(options) {
   resultsEl = document.getElementById("bookmark-search-results");
   toggleBtn = document.getElementById("bookmark-search-toggle");
   clearBtn = document.getElementById("bookmark-search-clear");
+  searchIconEl = document.getElementById("bookmark-search-icon");
   if (!(root instanceof HTMLElement) || !(input instanceof HTMLInputElement) || !(resultsEl instanceof HTMLElement)) {
     return;
   }
 
   if (clearBtn instanceof HTMLButtonElement && deps.iconSvg && deps.clearIcon) {
     clearBtn.innerHTML = `<span class="btn__icon" aria-hidden="true">${deps.iconSvg(deps.clearIcon, "inline-icon")}</span>`;
+  }
+  if (searchIconEl instanceof HTMLElement && deps.iconSvg && deps.searchIcon) {
+    searchIconEl.innerHTML = deps.iconSvg(deps.searchIcon, "inline-icon");
   }
 
   mobileQuery = window.matchMedia("(max-width: 900px)");

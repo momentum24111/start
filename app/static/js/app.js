@@ -391,6 +391,11 @@ function isBlockingFocusTarget(target) {
   return false;
 }
 
+function isGlobalKeyboardShortcutBlocked() {
+  if (document.querySelector(".modal-overlay")) return true;
+  return isBlockingFocusTarget(document.activeElement);
+}
+
 function triggerBookmarkLaunch(bookmarkId) {
   const tile = document.querySelector(`.bookmark-item[data-bookmark-id="${bookmarkId}"] [data-bookmark-open]`);
   if (!(tile instanceof HTMLAnchorElement)) return;
@@ -1145,6 +1150,7 @@ async function bootstrap() {
     mdiIcon,
     iconSvg,
     clearIcon: ICONS.close,
+    searchIcon: ICONS.search,
     t,
     openBookmark: openBookmarkFromSearch
   });
@@ -1493,10 +1499,18 @@ function bindSidebarEvents() {
     })();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if (!isSidebarMobileLayout() || !state.sidebarOpen) return;
+    if (event.key === "Escape") {
+      if (!isSidebarMobileLayout() || !state.sidebarOpen) return;
+      event.preventDefault();
+      setSidebarOpen(false);
+      return;
+    }
+    if (event.key !== "ArrowLeft" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat) {
+      return;
+    }
+    if (isGlobalKeyboardShortcutBlocked()) return;
     event.preventDefault();
-    setSidebarOpen(false);
+    setSidebarOpen(!state.sidebarOpen, { persist: !isSidebarMobileLayout() });
   });
 }
 
@@ -2048,22 +2062,123 @@ function refreshSettingsModalTexts(form) {
   form.querySelector("[data-settings-browser-sync-url-label]")?.replaceChildren(t("ui.browserSyncGithubUrl"));
   form.querySelector("[data-settings-browser-sync-pat-label]")?.replaceChildren(t("ui.browserSyncGithubPat"));
   form.querySelector("[data-settings-browser-sync-interval-label]")?.replaceChildren(t("ui.browserSyncInterval"));
+  form.querySelector("[data-settings-browser-sync-status-label]")?.replaceChildren(t("ui.browserSyncStatus"));
   form.querySelector("[data-browser-sync-run] .btn__label")?.replaceChildren(t("ui.browserSyncRunNow"));
+  form.querySelectorAll("[data-secret-field-edit] .btn__label").forEach((label) => {
+    label.textContent = t("ui.edit");
+  });
+  const browserSyncStatusEl = form.querySelector("[data-browser-sync-status]");
+  if (browserSyncStatusEl?._lastBrowserSyncStatus !== undefined) {
+    renderBrowserSyncStatus(browserSyncStatusEl, browserSyncStatusEl._lastBrowserSyncStatus);
+  }
   form.closest(".modal")?.querySelector("[data-cancel] .btn__label")?.replaceChildren(t("ui.close"));
 }
 
-function formatBrowserSyncStatusLine(status) {
-  if (!status?.lastSync) return t("ui.browserSyncNever");
+function maskSecretDisplay(value) {
+  if (!value) return "";
+  return "\u2022".repeat(Math.min(Math.max(value.length, 8), 32));
+}
+
+function initSecretField(wrap, { onChange } = {}) {
+  if (!wrap) return null;
+  const input = wrap.querySelector(".secret-field__input");
+  const editBtn = wrap.querySelector("[data-secret-field-edit]");
+  if (!input || !editBtn) return null;
+
+  const getValue = () => wrap.dataset.secretValue || "";
+  const setValue = (next) => {
+    wrap.dataset.secretValue = next ?? "";
+    if (input.classList.contains("is-locked")) {
+      input.value = maskSecretDisplay(wrap.dataset.secretValue);
+    } else {
+      input.value = wrap.dataset.secretValue;
+    }
+  };
+  const lock = () => {
+    input.classList.add("is-locked");
+    input.readOnly = true;
+    input.tabIndex = -1;
+    input.setAttribute("aria-readonly", "true");
+    input.value = maskSecretDisplay(getValue());
+  };
+  const unlock = () => {
+    input.classList.remove("is-locked");
+    input.readOnly = false;
+    input.tabIndex = 0;
+    input.removeAttribute("aria-readonly");
+    input.value = getValue();
+    input.focus();
+    if (typeof input.select === "function") input.select();
+  };
+
+  editBtn.addEventListener("click", () => {
+    if (input.disabled || !input.classList.contains("is-locked")) return;
+    unlock();
+  });
+  input.addEventListener("input", () => {
+    wrap.dataset.secretValue = input.value;
+    onChange?.(input.value);
+  });
+
+  lock();
+  return { getValue, setValue, lock, unlock, input, editBtn };
+}
+
+function setBrowserSyncStatusMessage(container, className, message) {
+  if (!container) return;
+  container.className = `browser-sync-status ${className}`.trim();
+  container.replaceChildren(document.createTextNode(message));
+  container._lastBrowserSyncStatus = undefined;
+}
+
+function renderBrowserSyncStatus(container, status) {
+  if (!container) return;
+  container._lastBrowserSyncStatus = status;
+  if (!status?.lastSync) {
+    setBrowserSyncStatusMessage(container, "browser-sync-status--empty", t("ui.browserSyncNever"));
+    return;
+  }
   const last = status.lastSync;
   if (!last.ok) {
-    return interpolateLabel(t("ui.browserSyncLastFailed"), { error: last.error || "?" });
+    container.className = "browser-sync-status browser-sync-status--error";
+    container.replaceChildren();
+    const label = document.createElement("span");
+    label.className = "browser-sync-status__label";
+    label.textContent = t("ui.browserSyncLastFailedLabel");
+    const message = document.createElement("span");
+    message.className = "browser-sync-status__message";
+    message.textContent = last.error || "?";
+    container.append(label, document.createTextNode(" "), message);
+    return;
   }
-  return interpolateLabel(t("ui.browserSyncLastOk"), {
-    at: last.at || "",
-    imported: last.imported || 0,
-    reimported: last.reimported || 0,
-    disappeared: last.disappeared || 0
+  container.className = "browser-sync-status browser-sync-status--ok";
+  container.replaceChildren();
+  const label = document.createElement("span");
+  label.className = "browser-sync-status__label";
+  label.textContent = t("ui.browserSyncLastSyncLabel");
+  const time = document.createElement("time");
+  time.className = "browser-sync-status__time";
+  if (last.at) time.dateTime = last.at;
+  time.textContent = last.at || "";
+  const stats = document.createElement("ul");
+  stats.className = "browser-sync-status__stats";
+  [
+    ["browserSyncImported", last.imported || 0],
+    ["browserSyncReimported", last.reimported || 0],
+    ["browserSyncDisappeared", last.disappeared || 0]
+  ].forEach(([key, value]) => {
+    const item = document.createElement("li");
+    item.className = "browser-sync-status__stat";
+    const statLabel = document.createElement("span");
+    statLabel.className = "browser-sync-status__stat-label";
+    statLabel.textContent = t(`ui.${key}`);
+    const statValue = document.createElement("span");
+    statValue.className = "browser-sync-status__stat-value";
+    statValue.textContent = String(value);
+    item.append(statLabel, statValue);
+    stats.append(item);
   });
+  container.append(label, time, stats);
 }
 
 function updateBrowserSyncFieldsVisibility(form, enabled) {
@@ -2948,7 +3063,25 @@ function openSettingsModal() {
     </div>
     <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
       <label data-settings-browser-sync-pat-label for="browser-sync-pat">${t("ui.browserSyncGithubPat")}</label>
-      <input id="browser-sync-pat" name="githubPat" type="password" value="${browserSync.githubPat}" autocomplete="off" />
+      <div class="secret-field" data-secret-field>
+        <input
+          id="browser-sync-pat"
+          class="secret-field__input is-locked"
+          name="githubPatDisplay"
+          type="text"
+          value=""
+          readonly
+          tabindex="-1"
+          autocomplete="off"
+          data-lpignore="true"
+          data-1p-ignore
+          data-form-type="other"
+          aria-readonly="true"
+        />
+        <button type="button" class="btn btn--ghost btn--compact secret-field__edit" data-secret-field-edit>
+          <span class="btn__label">${t("ui.edit")}</span>
+        </button>
+      </div>
     </div>
     <div class="form-row ${browserSync.enabled ? "" : "hidden"}" data-browser-sync-field>
       <label data-settings-browser-sync-interval-label for="browser-sync-interval">${t("ui.browserSyncInterval")}</label>

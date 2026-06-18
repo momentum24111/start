@@ -70,6 +70,9 @@ body {
   --toast-detail-fg: #5f7389;
   --search-input-bg: #ffffff;
   --search-input-border: color-mix(in srgb, var(--text) 14%, transparent);
+  --search-placeholder-fg: #516379;
+  --search-icon-fg: #6e879f;
+  --search-icon-focus-fg: #516379;
   --search-clear-bg: transparent;
   --search-clear-fg: var(--text);
   --search-clear-hover-bg: var(--surface-hover);
@@ -86,4 +89,50 @@ body {
   --sidebar-tooltip-shadow: 0 8px 20px rgba(15, 35, 60, 0.14);
   --bookmark-drag-ghost-bg: #ffffff;
   --bookmark-drag-ghost-shadow: 0 10px 24px rgba(15, 35, 60, 0.16);
+  --settings-section-divider: rgba(81, 99, 121, 0.16);
+  --settings-section-title-fg: #3d5168;
+  --settings-section-title-size: 0.78rem;
+  --settings-section-title-tracking: 0.04em;
+  --secret-field-mask-fg: #516379;
+  --browser-sync-status-label-fg: #516379;
+  --browser-sync-status-time-fg: #182332;
+  --browser-sync-status-stat-label-fg: #6e879f;
+  --browser-sync-status-stat-value-fg: #182332;
+  --browser-sync-status-empty-fg: #516379;
+  --browser-sync-status-error-fg: #b52d2d;
+}
+
+.topbar-search__input::placeholder {
+  color: var(--search-placeholder-fg);
+}
+
+.topbar-search__field:focus-within .topbar-search__icon {
+  color: var(--search-icon-focus-fg);
+}
+
+.browser-sync-status--empty,
+.browser-sync-status--loading {
+  color: var(--browser-sync-status-empty-fg);
+}
+
+.browser-sync-status__label {
+  color: var(--browser-sync-status-label-fg);
+}
+
+.browser-sync-status__time {
+  color: var(--browser-sync-status-time-fg);
+  font-weight: 600;
+}
+
+.browser-sync-status__stat-label {
+  color: var(--browser-sync-status-stat-label-fg);
+}
+
+.browser-sync-status__stat-value {
+  color: var(--browser-sync-status-stat-value-fg);
+  font-weight: 600;
+}
+
+.browser-sync-status--error {
+  color: var(--browser-sync-status-error-fg);
 }
