@@ -212,6 +212,21 @@ def _element_local_tag(element: ET.Element) -> str:
     return tag.split("}")[-1] if "}" in tag else tag
 
 
+def _element_href(element: ET.Element) -> str:
+    href = (element.get("href") or "").strip()
+    if href:
+        return href
+    for child in element:
+        if _element_local_tag(child) != "info":
+            continue
+        info_type = (child.get("type") or "").strip().lower()
+        if info_type in ("text/html", "text/x-moz-url", "application/xhtml+xml"):
+            info_href = (child.get("href") or "").strip()
+            if info_href:
+                return info_href
+    return ""
+
+
 def _element_title(element: ET.Element) -> str:
     for child in element:
         if _element_local_tag(child) == "title":
@@ -239,7 +254,7 @@ def _parse_xbel_node(
             _parse_xbel_node(child, folder_path, bookmarks, seen_ids)
         return
     browser_id = (element.get("id") or "").strip()
-    href = (element.get("href") or "").strip()
+    href = _element_href(element)
     if not browser_id or not href or browser_id in seen_ids:
         return
     seen_ids.add(browser_id)
@@ -310,6 +325,32 @@ def _new_imported_bookmark(entry: dict[str, str]) -> dict:
     return bookmark
 
 
+def _backfill_imported_bookmark_metadata(bookmark: dict, entry: dict[str, str]) -> bool:
+    """Ergänzt fehlende browserFolderPath- und createdAt-Felder ohne andere Daten zu ändern."""
+    changed = False
+    folder_path = str(entry.get("folderPath") or "").strip()
+    if folder_path and not str(bookmark.get("browserFolderPath") or "").strip():
+        bookmark["browserFolderPath"] = folder_path
+        changed = True
+    if not str(bookmark.get("createdAt") or "").strip():
+        bookmark["createdAt"] = _timestamp_now()
+        changed = True
+    browser_id = str(entry.get("id") or "").strip()
+    if browser_id and not str(bookmark.get("browserId") or "").strip():
+        bookmark["browserId"] = browser_id
+        changed = True
+    return changed
+
+
+def _find_bookmark_for_xbel_entry(config: dict, state: dict, browser_id: str) -> dict | None:
+    record = (state.get("ids") or {}).get(browser_id)
+    bookmark_id = record.get("bookmarkId") if isinstance(record, dict) else None
+    bookmark = _find_bookmark_by_id(config, bookmark_id if isinstance(bookmark_id, str) else None)
+    if bookmark is not None:
+        return bookmark
+    return _collect_bookmarks_by_browser_id(config).get(browser_id)
+
+
 def _append_bookmark_to_config(config: dict, bookmark: dict) -> None:
     bookmarks = config.get("bookmarks")
     if not isinstance(bookmarks, list):
@@ -375,6 +416,7 @@ def process_sync(*, trigger: str = "scheduled") -> dict:
         "imported": 0,
         "disappeared": 0,
         "reimported": 0,
+        "updated": 0,
         "error": None,
     }
 
@@ -382,7 +424,8 @@ def process_sync(*, trigger: str = "scheduled") -> dict:
         with _config_lock:
             xbel_content = download_xbel_file(file_url, settings["githubPat"])
             xbel_bookmarks = parse_xbel_bookmarks(xbel_content)
-            browser_ids_in_file = {entry["id"] for entry in xbel_bookmarks}
+            xbel_by_id = {entry["id"]: entry for entry in xbel_bookmarks}
+            browser_ids_in_file = set(xbel_by_id.keys())
 
             state = load_state()
             config = _load_migrated_config(context="browser_sync:process_sync")
@@ -393,8 +436,21 @@ def process_sync(*, trigger: str = "scheduled") -> dict:
                 browser_id = entry["id"]
                 record = (state.get("ids") or {}).get(browser_id)
                 status = record.get("status") if isinstance(record, dict) else None
+                existing = _find_bookmark_for_xbel_entry(config, state, browser_id)
 
                 if status is None:
+                    if existing is not None:
+                        if _backfill_imported_bookmark_metadata(existing, entry):
+                            config_changed = True
+                            result["updated"] += 1
+                        _set_id_state(
+                            state,
+                            browser_id,
+                            status=STATUS_PRESENT,
+                            bookmark_id=existing["id"],
+                        )
+                        state_changed = True
+                        continue
                     bookmark = _new_imported_bookmark(entry)
                     _append_bookmark_to_config(config, bookmark)
                     _set_id_state(
@@ -409,6 +465,9 @@ def process_sync(*, trigger: str = "scheduled") -> dict:
                     continue
 
                 if status == STATUS_PRESENT:
+                    if existing is not None and _backfill_imported_bookmark_metadata(existing, entry):
+                        config_changed = True
+                        result["updated"] += 1
                     continue
 
                 if status == STATUS_DELETED_BY_USER:
@@ -458,6 +517,7 @@ def process_sync(*, trigger: str = "scheduled") -> dict:
                 "imported": result["imported"],
                 "reimported": result["reimported"],
                 "disappeared": result["disappeared"],
+                "updated": result["updated"],
                 "bookmarkCount": len(browser_ids_in_file),
                 "error": None,
             }

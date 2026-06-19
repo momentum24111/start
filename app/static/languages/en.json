@@ -31,7 +31,6 @@
     "sourceManual": "Manually created",
     "sourceBrowserImport": "Browser import",
     "bookmarkCategories": "Categories",
-    "bookmarkUnsortedHint": "Without a selected category, the bookmark will appear under Unsorted after saving.",
     "homepageCategoryPlaceholder": "Select dashboard category",
     "openMode": "Open mode",
     "shortcut": "Shortcut",

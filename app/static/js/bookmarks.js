@@ -387,6 +387,20 @@ export function getBookmarkBrowserFolderPath(bookmark) {
   return String(bookmark?.browserFolderPath || "").trim();
 }
 
+export function shouldShowUnsortedBrowserImportPath(bookmark, config) {
+  if (normalizeBookmarkSource(bookmark?.source) !== "browser-import") return false;
+  return isUnsortedBookmark(bookmark, config);
+}
+
+export function formatUnsortedBrowserImportPathLine(bookmark) {
+  const domain = getBookmarkDisplayDomain(bookmark);
+  const path = getBookmarkBrowserFolderPath(bookmark);
+  if (path && domain) return { text: `${path} / ${domain}`, style: "path" };
+  if (path) return { text: path, style: "path" };
+  if (domain) return { text: domain, style: "domain" };
+  return null;
+}
+
 export function shouldShowBrowserFolderPath(bookmark, config) {
   if (normalizeBookmarkSource(bookmark?.source) !== "browser-import") return false;
   if (!isUnsortedBookmark(bookmark, config)) return false;

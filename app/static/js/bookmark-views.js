@@ -1,7 +1,7 @@
 /** Lesezeichen-Darstellung: Listen- und Kartenansicht. */
 
 import { t } from "./i18n.js";
-import { getBookmarkDisplayDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites, getBookmarkBrowserFolderPath } from "./bookmarks.js";
+import { getBookmarkDisplayDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites, formatUnsortedBrowserImportPathLine } from "./bookmarks.js";
 import { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS } from "./navigation.js";
 
 export { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS };
@@ -42,6 +42,15 @@ function renderCategoryChips(labels) {
 function renderBrowserFolderPath(path) {
   if (!path) return "";
   return `<span class="bookmark-item__browser-path">${escapeHtml(path)}</span>`;
+}
+
+function renderUnsortedBrowserImportPathLine(bookmark) {
+  const line = formatUnsortedBrowserImportPathLine(bookmark);
+  if (!line?.text) return "";
+  if (line.style === "domain") {
+    return `<span class="bookmark-item__domain">${escapeHtml(line.text)}</span>`;
+  }
+  return renderBrowserFolderPath(line.text);
 }
 
 function renderThumbnail(bookmark, deps, variant = "") {
@@ -237,13 +246,13 @@ function renderHomepageBookmark(options, deps) {
 }
 
 function renderNavBookmark(options, deps) {
-  const { bookmark, editMode, showBrowserFolderPath, showCategoryChips } = options;
+  const { bookmark, editMode, showUnsortedBrowserImportPath, showCategoryChips } = options;
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = String(bookmark.url || "").trim();
   const urlAttr = escapeHtml(url);
   const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
-  const browserFolderPath = showBrowserFolderPath ? getBookmarkBrowserFolderPath(bookmark) : "";
+  const unsortedPathLine = showUnsortedBrowserImportPath ? renderUnsortedBrowserImportPathLine(bookmark) : "";
   const categoryLabels = showCategoryChips
     ? getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"))
     : [];
@@ -267,8 +276,7 @@ function renderNavBookmark(options, deps) {
         <div class="bookmark-item__main">
           <h3 class="bookmark-item__title">${title}</h3>
           ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-          ${browserFolderPath ? renderBrowserFolderPath(browserFolderPath) : ""}
-          ${domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : ""}
+          ${unsortedPathLine || (!showUnsortedBrowserImportPath && domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : "")}
         </div>
       </a>
       <div class="bookmark-item__aside">

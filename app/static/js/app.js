@@ -11,6 +11,7 @@ import {
   normalizeBookmarkSource,
   DEFAULT_BOOKMARK_SOURCE,
   FAVORITES_CATEGORY_ID,
+  UNSORTED_CATEGORY_ID,
   getBookmarksForCategory,
   getBookmarksForSidebarCategory,
   getBookmarkHomepageCategoryId,
@@ -28,7 +29,7 @@ import {
   listSidebarCategories,
   allocateSidebarCategorySlug,
   getHomepageCategories,
-  shouldShowBrowserFolderPath,
+  shouldShowUnsortedBrowserImportPath,
   collectUnsortedBrowserFolderPaths,
   filterBookmarksByBrowserFolderPaths,
   bookmarkTimestampNow
@@ -786,7 +787,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       navList: !homepage,
       editMode: state.editMode,
       config: state.config,
-      showBrowserFolderPath: navId === NAV_UNSORTED && shouldShowBrowserFolderPath(bookmark, state.config),
+      showUnsortedBrowserImportPath: navId === NAV_UNSORTED && shouldShowUnsortedBrowserImportPath(bookmark, state.config),
       showCategoryChips: navId !== NAV_UNSORTED,
       hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
       canMoveLeft: reorder.canMoveLeft,
@@ -2832,6 +2833,7 @@ function renderBookmarkThemeCheckbox({
   inputAttrs = "",
   extraClass = ""
 } = {}) {
+  const nameAttr = name ? ` name="${escapeHtml(name)}"` : "";
   const valueAttr = value ? ` value="${escapeHtml(value)}"` : "";
   const checkedAttr = checked ? " checked" : "";
   const className = ["theme-checkbox", "bookmark-placement-option", extraClass].filter(Boolean).join(" ");
@@ -2840,8 +2842,7 @@ function renderBookmarkThemeCheckbox({
       <input
         type="checkbox"
         class="theme-checkbox__input"
-        name="${escapeHtml(name)}"
-        ${valueAttr}${checkedAttr}
+        ${nameAttr}${valueAttr}${checkedAttr}
         ${inputAttrs}
       />
       <span class="theme-checkbox__box" aria-hidden="true"></span>
@@ -2853,7 +2854,8 @@ function renderBookmarkThemeCheckbox({
 function renderBookmarkPlacementFields({
   homepageEnabled,
   homepageCategoryId,
-  selectedSidebarIds
+  selectedSidebarIds,
+  unsortedSelected = false
 } = {}) {
   const sidebarSelected = new Set(selectedSidebarIds || []);
   const homepageCategories = listBookmarkListCategories(state.config);
@@ -2897,13 +2899,29 @@ function renderBookmarkPlacementFields({
     checked: sidebarSelected.has(FAVORITES_CATEGORY_ID),
     label: t("ui.navFavorites")
   })}
+    ${renderBookmarkThemeCheckbox({
+    checked: unsortedSelected,
+    label: t("ui.navUnsorted"),
+    inputAttrs: "data-unsorted-toggle",
+    extraClass: "bookmark-placement-option--unsorted"
+  })}
     ${sidebarOptions}
-    <small class="bookmark-unsorted-hint hidden" data-unsorted-hint>${escapeHtml(t("ui.bookmarkUnsortedHint"))}</small>
   `;
 }
 
-function renderBookmarkPlacementTailFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds, existing }) {
-  const placementFields = renderBookmarkPlacementFields({ homepageEnabled, homepageCategoryId, selectedSidebarIds });
+function renderBookmarkPlacementTailFields({
+  homepageEnabled,
+  homepageCategoryId,
+  selectedSidebarIds,
+  unsortedSelected,
+  existing
+}) {
+  const placementFields = renderBookmarkPlacementFields({
+    homepageEnabled,
+    homepageCategoryId,
+    selectedSidebarIds,
+    unsortedSelected
+  });
   const openMode = existing?.openMode;
   return `
     <div class="form-row form-row--bookmark-placements">
@@ -2982,7 +3000,8 @@ function resolveBookmarkModalDefaults(options = {}) {
   const defaults = {
     homepageEnabled: false,
     homepageCategoryId: "",
-    selectedSidebarIds: []
+    selectedSidebarIds: [],
+    unsortedSelected: true
   };
 
   if (options.homepageCategoryId) {
@@ -2990,12 +3009,17 @@ function resolveBookmarkModalDefaults(options = {}) {
     defaults.homepageCategoryId = options.homepageCategoryId;
   } else if (navId === NAV_FAVORITES) {
     defaults.selectedSidebarIds = [FAVORITES_CATEGORY_ID];
-  } else if (navId !== NAV_UNSORTED && navId !== NAV_ALL && isCategoryNavId(state.config, navId)) {
+    defaults.unsortedSelected = false;
+  } else if (navId === NAV_UNSORTED) {
+    defaults.unsortedSelected = true;
+  } else if (navId !== NAV_ALL && isCategoryNavId(state.config, navId)) {
     defaults.selectedSidebarIds = [navId];
+    defaults.unsortedSelected = false;
   }
 
   if (options.selectedSidebarIds?.length) {
     defaults.selectedSidebarIds = [...options.selectedSidebarIds];
+    defaults.unsortedSelected = false;
   }
 
   return defaults;
@@ -3015,7 +3039,8 @@ function captureBookmarkFormSnapshot(form, shortcut) {
     sidebarCategoryIds: [...fd.getAll("sidebarCategoryIds")]
       .map((id) => String(id || "").trim())
       .filter(Boolean)
-      .sort()
+      .sort(),
+    unsortedSelected: Boolean(form.querySelector("[data-unsorted-toggle]")?.checked)
   });
 }
 
@@ -3051,6 +3076,9 @@ function openBookmarkModal(arg = {}) {
   const selectedSidebarIds = existing
     ? getBookmarkSidebarPlacementIds(existing)
     : [...(navDefaults?.selectedSidebarIds || [])];
+  const unsortedSelected = existing
+    ? selectedSidebarIds.length === 0
+    : Boolean(navDefaults?.unsortedSelected);
   const form = document.createElement("form");
   form.className = "bookmark-form";
   const previewImgSrc = existing ? bookmarkStoredImageSrc(existing) : resolveIconSrcForImgTag("");
@@ -3058,6 +3086,7 @@ function openBookmarkModal(arg = {}) {
     homepageEnabled,
     homepageCategoryId,
     selectedSidebarIds,
+    unsortedSelected,
     existing
   });
   form.innerHTML = renderBookmarkFormMarkup({
@@ -3225,8 +3254,9 @@ function openBookmarkModal(arg = {}) {
 
   const homepageToggle = form.querySelector("[data-homepage-toggle]");
   const homepageCategorySelect = form.querySelector("[data-homepage-category]");
-  const unsortedHint = form.querySelector("[data-unsorted-hint]");
+  const unsortedToggle = form.querySelector("[data-unsorted-toggle]");
   const placementGroup = form.querySelector("[data-bookmark-placements]");
+  const sidebarCategoryInputs = () => form.querySelectorAll('input[name="sidebarCategoryIds"]');
 
   const syncHomepageCategorySelect = () => {
     const enabled = Boolean(homepageToggle?.checked);
@@ -3235,25 +3265,48 @@ function openBookmarkModal(arg = {}) {
     if (!enabled) homepageCategorySelect.removeAttribute("data-invalid");
   };
 
-  const syncUnsortedHint = () => {
-    if (!unsortedHint) return;
-    const homepageActive = Boolean(homepageToggle?.checked);
-    const sidebarActive = form.querySelectorAll('input[name="sidebarCategoryIds"]:checked').length > 0;
-    unsortedHint.classList.toggle("hidden", homepageActive || sidebarActive);
+  const syncUnsortedExclusive = (source) => {
+    if (!unsortedToggle) return;
+    const sidebarInputs = [...sidebarCategoryInputs()];
+    const anySidebarChecked = sidebarInputs.some((input) => input.checked);
+
+    if (source === unsortedToggle) {
+      if (unsortedToggle.checked) {
+        sidebarInputs.forEach((input) => {
+          input.checked = false;
+        });
+      } else if (!anySidebarChecked) {
+        unsortedToggle.checked = true;
+      }
+      return;
+    }
+
+    if (anySidebarChecked) {
+      unsortedToggle.checked = false;
+    } else {
+      unsortedToggle.checked = true;
+    }
   };
 
   const syncPlacementState = () => {
     placementGroup?.removeAttribute("data-invalid");
     homepageCategorySelect?.removeAttribute("data-invalid");
     syncHomepageCategorySelect();
-    syncUnsortedHint();
   };
 
   homepageToggle?.addEventListener("change", syncPlacementState);
   homepageCategorySelect?.addEventListener("change", syncPlacementState);
-  form.querySelectorAll('input[name="sidebarCategoryIds"]').forEach((input) => {
-    input.addEventListener("change", syncPlacementState);
+  unsortedToggle?.addEventListener("change", () => {
+    syncUnsortedExclusive(unsortedToggle);
+    syncPlacementState();
   });
+  sidebarCategoryInputs().forEach((input) => {
+    input.addEventListener("change", () => {
+      syncUnsortedExclusive(input);
+      syncPlacementState();
+    });
+  });
+  syncUnsortedExclusive(null);
   syncPlacementState();
   syncIconPreviewFromField();
   updateShortcutUI();
@@ -3294,9 +3347,15 @@ function openBookmarkModal(arg = {}) {
       const homepageCategorySelectEl = form.querySelector("[data-homepage-category]");
       const homepageCategoryIdValue = String(homepageCategorySelectEl?.value || "").trim();
       const listCategoryIds = new Set(listBookmarkListCategories(state.config).map((category) => category.id));
-      const sidebarCategoryIds = [
+      const unsortedActive = Boolean(form.querySelector("[data-unsorted-toggle]")?.checked);
+      let sidebarCategoryIds = [
         ...new Set(fd.getAll("sidebarCategoryIds").map((id) => String(id || "").trim()).filter(Boolean))
       ];
+      if (unsortedActive) {
+        sidebarCategoryIds = [];
+      } else {
+        sidebarCategoryIds = sidebarCategoryIds.filter((id) => id !== UNSORTED_CATEGORY_ID);
+      }
 
       form.querySelector("[data-bookmark-placements]")?.removeAttribute("data-invalid");
       homepageCategorySelectEl?.removeAttribute("data-invalid");
@@ -3320,7 +3379,7 @@ function openBookmarkModal(arg = {}) {
         entry.image = image;
         entry.openMode = fd.get("openMode");
         entry.shortcut = selectedShortcut;
-        entry.favorite = false;
+        entry.favorite = sidebarCategoryIds.includes(FAVORITES_CATEGORY_ID);
         entry.sidebarCategoryIds = sidebarCategoryIds;
         const preservedNonListCategoryIds = (entry.categoryIds || []).filter((id) => !listCategoryIds.has(id));
         entry.categoryIds = homepageEnabledValue
