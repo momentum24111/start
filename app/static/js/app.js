@@ -2258,7 +2258,8 @@ function renderNavSelectionToggle() {
 
 function renderNavSelectionActions() {
   const bar = document.createElement("div");
-  bar.className = "nav-selection-actions";
+  bar.className = "nav-view-header__selection-actions";
+  if (navSelectionMode) bar.classList.add("is-visible");
   bar.innerHTML = `
     ${button({
       label: t("ui.selectAll"),
@@ -2419,7 +2420,8 @@ function renderNavView() {
   panel.className = "nav-view-panel";
 
   const header = document.createElement("div");
-  header.className = "nav-view-header nav-view-header--toggle-only";
+  header.className = "nav-view-header nav-view-header--toolbar";
+  header.append(renderNavSelectionActions());
   const actions = document.createElement("div");
   actions.className = "nav-view-header__actions";
   actions.append(renderNavSelectionToggle());
@@ -2430,10 +2432,6 @@ function renderNavView() {
   actions.append(renderViewModeToggle(viewMode, { showCategorySync: isCategoryNavId(state.config, navId) }));
   header.append(actions);
   panel.append(header);
-
-  if (navSelectionMode) {
-    panel.append(renderNavSelectionActions());
-  }
 
   const bookmarks = getActiveNavBookmarks();
   const collection = renderBookmarkCollection(bookmarks, navId, viewMode);
