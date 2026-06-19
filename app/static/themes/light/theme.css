@@ -125,6 +125,11 @@ body {
   --checkbox-checked-bg: #2d65d6;
   --checkbox-checked-border: #2d65d6;
   --checkbox-check-fg: #ffffff;
+  --nav-selection-toggle-active-bg: var(--control-active-bg);
+  --nav-selection-toggle-active-fg: var(--control-active-fg);
+  --bookmark-selection-bg: color-mix(in srgb, var(--primary) 14%, var(--surface-2));
+  --bookmark-selection-preview-bg: color-mix(in srgb, var(--primary) 8%, var(--surface-2));
+  --bookmark-selection-hover-bg: color-mix(in srgb, var(--primary) 10%, var(--surface-2));
   --fab-bg: var(--primary);
   --fab-fg: #ffffff;
   --fab-hover-bg: color-mix(in srgb, var(--primary) 88%, black);

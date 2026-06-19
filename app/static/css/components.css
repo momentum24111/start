@@ -623,6 +623,27 @@ body:not(.sidebar-mobile) .sidebar.sidebar--instant .sidebar-link__details {
   white-space: nowrap;
 }
 
+.nav-selection-toggle {
+  flex: 0 0 auto;
+}
+
+.nav-selection-toggle .btn.is-active {
+  background: var(--nav-selection-toggle-active-bg);
+  color: var(--nav-selection-toggle-active-fg);
+}
+
+.nav-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.65rem;
+}
+
+.nav-selection-actions .btn__icon .mdi-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
 .unsorted-folder-filter {
   position: relative;
   flex: 0 0 auto;
@@ -642,11 +663,23 @@ body:not(.sidebar-mobile) .sidebar.sidebar--instant .sidebar-link__details {
   min-width: min(24rem, 90vw);
   max-width: min(32rem, 92vw);
   max-height: min(60vh, 22rem);
-  overflow: auto;
   padding: 0.45rem;
   border-radius: 6px;
   background: var(--unsorted-filter-dropdown-bg);
   box-shadow: var(--unsorted-filter-dropdown-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.unsorted-folder-filter__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .unsorted-folder-filter__reset {
@@ -662,17 +695,12 @@ body:not(.sidebar-mobile) .sidebar.sidebar--instant .sidebar-link__details {
   font-size: 0.86rem;
   text-align: left;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .unsorted-folder-filter__reset:hover {
   background: var(--unsorted-filter-option-hover-bg);
   color: var(--unsorted-filter-reset-hover-fg);
-}
-
-.unsorted-folder-filter__options {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
 }
 
 .unsorted-folder-filter__empty {
@@ -2618,20 +2646,76 @@ textarea {
   contain-intrinsic-size: auto var(--size-bookmark-list-height);
 }
 
+.bookmark-item--nav.is-select-mode {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  cursor: pointer;
+}
+
 .bookmark-item--nav.is-edit-mode {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.bookmark-item--nav.is-edit-mode.is-select-mode {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.bookmark-item__select-checkbox {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  margin: 0;
+  padding: 0 calc(0.45rem * var(--element-scale)) 0 calc(0.55rem * var(--element-scale));
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.bookmark-item__select-checkbox:hover {
+  background: transparent;
+}
+
+.bookmark-item__select-checkbox .theme-checkbox__box {
+  margin-top: 0;
+}
+
 .bookmark-item__nav-link {
+  display: block;
+  min-width: 0;
+  min-height: var(--size-bookmark-list-height);
+  padding: calc(0.55rem * var(--element-scale));
+  padding-left: calc(0.55rem * var(--element-scale));
+  color: inherit;
+  text-decoration: none;
+}
+
+.bookmark-item__nav-content {
   display: grid;
   grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr);
   gap: var(--size-bookmark-gap);
   align-items: center;
   min-width: 0;
-  min-height: var(--size-bookmark-list-height);
-  padding: calc(0.55rem * var(--element-scale));
-  color: inherit;
-  text-decoration: none;
+  transform: translateX(0);
+  transition: transform 180ms ease;
+}
+
+.bookmark-item--nav.is-select-mode .bookmark-item__nav-content {
+  transform: translateX(calc(0.15rem * var(--element-scale)));
+}
+
+.bookmark-item--nav.is-select-mode.is-edit-mode .bookmark-item__nav-link,
+.bookmark-item--nav.is-select-mode .bookmark-item__nav-link {
+  pointer-events: none;
+}
+
+.bookmark-item--nav.is-selected {
+  background: var(--bookmark-selection-bg);
+}
+
+.bookmark-item--nav.is-selection-preview {
+  background: var(--bookmark-selection-preview-bg);
+}
+
+.bookmark-item--nav.is-selected.is-selection-preview {
+  background: var(--bookmark-selection-bg);
 }
 
 .bookmark-item--nav .bookmark-thumb--list {
@@ -3075,8 +3159,16 @@ body.bookmark-drag-active .sidebar-link.is-drop-target {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .bookmark-item--nav:not(.is-edit-mode):hover {
+  .bookmark-item--nav:not(.is-edit-mode):not(.is-select-mode):hover {
     background: var(--service-hover-bg);
+  }
+
+  .bookmark-item--nav.is-select-mode:hover {
+    background: var(--bookmark-selection-hover-bg);
+  }
+
+  .bookmark-item--nav.is-select-mode.is-selected:hover {
+    background: var(--bookmark-selection-bg);
   }
 
   .bookmark-item--list:hover,
@@ -3105,6 +3197,17 @@ body.bookmark-drag-active .sidebar-link.is-drop-target {
 @media (max-width: 650px) {
   .bookmark-item--nav {
     grid-template-columns: 1fr;
+  }
+
+  .bookmark-item--nav.is-select-mode,
+  .bookmark-item--nav.is-edit-mode.is-select-mode {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+
+  .bookmark-item--nav.is-select-mode .bookmark-item__select-checkbox {
+    grid-row: 1 / span 2;
+    align-self: center;
   }
 
   .bookmark-item__aside {

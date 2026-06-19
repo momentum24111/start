@@ -185,7 +185,8 @@ function renderHomepageCardBookmark(options, deps) {
       class="bookmark-item bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
-      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
+      draggable="true"
+      data-bookmark-drag
     >
       <a
         class="bookmark-card__link"
@@ -222,7 +223,8 @@ function renderHomepageBookmark(options, deps) {
       class="bookmark-item bookmark-item--homepage service ${editMode ? "is-edit-mode" : ""} ${hasShortcut ? "has-shortcut" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
-      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
+      draggable="true"
+      data-bookmark-drag
     >
       <a
         class="bookmark-homepage__main"
@@ -245,8 +247,23 @@ function renderHomepageBookmark(options, deps) {
   `;
 }
 
+function renderBookmarkSelectCheckbox(selected) {
+  return `
+    <label class="theme-checkbox bookmark-item__select-checkbox" data-bookmark-select-wrap>
+      <input
+        type="checkbox"
+        class="theme-checkbox__input"
+        data-bookmark-select
+        ${selected ? "checked" : ""}
+        aria-label="${escapeHtml(t("ui.selectBookmark"))}"
+      />
+      <span class="theme-checkbox__box" aria-hidden="true"></span>
+    </label>
+  `;
+}
+
 function renderNavBookmark(options, deps) {
-  const { bookmark, editMode, showUnsortedBrowserImportPath, showCategoryChips } = options;
+  const { bookmark, editMode, showUnsortedBrowserImportPath, showCategoryChips, selectionMode, selected, selectionPreview } = options;
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = String(bookmark.url || "").trim();
@@ -257,14 +274,21 @@ function renderNavBookmark(options, deps) {
     ? getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"))
     : [];
   const categoryChips = renderCategoryChips(categoryLabels);
+  const selectionClass = [
+    selectionMode ? "is-select-mode" : "",
+    selected ? "is-selected" : "",
+    selectionPreview ? "is-selection-preview" : ""
+  ].filter(Boolean).join(" ");
 
   return `
     <article
-      class="bookmark-item bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--nav service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""} ${selectionClass}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
-      ${editMode ? "" : 'draggable="true" data-bookmark-drag'}
+      draggable="true"
+      data-bookmark-drag
     >
+      ${selectionMode ? renderBookmarkSelectCheckbox(selected) : ""}
       <a
         class="bookmark-item__nav-link"
         href="${urlAttr}"
@@ -272,11 +296,13 @@ function renderNavBookmark(options, deps) {
         rel="noreferrer"
         data-bookmark-open
       >
-        ${renderThumbnail(bookmark, deps, "list")}
-        <div class="bookmark-item__main">
-          <h3 class="bookmark-item__title">${title}</h3>
-          ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-          ${unsortedPathLine || (!showUnsortedBrowserImportPath && domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : "")}
+        <div class="bookmark-item__nav-content">
+          ${renderThumbnail(bookmark, deps, "list")}
+          <div class="bookmark-item__main">
+            <h3 class="bookmark-item__title">${title}</h3>
+            ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
+            ${unsortedPathLine || (!showUnsortedBrowserImportPath && domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : "")}
+          </div>
         </div>
       </a>
       <div class="bookmark-item__aside">

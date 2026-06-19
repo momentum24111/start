@@ -84,6 +84,11 @@ let unsortedFolderFilterDropdownOpen = false;
 let unsortedFolderFilterDismissBound = false;
 let bookmarkSortDropdownOpen = false;
 let bookmarkSortDismissBound = false;
+let navSelectionMode = false;
+const navSelectedBookmarkIds = new Set();
+let navSelectionAnchorId = null;
+const navSelectionPreviewIds = new Set();
+let navSelectionEventsBound = false;
 
 const state = {
   config: {
@@ -170,7 +175,8 @@ const ICONS = {
   search: "M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 3.23-.87l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
   close: "M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z",
   filter: "M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z",
-  sort: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"
+  sort: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z",
+  selectMark: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM17.99 9l-1.41-1.42-6.59 6.58-2.58-2.57-1.42 1.41 4 3.99z"
 };
 
 const FALLBACK_MDI_ICON = "folder";
@@ -774,6 +780,210 @@ async function reloadCategoryMetadata() {
   }
 }
 
+function resetNavSelection() {
+  navSelectionMode = false;
+  navSelectedBookmarkIds.clear();
+  navSelectionAnchorId = null;
+  navSelectionPreviewIds.clear();
+}
+
+function getActiveNavBookmarks() {
+  const navId = getActiveNavId();
+  let bookmarks = getBookmarksForNav(state.config, navId);
+  if (navId === NAV_UNSORTED) {
+    bookmarks = filterUnsortedNavBookmarks(bookmarks);
+  }
+  return sortNavBookmarks(bookmarks, getNavSortSetting(state.settings, navId));
+}
+
+function getVisibleNavBookmarkIds() {
+  return getActiveNavBookmarks().map((bookmark) => bookmark.id);
+}
+
+function pruneNavSelectionToVisible() {
+  const visible = new Set(getVisibleNavBookmarkIds());
+  for (const id of navSelectedBookmarkIds) {
+    if (!visible.has(id)) navSelectedBookmarkIds.delete(id);
+  }
+  for (const id of navSelectionPreviewIds) {
+    if (!visible.has(id)) navSelectionPreviewIds.delete(id);
+  }
+  if (navSelectionAnchorId && !visible.has(navSelectionAnchorId)) {
+    navSelectionAnchorId = navSelectedBookmarkIds.size
+      ? [...navSelectedBookmarkIds][navSelectedBookmarkIds.size - 1]
+      : null;
+  }
+}
+
+function clearNavSelectionPreview() {
+  if (!navSelectionPreviewIds.size) return;
+  navSelectionPreviewIds.clear();
+  applyNavSelectionStateToDom();
+}
+
+function getNavSelectionRangeIds(anchorId, targetId) {
+  const ids = getVisibleNavBookmarkIds();
+  const anchorIndex = ids.indexOf(anchorId);
+  const targetIndex = ids.indexOf(targetId);
+  if (anchorIndex === -1 || targetIndex === -1) return [];
+  const start = Math.min(anchorIndex, targetIndex);
+  const end = Math.max(anchorIndex, targetIndex);
+  return ids.slice(start, end + 1);
+}
+
+function toggleNavBookmarkSelection(bookmarkId) {
+  if (navSelectedBookmarkIds.has(bookmarkId)) navSelectedBookmarkIds.delete(bookmarkId);
+  else navSelectedBookmarkIds.add(bookmarkId);
+  navSelectionAnchorId = bookmarkId;
+}
+
+function selectNavBookmarkRange(anchorId, targetId) {
+  for (const id of getNavSelectionRangeIds(anchorId, targetId)) {
+    navSelectedBookmarkIds.add(id);
+  }
+  navSelectionAnchorId = targetId;
+}
+
+function setNavSelectionPreviewForTarget(targetId) {
+  if (!navSelectionAnchorId || !targetId) return;
+  const nextPreview = new Set(
+    getNavSelectionRangeIds(navSelectionAnchorId, targetId)
+      .filter((id) => !navSelectedBookmarkIds.has(id))
+  );
+  if (nextPreview.size === navSelectionPreviewIds.size
+    && [...nextPreview].every((id) => navSelectionPreviewIds.has(id))) {
+    return;
+  }
+  navSelectionPreviewIds.clear();
+  for (const id of nextPreview) navSelectionPreviewIds.add(id);
+  applyNavSelectionStateToDom();
+}
+
+function applyNavSelectionStateToDom() {
+  const collection = elements.navView?.querySelector(".bookmark-collection");
+  if (!collection) return;
+  collection.querySelectorAll(".bookmark-item[data-bookmark-id]").forEach((item) => {
+    const bookmarkId = item.dataset.bookmarkId;
+    const selected = navSelectedBookmarkIds.has(bookmarkId);
+    const preview = navSelectionPreviewIds.has(bookmarkId);
+    item.classList.toggle("is-selected", selected);
+    item.classList.toggle("is-selection-preview", preview && !selected);
+    const checkbox = item.querySelector("[data-bookmark-select]");
+    if (checkbox instanceof HTMLInputElement) checkbox.checked = selected;
+  });
+}
+
+function selectAllVisibleNavBookmarks() {
+  navSelectedBookmarkIds.clear();
+  for (const id of getVisibleNavBookmarkIds()) navSelectedBookmarkIds.add(id);
+  navSelectionAnchorId = getVisibleNavBookmarkIds().at(-1) || null;
+  clearNavSelectionPreview();
+  applyNavSelectionStateToDom();
+}
+
+function clearAllNavBookmarkSelection() {
+  navSelectedBookmarkIds.clear();
+  navSelectionAnchorId = null;
+  clearNavSelectionPreview();
+  applyNavSelectionStateToDom();
+}
+
+function setNavSelectionMode(active) {
+  if (navSelectionMode === active) return;
+  navSelectionMode = active;
+  if (!active) {
+    navSelectedBookmarkIds.clear();
+    navSelectionAnchorId = null;
+    navSelectionPreviewIds.clear();
+  }
+  render();
+}
+
+function isNavSelectionInteractionTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest(
+    "[data-edit-bookmark], [data-delete-bookmark], [data-move-bookmark-left], [data-move-bookmark-right], [data-bookmark-menu-trigger], .bookmark-menu__item, .bookmark-reorder"
+  ));
+}
+
+function handleNavBookmarkSelectionClick(event) {
+  if (!navSelectionMode) return;
+  if (isNavSelectionInteractionTarget(event.target)) return;
+  const item = event.target.closest?.(".bookmark-item[data-bookmark-id]");
+  if (!(item instanceof HTMLElement)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const bookmarkId = item.dataset.bookmarkId;
+  if (!bookmarkId) return;
+  if (event.shiftKey && navSelectionAnchorId) {
+    selectNavBookmarkRange(navSelectionAnchorId, bookmarkId);
+    clearNavSelectionPreview();
+  } else {
+    toggleNavBookmarkSelection(bookmarkId);
+    clearNavSelectionPreview();
+  }
+  applyNavSelectionStateToDom();
+}
+
+function handleNavBookmarkSelectionHover(event) {
+  if (!navSelectionMode || !event.shiftKey || !navSelectionAnchorId) return;
+  if (isNavSelectionInteractionTarget(event.target)) return;
+  const item = event.target.closest?.(".bookmark-item[data-bookmark-id]");
+  if (!(item instanceof HTMLElement)) return;
+  setNavSelectionPreviewForTarget(item.dataset.bookmarkId || "");
+}
+
+function ensureNavSelectionEvents() {
+  if (navSelectionEventsBound) return;
+  navSelectionEventsBound = true;
+  document.addEventListener("keyup", (event) => {
+    if (event.key === "Shift") clearNavSelectionPreview();
+  });
+}
+
+function bindNavSelectionCollectionEvents(collection) {
+  if (!(collection instanceof HTMLElement)) return;
+  collection.addEventListener("click", handleNavBookmarkSelectionClick);
+  collection.addEventListener("mouseover", handleNavBookmarkSelectionHover);
+}
+
+function refreshNavBookmarkList() {
+  const navId = getActiveNavId();
+  if (shouldShowCategoryGrid(navId)) return;
+  const panel = elements.navView?.querySelector(".nav-view-panel");
+  if (!panel) return;
+  const viewMode = getActiveNavViewMode();
+  const bookmarks = getActiveNavBookmarks();
+  const nextCollection = renderBookmarkCollection(bookmarks, navId, viewMode);
+  const currentCollection = panel.querySelector(".bookmark-collection");
+  if (currentCollection) currentCollection.replaceWith(nextCollection);
+  else panel.append(nextCollection);
+  pruneNavSelectionToVisible();
+  if (navSelectionMode) {
+    bindNavSelectionCollectionEvents(nextCollection);
+    applyNavSelectionStateToDom();
+  }
+}
+
+function updateUnsortedFolderFilterToggleState() {
+  const toggle = document.querySelector(".unsorted-folder-filter__toggle");
+  toggle?.classList.toggle("is-active", isUnsortedBrowserFolderFilterActive());
+}
+
+function captureUnsortedFolderFilterScroll() {
+  if (!unsortedFolderFilterDropdownOpen) return null;
+  const options = document.querySelector(".unsorted-folder-filter__options");
+  return options instanceof HTMLElement ? options.scrollTop : null;
+}
+
+function restoreUnsortedFolderFilterScroll(scrollTop) {
+  if (scrollTop == null) return;
+  requestAnimationFrame(() => {
+    const options = document.querySelector(".unsorted-folder-filter__options");
+    if (options instanceof HTMLElement) options.scrollTop = scrollTop;
+  });
+}
+
 function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false, navId = null } = {}) {
   const categoryContext = category || { id: navId || resolveBookmarkModalCategoryId(bookmark, category) };
   const reorder = getBookmarkReorderState(category, bookmark);
@@ -791,7 +1001,10 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       showCategoryChips: navId !== NAV_UNSORTED,
       hasShortcut: Boolean(normalizeServiceShortcut(bookmark.shortcut)),
       canMoveLeft: reorder.canMoveLeft,
-      canMoveRight: reorder.canMoveRight
+      canMoveRight: reorder.canMoveRight,
+      selectionMode: !homepage && navSelectionMode,
+      selected: navSelectedBookmarkIds.has(bookmark.id),
+      selectionPreview: navSelectionPreviewIds.has(bookmark.id)
     },
     {
       ...createBookmarkUiDeps(),
@@ -1032,6 +1245,7 @@ function applyStateFromUrl({ normalizeInvalidHash = false } = {}) {
 
   if (state.settings.activeNavId !== nextNavId) {
     bookmarkSortDropdownOpen = false;
+    resetNavSelection();
     state.settings.activeNavId = nextNavId;
     changed = true;
   }
@@ -1612,6 +1826,7 @@ async function selectNav(navId, { syncHistory = true, historyMode = "push" } = {
     return;
   }
   bookmarkSortDropdownOpen = false;
+  resetNavSelection();
   state.settings.activeNavId = nextNavId;
   if (syncHistory) {
     syncAppUrl({ navId: nextNavId, historyMode });
@@ -1633,6 +1848,7 @@ async function setNavSortForActive(partial) {
   setNavSortSetting(state.settings, navId, partial);
   await persistSettings();
   bookmarkSortDropdownOpen = true;
+  pruneNavSelectionToVisible();
   render();
 }
 
@@ -2016,6 +2232,50 @@ function renderBookmarkSortControl(navId) {
   return wrap;
 }
 
+function renderNavSelectionToggle() {
+  const wrap = document.createElement("div");
+  wrap.className = "nav-selection-toggle";
+  wrap.innerHTML = button({
+    label: t("ui.selectMode"),
+    icon: iconSvg(ICONS.selectMark, "inline-icon"),
+    dataAttr: "data-nav-selection-toggle",
+    variant: "btn--ghost",
+    className: `btn--compact ${navSelectionMode ? "is-active" : ""}`
+  });
+  wrap.querySelector("[data-nav-selection-toggle]")?.addEventListener("click", () => {
+    setNavSelectionMode(!navSelectionMode);
+  });
+  return wrap;
+}
+
+function renderNavSelectionActions() {
+  const bar = document.createElement("div");
+  bar.className = "nav-selection-actions";
+  bar.innerHTML = `
+    ${button({
+      label: t("ui.selectAll"),
+      icon: mdiIcon("select-all", "inline-icon"),
+      dataAttr: "data-nav-select-all",
+      variant: "btn--ghost",
+      className: "btn--compact"
+    })}
+    ${button({
+      label: t("ui.selectNone"),
+      icon: mdiIcon("select-off", "inline-icon"),
+      dataAttr: "data-nav-select-none",
+      variant: "btn--ghost",
+      className: "btn--compact"
+    })}
+  `;
+  bar.querySelector("[data-nav-select-all]")?.addEventListener("click", () => {
+    selectAllVisibleNavBookmarks();
+  });
+  bar.querySelector("[data-nav-select-none]")?.addEventListener("click", () => {
+    clearAllNavBookmarkSelection();
+  });
+  return bar;
+}
+
 function renderUnsortedFolderFilter() {
   ensureUnsortedFolderFilterDismiss();
   const wrap = document.createElement("div");
@@ -2068,7 +2328,12 @@ function renderUnsortedFolderFilter() {
     event.stopPropagation();
     unsortedBrowserFolderFilter.clear();
     unsortedFolderFilterDropdownOpen = true;
-    render();
+    wrap.querySelectorAll(".theme-checkbox__input").forEach((input) => {
+      if (input instanceof HTMLInputElement) input.checked = false;
+    });
+    updateUnsortedFolderFilterToggleState();
+    pruneNavSelectionToVisible();
+    refreshNavBookmarkList();
   });
   wrap.querySelectorAll(".theme-checkbox__input").forEach((input) => {
     input.addEventListener("change", () => {
@@ -2077,7 +2342,9 @@ function renderUnsortedFolderFilter() {
       if (input.checked) unsortedBrowserFolderFilter.add(path);
       else unsortedBrowserFolderFilter.delete(path);
       unsortedFolderFilterDropdownOpen = true;
-      render();
+      updateUnsortedFolderFilterToggleState();
+      pruneNavSelectionToVisible();
+      refreshNavBookmarkList();
     });
   });
 
@@ -2147,6 +2414,7 @@ function renderNavView() {
   header.className = "nav-view-header nav-view-header--toggle-only";
   const actions = document.createElement("div");
   actions.className = "nav-view-header__actions";
+  actions.append(renderNavSelectionToggle());
   actions.append(renderBookmarkSortControl(navId));
   if (navId === NAV_UNSORTED) {
     actions.append(renderUnsortedFolderFilter());
@@ -2155,16 +2423,20 @@ function renderNavView() {
   header.append(actions);
   panel.append(header);
 
-  let bookmarks = getBookmarksForNav(state.config, navId);
-  if (navId === NAV_UNSORTED) {
-    bookmarks = filterUnsortedNavBookmarks(bookmarks);
+  if (navSelectionMode) {
+    panel.append(renderNavSelectionActions());
   }
-  bookmarks = sortNavBookmarks(bookmarks, getNavSortSetting(state.settings, navId));
-  panel.append(renderBookmarkCollection(bookmarks, navId, viewMode));
+
+  const bookmarks = getActiveNavBookmarks();
+  const collection = renderBookmarkCollection(bookmarks, navId, viewMode);
+  if (navSelectionMode) bindNavSelectionCollectionEvents(collection);
+  panel.append(collection);
   return panel;
 }
 
 function render() {
+  ensureNavSelectionEvents();
+  const savedFilterScroll = captureUnsortedFolderFilterScroll();
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
   applyElementSize(state.settings.elementSize);
   updateDocumentLanguage();
@@ -2213,8 +2485,10 @@ function render() {
   elements.navView?.classList.remove("nav-view--homepage");
   elements.navView?.classList.remove("hidden");
   elements.categories.classList.add("hidden");
+  pruneNavSelectionToVisible();
   elements.navView?.append(renderNavView());
   syncCategoryMetadataReloadBookmarkLoading();
+  restoreUnsortedFolderFilterScroll(savedFilterScroll);
 }
 
 function updateDocumentLanguage() {
@@ -2252,6 +2526,15 @@ function refreshStaticLocalizedTexts() {
   elements.navView?.querySelectorAll("[data-reload-category-metadata]").forEach((button) => {
     button.title = t("ui.reloadCategoryMetadata");
     button.setAttribute("aria-label", t("ui.reloadCategoryMetadata"));
+  });
+  elements.navView?.querySelectorAll("[data-nav-selection-toggle] .btn__label").forEach((entry) => {
+    entry.textContent = t("ui.selectMode");
+  });
+  elements.navView?.querySelectorAll("[data-nav-select-all] .btn__label").forEach((entry) => {
+    entry.textContent = t("ui.selectAll");
+  });
+  elements.navView?.querySelectorAll("[data-nav-select-none] .btn__label").forEach((entry) => {
+    entry.textContent = t("ui.selectNone");
   });
   document.querySelectorAll("[data-add-bookmark] .service-name").forEach((entry) => {
     entry.textContent = t("ui.addBookmark");
