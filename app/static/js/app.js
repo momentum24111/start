@@ -429,11 +429,16 @@ function openBookmarkFromSearch(bookmark, { newTab = false } = {}) {
   openBookmarkUrl(bookmark, { newTab });
 }
 
-async function confirmDropToUnsorted(bookmark) {
+async function confirmDropToUnsorted(bookmarkOrBookmarks) {
+  const bookmarks = Array.isArray(bookmarkOrBookmarks) ? bookmarkOrBookmarks : [bookmarkOrBookmarks];
   let confirmed = false;
   const body = document.createElement("p");
-  const label = bookmark?.title || bookmark?.url || "";
-  body.textContent = interpolateLabel(t("ui.dropToUnsortedConfirm"), { title: label });
+  if (bookmarks.length > 1) {
+    body.textContent = interpolateLabel(t("ui.dropToUnsortedConfirmMultiple"), { count: bookmarks.length });
+  } else {
+    const label = bookmarks[0]?.title || bookmarks[0]?.url || "";
+    body.textContent = interpolateLabel(t("ui.dropToUnsortedConfirm"), { title: label });
+  }
   await showModal({
     title: t("ui.dropToUnsorted"),
     content: body,
@@ -446,7 +451,7 @@ async function confirmDropToUnsorted(bookmark) {
   return confirmed;
 }
 
-async function pickHomepageCategoryForDrop() {
+async function pickHomepageCategoryForDrop(bookmarksForDrop = null) {
   const categories = listBookmarkListCategories(state.config);
   if (!categories.length) return null;
 
@@ -1369,6 +1374,9 @@ async function bootstrap() {
     },
     pickHomepageCategory: pickHomepageCategoryForDrop,
     confirmDropToUnsorted,
+    getSelectedBookmarkIds: () => [...navSelectedBookmarkIds],
+    formatDragCount: (count) => interpolateLabel(t("ui.dragSelectedCount"), { count }),
+    formatDropBadgeCount: (count) => String(count),
     onDragSessionStart: () => {
       sidebarOpenBeforeDrag = state.sidebarOpen;
       setSidebarOpen(true);

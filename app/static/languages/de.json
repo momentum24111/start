@@ -89,6 +89,8 @@
     "dropToHomepageLabel": "Startseiten-Kategorie",
     "dropToUnsorted": "Nach Unsortiert verschieben",
     "dropToUnsortedConfirm": "„{title}“ aus allen Sidebar-Kategorien entfernen und unter Unsortiert anzeigen?",
+    "dropToUnsortedConfirmMultiple": "{count} Lesezeichen aus allen Sidebar-Kategorien entfernen und unter Unsortiert anzeigen?",
+    "dragSelectedCount": "{count} Lesezeichen",
     "actions": "Aktionen",
     "restartApp": "Anwendung neu starten",
     "restartingAppTitle": "Neustart",

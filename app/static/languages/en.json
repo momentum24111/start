@@ -89,6 +89,8 @@
     "dropToHomepageLabel": "Homepage category",
     "dropToUnsorted": "Move to unsorted",
     "dropToUnsortedConfirm": "Remove “{title}” from all sidebar categories and show it under Unsorted?",
+    "dropToUnsortedConfirmMultiple": "Remove {count} bookmarks from all sidebar categories and show them under Unsorted?",
+    "dragSelectedCount": "{count} bookmarks",
     "actions": "Actions",
     "restartApp": "Restart application",
     "restartingAppTitle": "Restart",

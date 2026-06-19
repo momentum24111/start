@@ -92,6 +92,17 @@ body {
   --sidebar-tooltip-shadow: 0 8px 20px rgba(15, 35, 60, 0.14);
   --bookmark-drag-ghost-bg: #ffffff;
   --bookmark-drag-ghost-shadow: 0 10px 24px rgba(15, 35, 60, 0.16);
+  --bookmark-drag-ghost-count-fg: #2d65d6;
+  --bookmark-drag-ghost-multi-title-fg: #516379;
+  --bookmark-drag-ghost-stack-bg: #e6edf4;
+  --bookmark-drag-ghost-stack-border: rgba(81, 99, 121, 0.22);
+  --bookmark-drag-ghost-stack-shadow: 0 2px 6px rgba(15, 35, 60, 0.12);
+  --bookmark-drag-group-bg: color-mix(in srgb, var(--primary) 8%, var(--surface-2));
+  --sidebar-drop-target-multi-bg: color-mix(in srgb, var(--primary) 16%, var(--sidebar-drop-target-bg));
+  --sidebar-drop-target-multi-border: color-mix(in srgb, var(--primary) 65%, transparent);
+  --sidebar-drop-badge-bg: var(--primary);
+  --sidebar-drop-badge-fg: #ffffff;
+  --sidebar-drop-badge-shadow: 0 2px 8px rgba(15, 35, 60, 0.18);
   --settings-section-divider: rgba(81, 99, 121, 0.16);
   --settings-section-title-fg: #3d5168;
   --settings-section-title-size: 0.78rem;
