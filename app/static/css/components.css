@@ -2476,12 +2476,18 @@ textarea {
   height: var(--size-service-icon);
   border-radius: 4px;
   flex: 0 0 auto;
+  background: transparent;
 }
 
 .bookmark-thumb--homepage .bookmark-thumb__img,
 .bookmark-thumb--homepage-card .bookmark-thumb__img {
   object-fit: contain;
   object-position: center;
+}
+
+.bookmark-thumb--homepage .bookmark-thumb__placeholder,
+.bookmark-thumb--homepage-card .bookmark-thumb__placeholder {
+  background: transparent;
 }
 
 .bookmark-item--homepage .bookmark-thumb__placeholder-icon {
@@ -2537,6 +2543,7 @@ textarea {
 .bookmark-thumb--homepage-card {
   width: 100%;
   aspect-ratio: 16 / 10;
+  background: transparent;
 }
 
 .bookmark-homepage-card__body {
