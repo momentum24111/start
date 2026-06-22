@@ -2478,6 +2478,12 @@ textarea {
   flex: 0 0 auto;
 }
 
+.bookmark-thumb--homepage .bookmark-thumb__img,
+.bookmark-thumb--homepage-card .bookmark-thumb__img {
+  object-fit: contain;
+  object-position: center;
+}
+
 .bookmark-item--homepage .bookmark-thumb__placeholder-icon {
   width: calc(18px * var(--element-scale));
   height: calc(18px * var(--element-scale));
