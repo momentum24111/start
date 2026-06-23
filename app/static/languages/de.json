@@ -156,6 +156,8 @@
     "yes": "Ja",
     "no": "Nein",
     "deleteBookmarkConfirm": "„{title}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "deleteSelectedBookmarks": "Löschen ({count})",
+    "deleteSelectedBookmarksConfirm": "Möchtest du die {count} markierten Lesezeichen wirklich löschen?",
     "sidebarCategoryActions": "Kategorie-Aktionen",
     "editSidebarCategory": "Kategorie bearbeiten",
     "deleteSidebarCategoryConfirm": "Möchtest du die Kategorie „{name}“ wirklich löschen?",

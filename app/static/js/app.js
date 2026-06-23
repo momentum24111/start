@@ -882,6 +882,66 @@ function applyNavSelectionStateToDom() {
     const checkbox = item.querySelector("[data-bookmark-select]");
     if (checkbox instanceof HTMLInputElement) checkbox.checked = selected;
   });
+  updateNavSelectionToolbar();
+}
+
+function updateNavSelectionToolbar() {
+  const bar = elements.navView?.querySelector(".nav-view-header__selection-actions");
+  if (!bar) return;
+  const deleteButton = bar.querySelector("[data-nav-select-delete]");
+  if (!(deleteButton instanceof HTMLElement)) return;
+  const count = navSelectedBookmarkIds.size;
+  const visible = navSelectionMode && count > 0;
+  deleteButton.classList.toggle("hidden", !visible);
+  const label = deleteButton.querySelector(".btn__label");
+  if (label) {
+    label.textContent = interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(count) });
+  }
+}
+
+async function confirmDeleteSelectedNavBookmarks() {
+  const count = navSelectedBookmarkIds.size;
+  if (!count) return false;
+  let confirmed = false;
+  const body = document.createElement("p");
+  body.textContent = interpolateLabel(t("ui.deleteSelectedBookmarksConfirm"), { count: String(count) });
+  await showModal({
+    title: t("ui.delete"),
+    content: body,
+    saveLabel: t("ui.delete"),
+    cancelLabel: t("ui.cancel"),
+    submitOnEnter: false,
+    onSave: async () => {
+      confirmed = true;
+    }
+  });
+  return confirmed;
+}
+
+async function requestDeleteSelectedNavBookmarks() {
+  if (!navSelectionMode || navSelectedBookmarkIds.size === 0) return;
+  const confirmed = await confirmDeleteSelectedNavBookmarks();
+  if (!confirmed) return;
+  const ids = [...navSelectedBookmarkIds];
+  pushUndo();
+  for (const id of ids) {
+    removeBookmarkFromConfig(state.config, id);
+  }
+  navSelectedBookmarkIds.clear();
+  navSelectionAnchorId = null;
+  navSelectionPreviewIds.clear();
+  await persistConfig();
+  render();
+}
+
+function handleNavDeleteSelectedShortcut(event) {
+  if (event.defaultPrevented) return;
+  if (event.key !== "Delete" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+  if (!navSelectionMode || navSelectedBookmarkIds.size === 0) return;
+  if (shouldShowCategoryGrid(getActiveNavId())) return;
+  if (isGlobalKeyboardShortcutBlocked()) return;
+  event.preventDefault();
+  void requestDeleteSelectedNavBookmarks();
 }
 
 function selectAllVisibleNavBookmarks() {
@@ -966,6 +1026,7 @@ function ensureNavSelectionEvents() {
   if (navSelectionEventsBound) return;
   navSelectionEventsBound = true;
   document.addEventListener("keydown", handleNavSelectAllShortcut);
+  document.addEventListener("keydown", handleNavDeleteSelectedShortcut);
   document.addEventListener("keyup", (event) => {
     if (event.key === "Shift") clearNavSelectionPreview();
   });
@@ -2673,6 +2734,7 @@ function renderNavSelectionActions() {
   const bar = document.createElement("div");
   bar.className = "nav-view-header__selection-actions";
   if (navSelectionMode) bar.classList.add("is-visible");
+  const selectedCount = navSelectedBookmarkIds.size;
   bar.innerHTML = `
     ${button({
       label: t("ui.selectAll"),
@@ -2688,12 +2750,22 @@ function renderNavSelectionActions() {
       variant: "btn--ghost",
       className: "btn--compact"
     })}
+    ${button({
+      label: interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(selectedCount) }),
+      icon: iconSvg(ICONS.trash, "inline-icon"),
+      dataAttr: "data-nav-select-delete",
+      variant: "btn--ghost",
+      className: `btn--compact${selectedCount > 0 ? "" : " hidden"}`
+    })}
   `;
   bar.querySelector("[data-nav-select-all]")?.addEventListener("click", () => {
     activateNavSelectionAndSelectAllVisible();
   });
   bar.querySelector("[data-nav-select-none]")?.addEventListener("click", () => {
     clearAllNavBookmarkSelection();
+  });
+  bar.querySelector("[data-nav-select-delete]")?.addEventListener("click", () => {
+    void requestDeleteSelectedNavBookmarks();
   });
   return bar;
 }
@@ -2989,6 +3061,7 @@ function refreshStaticLocalizedTexts() {
   elements.navView?.querySelectorAll("[data-nav-select-none] .btn__label").forEach((entry) => {
     entry.textContent = t("ui.selectNone");
   });
+  updateNavSelectionToolbar();
   document.querySelectorAll("[data-add-bookmark] .service-name").forEach((entry) => {
     entry.textContent = t("ui.addBookmark");
   });

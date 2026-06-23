@@ -156,6 +156,8 @@
     "yes": "Yes",
     "no": "No",
     "deleteBookmarkConfirm": "Delete “{title}”? This action cannot be undone.",
+    "deleteSelectedBookmarks": "Delete ({count})",
+    "deleteSelectedBookmarksConfirm": "Do you really want to delete the {count} selected bookmarks?",
     "sidebarCategoryActions": "Category actions",
     "editSidebarCategory": "Edit category",
     "deleteSidebarCategoryConfirm": "Delete category “{name}”?",
