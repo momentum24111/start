@@ -639,3 +639,13 @@ export function removeSidebarCategoryFromConfig(config, categoryId) {
     bookmark.sidebarCategoryIds = (bookmark.sidebarCategoryIds || []).filter((id) => id !== categoryId);
   }
 }
+
+export function deleteSidebarCategoryFromConfig(config, categoryId, { deleteBookmarks = false } = {}) {
+  if (deleteBookmarks) {
+    const bookmarks = getBookmarksForSidebarCategory(config, categoryId);
+    for (const bookmark of bookmarks) {
+      removeBookmarkFromConfig(config, bookmark.id);
+    }
+  }
+  removeSidebarCategoryFromConfig(config, categoryId);
+}

@@ -28,6 +28,8 @@ import {
   listBookmarkListCategories,
   listSidebarCategories,
   allocateSidebarCategorySlug,
+  removeSidebarCategoryFromConfig,
+  deleteSidebarCategoryFromConfig,
   getHomepageCategories,
   shouldShowUnsortedBrowserImportPath,
   collectUnsortedBrowserFolderPaths,
@@ -87,6 +89,9 @@ let bookmarkSortDropdownOpen = false;
 let bookmarkSortDismissBound = false;
 let navSelectionMode = false;
 const navSelectedBookmarkIds = new Set();
+let activeSidebarCategoryMenu = null;
+let sidebarCategoryMenuOverlay = null;
+let sidebarCategoryMenuDismissBound = false;
 let navSelectionAnchorId = null;
 const navSelectionPreviewIds = new Set();
 let navSelectionEventsBound = false;
@@ -1208,6 +1213,51 @@ function getMdiSearchResults(query, limit = 24) {
   return matches;
 }
 
+function wireMdiIconSearch(form, { fallbackIcon = FALLBACK_MDI_ICON } = {}) {
+  const input = form.querySelector("input[name='icon']");
+  const results = form.querySelector("[data-icon-results]");
+  const selectedPreview = form.querySelector("[data-selected-icon-preview]");
+  if (!(input instanceof HTMLInputElement) || !(results instanceof HTMLElement) || !(selectedPreview instanceof HTMLElement)) {
+    return;
+  }
+  const applySelectedIcon = (iconName) => {
+    const normalizedName = normalizeMdiIconName(iconName);
+    input.value = normalizedName;
+    selectedPreview.innerHTML = mdiIcon(normalizedName, "icon-preview icon-preview--theme");
+  };
+  const renderIconResults = () => {
+    const query = String(input.value || "");
+    const filtered = getMdiSearchResults(query, 32);
+    results.classList.toggle("is-open", filtered.length > 0);
+    results.innerHTML = filtered
+      .map((entry) => `<button type="button" class="icon-search-item" data-icon-pick="${entry.icon}">${mdiIcon(entry.icon, "icon-preview icon-preview--theme")}<span>${entry.label}</span></button>`)
+      .join("");
+    results.querySelectorAll("[data-icon-pick]").forEach((buttonEl) => {
+      buttonEl.addEventListener("click", () => {
+        applySelectedIcon(buttonEl.dataset.iconPick);
+        results.classList.remove("is-open");
+        results.innerHTML = "";
+      });
+    });
+  };
+  input.addEventListener("focus", renderIconResults);
+  input.addEventListener("input", renderIconResults);
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      results.classList.remove("is-open");
+      results.innerHTML = "";
+      if (!mdiRegistry.byName.has(String(input.value || "").toLowerCase())) {
+        applySelectedIcon(fallbackIcon);
+      } else {
+        applySelectedIcon(input.value);
+      }
+    }, 120);
+  });
+  applySelectedIcon(fallbackIcon);
+  results.classList.remove("is-open");
+  results.innerHTML = "";
+}
+
 async function loadMdiRegistry() {
   if (mdiRegistry.loaded) return;
   const response = await fetch(MDI_INDEX_PATH, { cache: "force-cache" });
@@ -1419,6 +1469,8 @@ async function bootstrap() {
   });
   initSidebarResponsiveBehavior();
   bindSidebarTooltipEvents();
+  ensureBookmarkMenuDismiss();
+  ensureSidebarCategoryMenuDismiss();
   const searchToggle = document.getElementById("bookmark-search-toggle");
   if (searchToggle) {
     searchToggle.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.search, "inline-icon")}</span>`;
@@ -1751,6 +1803,17 @@ function bindSidebarEvents() {
       setSidebarOpen(!state.sidebarOpen, { persist: !isSidebarMobileLayout() });
       return;
     }
+    const categoryMenuTrigger = event.target.closest("[data-sidebar-category-menu-trigger]");
+    if (categoryMenuTrigger instanceof HTMLElement && elements.sidebar?.contains(categoryMenuTrigger)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const row = categoryMenuTrigger.closest(".sidebar-link-row");
+      const navId = row?.querySelector(".sidebar-link[data-nav-id]")?.dataset.navId;
+      const category = findSidebarCategoryById(state.config, navId);
+      if (!category) return;
+      openSidebarCategoryMenu(categoryMenuTrigger, category);
+      return;
+    }
     const link = event.target.closest(".sidebar-link[data-nav-id]");
     if (!(link instanceof HTMLElement)) return;
     if (!elements.sidebar?.contains(link)) return;
@@ -1902,6 +1965,14 @@ function isSidebarLinkStructureValid(button) {
   return Boolean(iconWrap && details && labelEl && countEl);
 }
 
+function isSidebarCategoryRowStructureValid(row) {
+  if (!(row instanceof HTMLElement)) return false;
+  const link = row.querySelector(":scope > .sidebar-link[data-nav-id]");
+  const menuTrigger = row.querySelector(":scope > [data-sidebar-category-menu-trigger]");
+  const menuPanel = row.querySelector(":scope > [data-sidebar-category-menu-panel]");
+  return isSidebarLinkStructureValid(link) && menuTrigger instanceof HTMLButtonElement && menuPanel instanceof HTMLElement;
+}
+
 function buildSidebarLink(button, { navId, label, count, iconName }) {
   const isActive = getActiveNavId() === navId;
   button.type = "button";
@@ -1936,6 +2007,52 @@ function patchSidebarLink(button, { navId, label, count, iconName }) {
   }
 }
 
+function buildSidebarCategoryMenuPanel() {
+  return `
+    <button type="button" class="sidebar-category-menu__item" data-sidebar-category-edit role="menuitem">${escapeHtml(t("ui.edit"))}</button>
+    <button type="button" class="sidebar-category-menu__item sidebar-category-menu__item--danger" data-sidebar-category-delete role="menuitem">${escapeHtml(t("ui.delete"))}</button>
+  `;
+}
+
+function buildSidebarCategoryRow(row, { navId, label, count, iconName }) {
+  row.className = "sidebar-link-row";
+  row.innerHTML = `
+    <button type="button" class="sidebar-link"></button>
+    <button
+      type="button"
+      class="btn btn--ghost btn--icon sidebar-category-menu__trigger"
+      data-sidebar-category-menu-trigger
+      aria-label="${escapeHtml(t("ui.sidebarCategoryActions"))}"
+      aria-haspopup="menu"
+      aria-expanded="false"
+    >
+      <span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.dotsVertical, "inline-icon")}</span>
+    </button>
+    <div class="sidebar-category-menu__panel sidebar-category-menu__panel--source hidden" data-sidebar-category-menu-panel role="menu" aria-hidden="true">
+      ${buildSidebarCategoryMenuPanel()}
+    </div>
+  `;
+  buildSidebarLink(row.querySelector(".sidebar-link"), { navId, label, count, iconName });
+}
+
+function patchSidebarCategoryRow(row, { navId, label, count, iconName }) {
+  if (!isSidebarCategoryRowStructureValid(row)) {
+    buildSidebarCategoryRow(row, { navId, label, count, iconName });
+    return;
+  }
+  patchSidebarLink(row.querySelector(".sidebar-link"), { navId, label, count, iconName });
+}
+
+function ensureSidebarCategoryItemRow(li) {
+  let row = li.querySelector(":scope > .sidebar-link-row");
+  if (!(row instanceof HTMLElement)) {
+    li.replaceChildren();
+    row = document.createElement("div");
+    li.append(row);
+  }
+  return row;
+}
+
 function ensureSidebarItemButton(li) {
   let button = li.querySelector(":scope > .sidebar-link");
   if (!(button instanceof HTMLButtonElement)) {
@@ -1950,22 +2067,27 @@ function findSidebarItemByNavId(list, navId) {
   for (const child of list.children) {
     if (!(child instanceof HTMLElement)) continue;
     if (child.dataset.sidebarExtra === "true") continue;
-    const link = child.querySelector(":scope > .sidebar-link");
+    const link = child.querySelector(":scope .sidebar-link[data-nav-id], :scope > .sidebar-link[data-nav-id]");
     if (link?.dataset.navId === navId) return child;
   }
   return null;
 }
 
-function syncSidebarNavList(list, entries) {
+function syncSidebarNavList(list, entries, { showCategoryMenu = false } = {}) {
   const seen = new Set();
   entries.forEach((entry, index) => {
     let li = findSidebarItemByNavId(list, entry.navId);
     if (!(li instanceof HTMLElement)) {
       li = document.createElement("li");
-      li.className = "sidebar-item";
-      li.append(document.createElement("button"));
+      li.className = showCategoryMenu ? "sidebar-item sidebar-item--category" : "sidebar-item";
+    } else if (showCategoryMenu) {
+      li.classList.add("sidebar-item--category");
     }
-    patchSidebarLink(ensureSidebarItemButton(li), entry);
+    if (showCategoryMenu) {
+      patchSidebarCategoryRow(ensureSidebarCategoryItemRow(li), entry);
+    } else {
+      patchSidebarLink(ensureSidebarItemButton(li), entry);
+    }
     seen.add(entry.navId);
     if (list.children[index] !== li) {
       list.insertBefore(li, list.children[index] || null);
@@ -1974,7 +2096,7 @@ function syncSidebarNavList(list, entries) {
   [...list.children].forEach((child) => {
     if (!(child instanceof HTMLElement)) return;
     if (child.dataset.sidebarExtra === "true") return;
-    const navId = child.querySelector(":scope > .sidebar-link")?.dataset.navId;
+    const navId = child.querySelector(":scope .sidebar-link[data-nav-id], :scope > .sidebar-link[data-nav-id]")?.dataset.navId;
     if (navId && !seen.has(navId)) child.remove();
   });
 }
@@ -1999,6 +2121,7 @@ function syncSidebarDomState() {
 }
 
 function renderSidebar() {
+  closeSidebarCategoryMenu();
   ensureSidebarShell();
   syncSidebarDomState();
   updateNavToggleIcon();
@@ -2022,7 +2145,8 @@ function renderSidebar() {
       label: category.name,
       count: getBookmarkCountForNav(state.config, category.id),
       iconName: category.icon || FALLBACK_MDI_ICON
-    }))
+    })),
+    { showCategoryMenu: true }
   );
 
   [...elements.sidebarCategories.children].forEach((child) => {
@@ -2074,7 +2198,10 @@ function renderSidebarCategoryDraftRow() {
   input.type = "text";
   input.className = "sidebar-link__input";
   input.setAttribute("aria-label", t("ui.addSidebarCategory"));
+  let committed = false;
   const commit = async () => {
+    if (committed) return;
+    committed = true;
     const name = input.value.trim();
     state.sidebarCategoryDraft = false;
     if (!name) {
@@ -2088,6 +2215,7 @@ function renderSidebarCategoryDraftRow() {
       event.preventDefault();
       void commit();
     } else if (event.key === "Escape") {
+      committed = true;
       state.sidebarCategoryDraft = false;
       render();
     }
@@ -2115,6 +2243,237 @@ async function saveSidebarCategory(name) {
   state.config.sidebarCategoryBookmarkOrder[id] = [];
   await persistConfig();
   render();
+}
+
+function getSidebarCategoryMenuOverlay() {
+  if (sidebarCategoryMenuOverlay instanceof HTMLElement) return sidebarCategoryMenuOverlay;
+  const overlay = document.createElement("div");
+  overlay.id = "sidebar-category-menu-overlay";
+  overlay.className = "sidebar-category-menu-overlay hidden";
+  overlay.innerHTML = `<div class="sidebar-category-menu__panel" data-sidebar-category-menu-panel role="menu"></div>`;
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeSidebarCategoryMenu();
+  });
+  document.body.append(overlay);
+  sidebarCategoryMenuOverlay = overlay;
+  return overlay;
+}
+
+function positionSidebarCategoryMenuPanel(panel, trigger) {
+  const gap = 6;
+  const margin = 8;
+  panel.style.left = "0px";
+  panel.style.top = "0px";
+  const panelRect = panel.getBoundingClientRect();
+  const triggerRect = trigger.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let top = triggerRect.bottom + gap;
+  let left = triggerRect.right - panelRect.width;
+
+  if (top + panelRect.height > viewportHeight - margin) {
+    const aboveTop = triggerRect.top - panelRect.height - gap;
+    if (aboveTop >= margin) top = aboveTop;
+    else top = Math.max(margin, viewportHeight - panelRect.height - margin);
+  }
+  if (top < margin) top = margin;
+
+  if (left < margin) left = margin;
+  if (left + panelRect.width > viewportWidth - margin) {
+    left = Math.max(margin, viewportWidth - panelRect.width - margin);
+  }
+
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+}
+
+function bindSidebarCategoryMenuActions(panel, category) {
+  panel.querySelector("[data-sidebar-category-edit]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeSidebarCategoryMenu();
+    openSidebarCategoryModal(category);
+  });
+  panel.querySelector("[data-sidebar-category-delete]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeSidebarCategoryMenu();
+    void confirmDeleteSidebarCategory(category);
+  });
+}
+
+function closeSidebarCategoryMenu() {
+  const overlay = sidebarCategoryMenuOverlay;
+  const panel = overlay?.querySelector("[data-sidebar-category-menu-panel]");
+  if (panel) panel.innerHTML = "";
+  overlay?.classList.add("hidden");
+  overlay?.classList.remove("is-open");
+  if (activeSidebarCategoryMenu?.trigger) {
+    activeSidebarCategoryMenu.trigger.setAttribute("aria-expanded", "false");
+  }
+  activeSidebarCategoryMenu?.row?.classList.remove("is-menu-open");
+  activeSidebarCategoryMenu = null;
+}
+
+function openSidebarCategoryMenu(trigger, category) {
+  if (!(trigger instanceof HTMLElement)) return;
+
+  if (activeSidebarCategoryMenu?.trigger === trigger) {
+    closeSidebarCategoryMenu();
+    return;
+  }
+
+  closeSidebarCategoryMenu();
+
+  const row = trigger.closest(".sidebar-link-row");
+  const sourcePanel = row?.querySelector("[data-sidebar-category-menu-panel]");
+  if (!(sourcePanel instanceof HTMLElement)) return;
+
+  const overlay = getSidebarCategoryMenuOverlay();
+  const panel = overlay.querySelector("[data-sidebar-category-menu-panel]");
+  if (!(panel instanceof HTMLElement)) return;
+
+  panel.innerHTML = buildSidebarCategoryMenuPanel();
+  bindSidebarCategoryMenuActions(panel, category);
+
+  overlay.classList.remove("hidden");
+  overlay.classList.add("is-open");
+  trigger.setAttribute("aria-expanded", "true");
+  row?.classList.add("is-menu-open");
+  activeSidebarCategoryMenu = { trigger, row, categoryId: category.id };
+
+  requestAnimationFrame(() => {
+    if (activeSidebarCategoryMenu?.trigger !== trigger) return;
+    positionSidebarCategoryMenuPanel(panel, trigger);
+  });
+}
+
+function onSidebarCategoryMenuViewportChange() {
+  if (activeSidebarCategoryMenu) closeSidebarCategoryMenu();
+}
+
+function ensureSidebarCategoryMenuDismiss() {
+  if (sidebarCategoryMenuDismissBound) return;
+  sidebarCategoryMenuDismissBound = true;
+  getSidebarCategoryMenuOverlay();
+  document.addEventListener("click", (event) => {
+    if (!activeSidebarCategoryMenu) return;
+    const target = event.target;
+    if (target instanceof Element && (
+      target.closest("#sidebar-category-menu-overlay") ||
+      target.closest("[data-sidebar-category-menu-trigger]")
+    )) return;
+    closeSidebarCategoryMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !activeSidebarCategoryMenu) return;
+    closeSidebarCategoryMenu();
+  });
+  window.addEventListener("scroll", onSidebarCategoryMenuViewportChange, true);
+  window.addEventListener("resize", onSidebarCategoryMenuViewportChange);
+}
+
+function cleanupNavSettingsForCategory(categoryId) {
+  delete state.settings.navViewModes?.[categoryId];
+  delete state.settings.navSortSettings?.[categoryId];
+}
+
+function openSidebarCategoryModal(category) {
+  if (!category) return;
+  const form = document.createElement("form");
+  form.innerHTML = `
+    <div class="form-row">
+      <label>${t("ui.name")}</label>
+      <input name="name" value="${escapeHtml(category.name || "")}" required />
+    </div>
+    <div class="form-row icon-search">
+      <label>${t("ui.icon")}</label>
+      <div>
+        <div class="icon-input-wrap">
+          <span class="icon-input-preview" data-selected-icon-preview>${mdiIcon(category.icon || FALLBACK_MDI_ICON, "icon-preview icon-preview--theme")}</span>
+          <input name="icon" value="${normalizeMdiIconName(category.icon || FALLBACK_MDI_ICON)}" autocomplete="off" />
+        </div>
+        <div class="icon-search-results" data-icon-results></div>
+      </div>
+    </div>
+  `;
+
+  showModal({
+    title: t("ui.editSidebarCategory"),
+    content: form,
+    saveLabel: t("ui.save"),
+    cancelLabel: t("ui.cancel"),
+    modalClass: "modal--sidebar-category",
+    onSave: async () => {
+      if (!form.reportValidity()) return false;
+      const fd = new FormData(form);
+      pushUndo();
+      const nextName = String(fd.get("name") || "").trim();
+      if (!nextName) return false;
+      const selectedIcon = normalizeMdiIconName(fd.get("icon"));
+      const previousSlug = category.slug;
+      category.name = nextName;
+      category.icon = selectedIcon;
+      category.slug = allocateSidebarCategorySlug(state.config, nextName, category.id);
+      await persistConfig();
+      if (getActiveNavId() === category.id && previousSlug !== category.slug) {
+        syncAppUrl({ navId: category.id, historyMode: "replace" });
+      }
+      render();
+    }
+  });
+
+  wireMdiIconSearch(form, { fallbackIcon: category.icon || FALLBACK_MDI_ICON });
+}
+
+async function confirmDeleteSidebarCategory(category) {
+  if (!category) return;
+  let confirmed = false;
+  const body = document.createElement("div");
+  body.className = "sidebar-category-delete-modal";
+  body.innerHTML = `
+    <p class="sidebar-category-delete-modal__lead">${escapeHtml(interpolateLabel(t("ui.deleteSidebarCategoryConfirm"), { name: category.name || "" }))}</p>
+    <p class="sidebar-category-delete-modal__hint">${escapeHtml(t("ui.deleteSidebarCategoryKeepBookmarks"))}</p>
+    <div class="sidebar-category-delete-modal__switch-row">
+      <label class="toggle-switch" for="sidebar-category-delete-bookmarks">
+        <input id="sidebar-category-delete-bookmarks" name="deleteBookmarks" type="checkbox" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-switch__label">${escapeHtml(t("ui.deleteSidebarCategoryAlsoBookmarks"))}</span>
+      </label>
+    </div>
+    <p class="sidebar-category-delete-modal__warning hidden" data-delete-bookmarks-warning>${escapeHtml(t("ui.deleteSidebarCategoryAlsoBookmarksHint"))}</p>
+  `;
+  const deleteBookmarksToggle = body.querySelector("#sidebar-category-delete-bookmarks");
+  const warning = body.querySelector("[data-delete-bookmarks-warning]");
+  deleteBookmarksToggle?.addEventListener("change", () => {
+    warning?.classList.toggle("hidden", !deleteBookmarksToggle.checked);
+  });
+
+  await showModal({
+    title: t("ui.delete"),
+    content: body,
+    saveLabel: t("ui.delete"),
+    cancelLabel: t("ui.cancel"),
+    submitOnEnter: false,
+    onSave: async () => {
+      confirmed = true;
+      const deleteBookmarks = Boolean(deleteBookmarksToggle?.checked);
+      const categoryId = category.id;
+      const wasActive = getActiveNavId() === categoryId;
+      pushUndo();
+      deleteSidebarCategoryFromConfig(state.config, categoryId, { deleteBookmarks });
+      cleanupNavSettingsForCategory(categoryId);
+      await persistConfig();
+      await persistSettings();
+      if (wasActive) {
+        await selectNav(NAV_ALL);
+      } else {
+        render();
+      }
+    }
+  });
+  return confirmed;
 }
 
 function resolveBookmarkCategoryForNav(bookmark, navId) {
@@ -3144,42 +3503,7 @@ function openCategoryModal(category = null) {
   iframeUrlInput?.addEventListener("input", () => iframeUrlInput.setCustomValidity(""));
   syncTypeFields();
 
-  const input = form.querySelector("input[name='icon']");
-  const results = form.querySelector("[data-icon-results]");
-  const selectedPreview = form.querySelector("[data-selected-icon-preview]");
-  const applySelectedIcon = (iconName) => {
-    const normalizedName = normalizeMdiIconName(iconName);
-    input.value = normalizedName;
-    selectedPreview.innerHTML = mdiIcon(normalizedName, "icon-preview icon-preview--theme");
-  };
-  const renderIconResults = () => {
-    const query = String(input.value || "");
-    const filtered = getMdiSearchResults(query, 32);
-    results.classList.toggle("is-open", filtered.length > 0);
-    results.innerHTML = filtered
-      .map((entry) => `<button type="button" class="icon-search-item" data-icon-pick="${entry.icon}">${mdiIcon(entry.icon, "icon-preview icon-preview--theme")}<span>${entry.label}</span></button>`)
-      .join("");
-    results.querySelectorAll("[data-icon-pick]").forEach((buttonEl) => {
-      buttonEl.addEventListener("click", () => {
-        applySelectedIcon(buttonEl.dataset.iconPick);
-        results.classList.remove("is-open");
-        results.innerHTML = "";
-      });
-    });
-  };
-  input.addEventListener("focus", renderIconResults);
-  input.addEventListener("input", renderIconResults);
-  input.addEventListener("blur", () => {
-    window.setTimeout(() => {
-      results.classList.remove("is-open");
-      results.innerHTML = "";
-      if (!mdiRegistry.byName.has(String(input.value || "").toLowerCase())) {
-        applySelectedIcon(category?.icon || FALLBACK_MDI_ICON);
-      } else {
-        applySelectedIcon(input.value);
-      }
-    }, 120);
-  });
+  wireMdiIconSearch(form, { fallbackIcon: category?.icon || FALLBACK_MDI_ICON });
   form.querySelectorAll("[data-color-pick]").forEach((colorButton) => {
     colorButton.addEventListener("click", () => {
       form.querySelector("input[name='color']").value = colorButton.dataset.color;
@@ -3195,9 +3519,6 @@ function openCategoryModal(category = null) {
       slotButton.classList.add("active");
     });
   });
-  applySelectedIcon(category?.icon || FALLBACK_MDI_ICON);
-  results.classList.remove("is-open");
-  results.innerHTML = "";
 }
 
 function renderBookmarkThemeCheckbox({

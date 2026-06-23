@@ -155,6 +155,12 @@
     "discardChangesText": "The entered data will be lost. Do you really want to cancel?",
     "yes": "Yes",
     "no": "No",
-    "deleteBookmarkConfirm": "Delete “{title}”? This action cannot be undone."
+    "deleteBookmarkConfirm": "Delete “{title}”? This action cannot be undone.",
+    "sidebarCategoryActions": "Category actions",
+    "editSidebarCategory": "Edit category",
+    "deleteSidebarCategoryConfirm": "Delete category “{name}”?",
+    "deleteSidebarCategoryKeepBookmarks": "Only the category will be deleted. The bookmarks themselves will not be deleted.",
+    "deleteSidebarCategoryAlsoBookmarks": "Also delete bookmarks",
+    "deleteSidebarCategoryAlsoBookmarksHint": "All bookmarks in this category will be permanently deleted – even if they also appear in other categories or on the homepage."
   }
 }

@@ -155,6 +155,12 @@
     "discardChangesText": "Die eingegebenen Daten gehen verloren. Möchtest du wirklich abbrechen?",
     "yes": "Ja",
     "no": "Nein",
-    "deleteBookmarkConfirm": "„{title}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+    "deleteBookmarkConfirm": "„{title}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "sidebarCategoryActions": "Kategorie-Aktionen",
+    "editSidebarCategory": "Kategorie bearbeiten",
+    "deleteSidebarCategoryConfirm": "Möchtest du die Kategorie „{name}“ wirklich löschen?",
+    "deleteSidebarCategoryKeepBookmarks": "Nur die Kategorie wird gelöscht. Die Lesezeichen selbst bleiben erhalten.",
+    "deleteSidebarCategoryAlsoBookmarks": "Lesezeichen ebenfalls löschen",
+    "deleteSidebarCategoryAlsoBookmarksHint": "Alle Lesezeichen in dieser Kategorie werden dauerhaft gelöscht – auch dann, wenn sie in anderen Kategorien oder auf der Startseite vorhanden sind."
   }
 }

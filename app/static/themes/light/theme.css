@@ -65,6 +65,16 @@ body {
   --bookmark-chip-bg: #e6edf7;
   --bookmark-chip-fg: #294b7f;
   --bookmark-menu-bg: #ffffff;
+  --sidebar-category-menu-bg: #ffffff;
+  --sidebar-category-menu-shadow: 0 12px 28px rgba(15, 35, 60, 0.14);
+  --sidebar-category-menu-item-fg: #1a2a3d;
+  --sidebar-category-menu-item-hover-bg: #eef3f9;
+  --sidebar-category-menu-item-danger-fg: #c62828;
+  --sidebar-category-menu-trigger-active-bg: #eef3f9;
+  --sidebar-category-menu-trigger-active-fg: #1a2a3d;
+  --sidebar-category-delete-hint-fg: #5a6d82;
+  --sidebar-category-delete-warning-fg: #c62828;
+  --toggle-switch-label-fg: #1a2a3d;
   --toast-bg: #ffffff;
   --toast-shadow: 0 12px 28px rgba(15, 35, 60, 0.14);
   --toast-detail-fg: #5f7389;
