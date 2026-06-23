@@ -887,6 +887,24 @@ function selectAllVisibleNavBookmarks() {
   applyNavSelectionStateToDom();
 }
 
+function activateNavSelectionAndSelectAllVisible() {
+  if (shouldShowCategoryGrid(getActiveNavId())) return;
+  if (!navSelectionMode) {
+    setNavSelectionMode(true);
+  }
+  selectAllVisibleNavBookmarks();
+}
+
+function handleNavSelectAllShortcut(event) {
+  if (event.defaultPrevented) return;
+  const key = String(event.key || "").toLowerCase();
+  if (key !== "a" || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+  if (isBlockingFocusTarget(document.activeElement) || isBlockingFocusTarget(event.target)) return;
+  if (shouldShowCategoryGrid(getActiveNavId())) return;
+  event.preventDefault();
+  activateNavSelectionAndSelectAllVisible();
+}
+
 function clearAllNavBookmarkSelection() {
   navSelectedBookmarkIds.clear();
   navSelectionAnchorId = null;
@@ -942,6 +960,7 @@ function handleNavBookmarkSelectionHover(event) {
 function ensureNavSelectionEvents() {
   if (navSelectionEventsBound) return;
   navSelectionEventsBound = true;
+  document.addEventListener("keydown", handleNavSelectAllShortcut);
   document.addEventListener("keyup", (event) => {
     if (event.key === "Shift") clearNavSelectionPreview();
   });
@@ -2310,7 +2329,7 @@ function renderNavSelectionActions() {
     })}
   `;
   bar.querySelector("[data-nav-select-all]")?.addEventListener("click", () => {
-    selectAllVisibleNavBookmarks();
+    activateNavSelectionAndSelectAllVisible();
   });
   bar.querySelector("[data-nav-select-none]")?.addEventListener("click", () => {
     clearAllNavBookmarkSelection();
