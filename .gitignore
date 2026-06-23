@@ -14,6 +14,7 @@ app/data/settings.json
 app/data/browser_sync.json
 app/data/backups/
 app/static/assets/favicon-cache/
+.cursor/rules
 
 .DS_Store
 Thumbs.db

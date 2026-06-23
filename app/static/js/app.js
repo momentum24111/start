@@ -2082,6 +2082,8 @@ function syncSidebarNavList(list, entries, { showCategoryMenu = false } = {}) {
       li.className = showCategoryMenu ? "sidebar-item sidebar-item--category" : "sidebar-item";
     } else if (showCategoryMenu) {
       li.classList.add("sidebar-item--category");
+    } else {
+      li.classList.remove("sidebar-item--category");
     }
     if (showCategoryMenu) {
       patchSidebarCategoryRow(ensureSidebarCategoryItemRow(li), entry);
@@ -2146,7 +2148,7 @@ function renderSidebar() {
       count: getBookmarkCountForNav(state.config, category.id),
       iconName: category.icon || FALLBACK_MDI_ICON
     })),
-    { showCategoryMenu: true }
+    { showCategoryMenu: state.editMode }
   );
 
   [...elements.sidebarCategories.children].forEach((child) => {
