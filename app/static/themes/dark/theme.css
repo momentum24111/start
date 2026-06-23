@@ -155,6 +155,24 @@ body {
   color: var(--search-placeholder-fg);
 }
 
+.unsorted-folder-filter__search-input {
+  background: var(--search-input-bg);
+  border-color: var(--search-input-border);
+  color: var(--text);
+}
+
+.unsorted-folder-filter__search-input::placeholder {
+  color: var(--search-placeholder-fg);
+}
+
+.unsorted-folder-filter__search-input:focus {
+  box-shadow: var(--focus-ring);
+}
+
+.unsorted-folder-filter__no-match {
+  color: var(--unsorted-filter-empty-fg);
+}
+
 .topbar-search__field:focus-within .topbar-search__icon {
   color: var(--search-icon-focus-fg);
 }

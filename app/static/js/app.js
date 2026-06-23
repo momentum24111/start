@@ -81,6 +81,7 @@ const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
 const unsortedBrowserFolderFilter = new Set();
 let unsortedFolderFilterDropdownOpen = false;
+let unsortedFolderFilterSearchQuery = "";
 let unsortedFolderFilterDismissBound = false;
 let bookmarkSortDropdownOpen = false;
 let bookmarkSortDismissBound = false;
@@ -2130,6 +2131,38 @@ function isUnsortedBrowserFolderFilterActive() {
   return unsortedBrowserFolderFilter.size > 0;
 }
 
+function pathMatchesUnsortedFolderFilterSearch(path, query) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  return String(path || "").toLowerCase().includes(normalizedQuery);
+}
+
+function closeUnsortedFolderFilterDropdown() {
+  unsortedFolderFilterDropdownOpen = false;
+  unsortedFolderFilterSearchQuery = "";
+}
+
+function applyUnsortedFolderFilterSearchVisibility(container, query) {
+  if (!(container instanceof Element)) return;
+  const options = container.querySelector(".unsorted-folder-filter__options");
+  if (!options) return;
+  let visibleCount = 0;
+  options.querySelectorAll(".unsorted-folder-filter__option").forEach((label) => {
+    const path = label.getAttribute("data-path") || "";
+    const visible = pathMatchesUnsortedFolderFilterSearch(path, query);
+    label.classList.toggle("hidden", !visible);
+    if (visible) visibleCount += 1;
+  });
+  const noMatch = container.querySelector("[data-unsorted-filter-no-match]");
+  const hasPaths = options.querySelector(".unsorted-folder-filter__option") != null;
+  if (noMatch instanceof HTMLElement) {
+    noMatch.classList.toggle(
+      "hidden",
+      !hasPaths || visibleCount > 0 || !String(query || "").trim()
+    );
+  }
+}
+
 function filterUnsortedNavBookmarks(bookmarks) {
   return filterBookmarksByBrowserFolderPaths(bookmarks, unsortedBrowserFolderFilter);
 }
@@ -2141,7 +2174,7 @@ function ensureUnsortedFolderFilterDismiss() {
     if (!unsortedFolderFilterDropdownOpen) return;
     const target = event.target;
     if (target instanceof Element && target.closest(".unsorted-folder-filter")) return;
-    unsortedFolderFilterDropdownOpen = false;
+    closeUnsortedFolderFilterDropdown();
     render();
   });
 }
@@ -2293,6 +2326,10 @@ function renderUnsortedFolderFilter() {
   const paths = collectUnsortedBrowserFolderPaths(allBookmarks, state.config);
   const filterActive = isUnsortedBrowserFolderFilterActive();
   const dropdownOpen = unsortedFolderFilterDropdownOpen;
+  const searchQuery = unsortedFolderFilterSearchQuery;
+  const showNoMatch = paths.length > 0
+    && String(searchQuery || "").trim()
+    && !paths.some((path) => pathMatchesUnsortedFolderFilterSearch(path, searchQuery));
 
   wrap.innerHTML = `
     <button
@@ -2306,13 +2343,29 @@ function renderUnsortedFolderFilter() {
       <span class="btn__label" data-unsorted-filter-label>${escapeHtml(t("ui.unsortedFilter"))}</span>
     </button>
     <div class="unsorted-folder-filter__dropdown ${dropdownOpen ? "" : "hidden"}" data-unsorted-filter-dropdown>
+      <div class="unsorted-folder-filter__search">
+        <input
+          type="search"
+          class="unsorted-folder-filter__search-input"
+          data-unsorted-filter-search
+          value="${escapeHtml(searchQuery)}"
+          placeholder="${escapeHtml(t("ui.unsortedFilterSearchPlaceholder"))}"
+          aria-label="${escapeHtml(t("ui.unsortedFilterSearchPlaceholder"))}"
+          autocomplete="off"
+        />
+      </div>
       <button type="button" class="unsorted-folder-filter__reset" data-unsorted-filter-reset>
         ${escapeHtml(t("ui.unsortedFilterReset"))}
       </button>
       <div class="unsorted-folder-filter__options" role="group" aria-label="${escapeHtml(t("ui.unsortedFilter"))}">
         ${paths.length
-    ? paths.map((path) => `
-            <label class="theme-checkbox unsorted-folder-filter__option">
+    ? paths.map((path) => {
+      const visible = pathMatchesUnsortedFolderFilterSearch(path, searchQuery);
+      return `
+            <label
+              class="theme-checkbox unsorted-folder-filter__option ${visible ? "" : "hidden"}"
+              data-path="${escapeHtml(path)}"
+            >
               <input
                 type="checkbox"
                 class="theme-checkbox__input"
@@ -2322,16 +2375,30 @@ function renderUnsortedFolderFilter() {
               <span class="theme-checkbox__box" aria-hidden="true"></span>
               <span class="theme-checkbox__label">${escapeHtml(path)}</span>
             </label>
-          `).join("")
+          `;
+    }).join("")
     : `<p class="unsorted-folder-filter__empty">${escapeHtml(t("ui.unsortedFilterEmpty"))}</p>`}
       </div>
+      <p class="unsorted-folder-filter__no-match ${showNoMatch ? "" : "hidden"}" data-unsorted-filter-no-match>
+        ${escapeHtml(t("ui.unsortedFilterNoMatch"))}
+      </p>
     </div>
   `;
 
   wrap.querySelector("[data-unsorted-filter-toggle]")?.addEventListener("click", (event) => {
     event.stopPropagation();
-    unsortedFolderFilterDropdownOpen = !unsortedFolderFilterDropdownOpen;
+    if (unsortedFolderFilterDropdownOpen) {
+      closeUnsortedFolderFilterDropdown();
+    } else {
+      unsortedFolderFilterDropdownOpen = true;
+    }
     render();
+  });
+  wrap.querySelector("[data-unsorted-filter-search]")?.addEventListener("input", (event) => {
+    const input = event.currentTarget;
+    if (!(input instanceof HTMLInputElement)) return;
+    unsortedFolderFilterSearchQuery = input.value;
+    applyUnsortedFolderFilterSearchVisibility(wrap, unsortedFolderFilterSearchQuery);
   });
   wrap.querySelector("[data-unsorted-filter-reset]")?.addEventListener("click", (event) => {
     event.stopPropagation();

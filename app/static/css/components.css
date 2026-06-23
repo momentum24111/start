@@ -713,6 +713,28 @@ body:not(.sidebar-mobile) .sidebar.sidebar--instant .sidebar-link__details {
   overflow: hidden;
 }
 
+.unsorted-folder-filter__search {
+  flex: 0 0 auto;
+  margin: 0 0 0.45rem;
+}
+
+.unsorted-folder-filter__search-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.unsorted-folder-filter__search-input:focus {
+  outline: none;
+}
+
 .unsorted-folder-filter__options {
   display: flex;
   flex-direction: column;
@@ -721,6 +743,14 @@ body:not(.sidebar-mobile) .sidebar.sidebar--instant .sidebar-link__details {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.unsorted-folder-filter__no-match {
+  margin: 0;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  flex: 0 0 auto;
 }
 
 .unsorted-folder-filter__reset {

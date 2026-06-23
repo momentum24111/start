@@ -128,6 +128,8 @@
     "navUnsorted": "Unsorted",
     "unsortedFilter": "Filter",
     "unsortedFilterReset": "Reset filters",
+    "unsortedFilterSearchPlaceholder": "Search paths…",
+    "unsortedFilterNoMatch": "No matching paths.",
     "unsortedFilterEmpty": "No browser folders in unsorted bookmarks.",
     "sort": "Sort",
     "sortAscending": "Ascending",
