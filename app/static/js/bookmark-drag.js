@@ -13,6 +13,7 @@ import { NAV_ALL, NAV_FAVORITES, NAV_UNSORTED } from "./navigation.js";
 
 const DRAG_MIME = "application/x-start-bookmark-id";
 const DRAG_MIME_MULTI = "application/x-start-bookmark-ids";
+export const SIDEBAR_ADD_CATEGORY_DROP_ID = "__sidebar-add-category__";
 let deps = null;
 let activeDropTarget = null;
 let activeDragBookmarkIds = [];
@@ -183,6 +184,9 @@ async function applyDrop(bookmarkIds, navId) {
       for (const bookmark of bookmarks) {
         assignBookmarkToHomepageCategory(config, bookmark, categoryId);
       }
+    } else if (navId === SIDEBAR_ADD_CATEGORY_DROP_ID) {
+      deps.openAddSidebarCategoryModal?.(bookmarkIds);
+      return;
     } else {
       deps.pushUndo();
       for (const bookmark of bookmarks) {

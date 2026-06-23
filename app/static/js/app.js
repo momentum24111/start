@@ -28,6 +28,7 @@ import {
   listBookmarkListCategories,
   listSidebarCategories,
   allocateSidebarCategorySlug,
+  assignBookmarkToCustomSidebarCategory,
   removeSidebarCategoryFromConfig,
   deleteSidebarCategoryFromConfig,
   getHomepageCategories,
@@ -77,7 +78,7 @@ import {
   openBookmarkUrl
 } from "./bookmark-views.js";
 import { initBookmarkSearch, refreshBookmarkSearchTexts } from "./bookmark-search.js";
-import { bindBookmarkDrag, initBookmarkDragDrop } from "./bookmark-drag.js";
+import { bindBookmarkDrag, initBookmarkDragDrop, SIDEBAR_ADD_CATEGORY_DROP_ID } from "./bookmark-drag.js";
 
 const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
@@ -119,7 +120,6 @@ const state = {
   },
   editMode: false,
   sidebarOpen: false,
-  sidebarCategoryDraft: false,
   editModeCollapsedSnapshot: null,
   /** Ephemeral UI overrides for normal mode only; never persisted. Absent key means use `category.collapsed`. */
   sessionCategoryCollapsed: {},
@@ -1390,7 +1390,6 @@ function applyStateFromUrl({ normalizeInvalidHash = false } = {}) {
     if (urlEditMode) captureEditModeCollapsedSnapshot();
     else {
       restoreEditModeCollapsedSnapshot();
-      state.sidebarCategoryDraft = false;
     }
     state.editMode = urlEditMode;
     if (!urlEditMode) editModeHistoryPushed = false;
@@ -1433,7 +1432,6 @@ function setEditMode(nextEditMode, { syncHistory = true } = {}) {
   if (nextEditMode) captureEditModeCollapsedSnapshot();
   else {
     restoreEditModeCollapsedSnapshot();
-    state.sidebarCategoryDraft = false;
   }
   state.editMode = nextEditMode;
   if (syncHistory) {
@@ -1516,6 +1514,9 @@ async function bootstrap() {
       if (sidebarOpenBeforeDrag === null) return;
       setSidebarOpen(sidebarOpenBeforeDrag);
       sidebarOpenBeforeDrag = null;
+    },
+    openAddSidebarCategoryModal: (bookmarkIds) => {
+      openSidebarCategoryModal({ bookmarkIdsToAssign: bookmarkIds });
     }
   });
   initBookmarkSearch({
@@ -2219,15 +2220,9 @@ function renderSidebar() {
   });
 
   if (state.editMode) {
-    if (state.sidebarCategoryDraft) {
-      const li = renderSidebarCategoryDraftRow();
-      li.dataset.sidebarExtra = "true";
-      elements.sidebarCategories.append(li);
-    } else {
-      const li = renderSidebarAddCategoryTrigger();
-      li.dataset.sidebarExtra = "true";
-      elements.sidebarCategories.append(li);
-    }
+    const li = renderSidebarAddCategoryTrigger();
+    li.dataset.sidebarExtra = "true";
+    elements.sidebarCategories.append(li);
   }
 }
 
@@ -2237,6 +2232,7 @@ function renderSidebarAddCategoryTrigger() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sidebar-link sidebar-link--add";
+  button.dataset.sidebarDrop = SIDEBAR_ADD_CATEGORY_DROP_ID;
   button.innerHTML = `
     <span class="sidebar-link__icon">${mdiIcon("plus")}</span>
     <span class="sidebar-link__details">
@@ -2245,67 +2241,95 @@ function renderSidebarAddCategoryTrigger() {
     </span>
   `;
   button.addEventListener("click", () => {
-    state.sidebarCategoryDraft = true;
-    render();
+    openSidebarCategoryModal();
   });
   li.append(button);
   return li;
 }
 
-function renderSidebarCategoryDraftRow() {
-  const li = document.createElement("li");
-  li.className = "sidebar-item";
-  const wrapper = document.createElement("div");
-  wrapper.className = "sidebar-link sidebar-link--draft";
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "sidebar-link__input";
-  input.setAttribute("aria-label", t("ui.addSidebarCategory"));
-  let committed = false;
-  const commit = async () => {
-    if (committed) return;
-    committed = true;
-    const name = input.value.trim();
-    state.sidebarCategoryDraft = false;
-    if (!name) {
-      render();
-      return;
-    }
-    await saveSidebarCategory(name);
-  };
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      void commit();
-    } else if (event.key === "Escape") {
-      committed = true;
-      state.sidebarCategoryDraft = false;
-      render();
-    }
-  });
-  input.addEventListener("blur", () => {
-    void commit();
-  });
-  wrapper.append(input);
-  li.append(wrapper);
-  requestAnimationFrame(() => input.focus());
-  return li;
+function createSidebarCategoryForm(category = null) {
+  const form = document.createElement("form");
+  const iconName = category?.icon || FALLBACK_MDI_ICON;
+  form.innerHTML = `
+    <div class="form-row">
+      <label>${t("ui.name")}</label>
+      <input name="name" value="${escapeHtml(category?.name || "")}" required />
+    </div>
+    <div class="form-row icon-search">
+      <label>${t("ui.icon")}</label>
+      <div>
+        <div class="icon-input-wrap">
+          <span class="icon-input-preview" data-selected-icon-preview>${mdiIcon(iconName, "icon-preview icon-preview--theme")}</span>
+          <input name="icon" value="${normalizeMdiIconName(iconName)}" autocomplete="off" />
+        </div>
+        <div class="icon-search-results" data-icon-results></div>
+      </div>
+    </div>
+  `;
+  return form;
 }
 
-async function saveSidebarCategory(name) {
-  pushUndo();
-  const id = uid();
-  if (!state.config.sidebarCategories) state.config.sidebarCategories = [];
-  state.config.sidebarCategories.push({
-    id,
-    name,
-    icon: FALLBACK_MDI_ICON,
-    slug: allocateSidebarCategorySlug(state.config, name)
+function openSidebarCategoryModal({ category = null, bookmarkIdsToAssign = [] } = {}) {
+  const isEdit = Boolean(category);
+  const form = createSidebarCategoryForm(category);
+  const assignBookmarkIds = isEdit
+    ? []
+    : bookmarkIdsToAssign.map((id) => String(id || "").trim()).filter(Boolean);
+
+  showModal({
+    title: isEdit ? t("ui.editSidebarCategory") : t("ui.addSidebarCategory"),
+    content: form,
+    saveLabel: t("ui.save"),
+    cancelLabel: t("ui.cancel"),
+    modalClass: "modal--sidebar-category",
+    onSave: async () => {
+      if (!form.reportValidity()) return false;
+      const fd = new FormData(form);
+      const nextName = String(fd.get("name") || "").trim();
+      if (!nextName) return false;
+      const selectedIcon = normalizeMdiIconName(fd.get("icon"));
+      pushUndo();
+      if (isEdit) {
+        const previousSlug = category.slug;
+        category.name = nextName;
+        category.icon = selectedIcon;
+        category.slug = allocateSidebarCategorySlug(state.config, nextName, category.id);
+        await persistConfig();
+        if (getActiveNavId() === category.id && previousSlug !== category.slug) {
+          syncAppUrl({ navId: category.id, historyMode: "replace" });
+        }
+        render();
+        return;
+      }
+      const id = uid();
+      if (!state.config.sidebarCategories) state.config.sidebarCategories = [];
+      state.config.sidebarCategories.push({
+        id,
+        name: nextName,
+        icon: selectedIcon,
+        slug: allocateSidebarCategorySlug(state.config, nextName)
+      });
+      if (!state.config.sidebarCategoryBookmarkOrder) state.config.sidebarCategoryBookmarkOrder = {};
+      state.config.sidebarCategoryBookmarkOrder[id] = [];
+      if (assignBookmarkIds.length) {
+        for (const bookmarkId of assignBookmarkIds) {
+          const bookmark = findBookmarkById(state.config, bookmarkId);
+          if (bookmark) assignBookmarkToCustomSidebarCategory(state.config, bookmark, id);
+        }
+        navSelectedBookmarkIds.clear();
+        navSelectionAnchorId = null;
+        navSelectionPreviewIds.clear();
+      }
+      await persistConfig();
+      render();
+    }
   });
-  if (!state.config.sidebarCategoryBookmarkOrder) state.config.sidebarCategoryBookmarkOrder = {};
-  state.config.sidebarCategoryBookmarkOrder[id] = [];
-  await persistConfig();
-  render();
+
+  wireMdiIconSearch(form, { fallbackIcon: category?.icon || FALLBACK_MDI_ICON });
+  const nameInput = form.querySelector("input[name='name']");
+  if (nameInput instanceof HTMLInputElement) {
+    requestAnimationFrame(() => nameInput.focus());
+  }
 }
 
 function getSidebarCategoryMenuOverlay() {
@@ -2356,7 +2380,7 @@ function bindSidebarCategoryMenuActions(panel, category) {
     event.preventDefault();
     event.stopPropagation();
     closeSidebarCategoryMenu();
-    openSidebarCategoryModal(category);
+    openSidebarCategoryModal({ category });
   });
   panel.querySelector("[data-sidebar-category-delete]")?.addEventListener("click", (event) => {
     event.preventDefault();
@@ -2440,54 +2464,6 @@ function ensureSidebarCategoryMenuDismiss() {
 function cleanupNavSettingsForCategory(categoryId) {
   delete state.settings.navViewModes?.[categoryId];
   delete state.settings.navSortSettings?.[categoryId];
-}
-
-function openSidebarCategoryModal(category) {
-  if (!category) return;
-  const form = document.createElement("form");
-  form.innerHTML = `
-    <div class="form-row">
-      <label>${t("ui.name")}</label>
-      <input name="name" value="${escapeHtml(category.name || "")}" required />
-    </div>
-    <div class="form-row icon-search">
-      <label>${t("ui.icon")}</label>
-      <div>
-        <div class="icon-input-wrap">
-          <span class="icon-input-preview" data-selected-icon-preview>${mdiIcon(category.icon || FALLBACK_MDI_ICON, "icon-preview icon-preview--theme")}</span>
-          <input name="icon" value="${normalizeMdiIconName(category.icon || FALLBACK_MDI_ICON)}" autocomplete="off" />
-        </div>
-        <div class="icon-search-results" data-icon-results></div>
-      </div>
-    </div>
-  `;
-
-  showModal({
-    title: t("ui.editSidebarCategory"),
-    content: form,
-    saveLabel: t("ui.save"),
-    cancelLabel: t("ui.cancel"),
-    modalClass: "modal--sidebar-category",
-    onSave: async () => {
-      if (!form.reportValidity()) return false;
-      const fd = new FormData(form);
-      pushUndo();
-      const nextName = String(fd.get("name") || "").trim();
-      if (!nextName) return false;
-      const selectedIcon = normalizeMdiIconName(fd.get("icon"));
-      const previousSlug = category.slug;
-      category.name = nextName;
-      category.icon = selectedIcon;
-      category.slug = allocateSidebarCategorySlug(state.config, nextName, category.id);
-      await persistConfig();
-      if (getActiveNavId() === category.id && previousSlug !== category.slug) {
-        syncAppUrl({ navId: category.id, historyMode: "replace" });
-      }
-      render();
-    }
-  });
-
-  wireMdiIconSearch(form, { fallbackIcon: category.icon || FALLBACK_MDI_ICON });
 }
 
 async function confirmDeleteSidebarCategory(category) {
