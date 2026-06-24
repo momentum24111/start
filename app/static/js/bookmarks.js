@@ -610,6 +610,23 @@ export function assignBookmarkToCustomSidebarCategory(config, bookmark, category
   ensureBookmarkInSidebarCategoryOrder(config, categoryId, bookmark.id);
 }
 
+export function assignBookmarkToNavCategoryTargets(config, bookmark, targetIds) {
+  const selected = new Set((targetIds || []).map((id) => String(id || "").trim()).filter(Boolean));
+  if (!selected.size) {
+    clearCustomSidebarCategoriesFromBookmark(config, bookmark);
+    return;
+  }
+  const customCategoryIds = listCustomSidebarCategoryIds(config).filter((id) => selected.has(id));
+  if (selected.has(UNSORTED_CATEGORY_ID)) {
+    assignBookmarkToUnsorted(config, bookmark);
+  } else if (customCategoryIds.length) {
+    assignBookmarkToCustomSidebarCategory(config, bookmark, customCategoryIds[customCategoryIds.length - 1]);
+  }
+  if (selected.has(FAVORITES_CATEGORY_ID)) {
+    assignBookmarkToFavorites(bookmark);
+  }
+}
+
 export function assignBookmarkToUnsorted(config, bookmark) {
   clearCustomSidebarCategoriesFromBookmark(config, bookmark);
 }

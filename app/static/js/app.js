@@ -29,6 +29,7 @@ import {
   listSidebarCategories,
   allocateSidebarCategorySlug,
   assignBookmarkToCustomSidebarCategory,
+  assignBookmarkToNavCategoryTargets,
   removeSidebarCategoryFromConfig,
   deleteSidebarCategoryFromConfig,
   getHomepageCategories,
@@ -132,7 +133,15 @@ const state = {
 
 const CATEGORY_METADATA_TOAST_ID = "category-metadata-reload";
 const SIDEBAR_MOBILE_BREAKPOINT = "(max-width: 900px)";
+const MOBILE_BOOKMARK_BREAKPOINT = "(max-width: 650px)";
+const NAV_LONG_PRESS_MS = 500;
+const NAV_LONG_PRESS_MOVE_THRESHOLD = 10;
 let sidebarMobileQuery = null;
+let mobileBookmarkQuery = null;
+let navLongPressTimer = null;
+let navLongPressStart = null;
+let navLongPressItemId = null;
+let navLongPressTriggered = false;
 let sidebarOpenBeforeDrag = null;
 let sidebarTooltipEl = null;
 let sidebarTooltipAnchor = null;
@@ -888,14 +897,21 @@ function applyNavSelectionStateToDom() {
 function updateNavSelectionToolbar() {
   const bar = elements.navView?.querySelector(".nav-view-header__selection-actions");
   if (!bar) return;
-  const deleteButton = bar.querySelector("[data-nav-select-delete]");
-  if (!(deleteButton instanceof HTMLElement)) return;
   const count = navSelectedBookmarkIds.size;
   const visible = navSelectionMode && count > 0;
-  deleteButton.classList.toggle("hidden", !visible);
-  const label = deleteButton.querySelector(".btn__label");
-  if (label) {
-    label.textContent = interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(count) });
+  const deleteButton = bar.querySelector("[data-nav-select-delete]");
+  if (deleteButton instanceof HTMLElement) {
+    deleteButton.classList.toggle("hidden", !visible);
+    const label = deleteButton.querySelector(".btn__label");
+    if (label) {
+      label.textContent = interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(count) });
+    }
+  }
+  const assignButton = bar.querySelector("[data-nav-select-assign]");
+  if (assignButton instanceof HTMLElement) {
+    assignButton.classList.toggle("hidden", !visible || !isMobileBookmarkLayout());
+    const label = assignButton.querySelector(".btn__label");
+    if (label) label.textContent = t("ui.assignSelectedBookmarks");
   }
 }
 
@@ -977,15 +993,138 @@ function clearAllNavBookmarkSelection() {
   applyNavSelectionStateToDom();
 }
 
-function setNavSelectionMode(active) {
-  if (navSelectionMode === active) return;
+function setNavSelectionMode(active, { initialBookmarkId = null } = {}) {
+  if (navSelectionMode === active && !initialBookmarkId) return;
   navSelectionMode = active;
   if (!active) {
     navSelectedBookmarkIds.clear();
     navSelectionAnchorId = null;
     navSelectionPreviewIds.clear();
+  } else if (initialBookmarkId) {
+    navSelectedBookmarkIds.clear();
+    navSelectedBookmarkIds.add(initialBookmarkId);
+    navSelectionAnchorId = initialBookmarkId;
+    navSelectionPreviewIds.clear();
   }
   render();
+}
+
+function getAssignableNavCategoryOptions() {
+  const options = [
+    { id: NAV_FAVORITES, label: t("ui.navFavorites"), icon: "star" },
+    { id: NAV_UNSORTED, label: t("ui.navUnsorted"), icon: "folder-outline" }
+  ];
+  for (const category of getSidebarCategories(state.config)) {
+    options.push({
+      id: category.id,
+      label: category.name,
+      icon: category.icon || FALLBACK_MDI_ICON
+    });
+  }
+  return options;
+}
+
+async function openAssignSelectedBookmarksModal() {
+  if (!navSelectionMode || navSelectedBookmarkIds.size === 0) return;
+  const bookmarkIds = [...navSelectedBookmarkIds];
+  const body = document.createElement("div");
+  body.className = "nav-assign-categories";
+  const options = getAssignableNavCategoryOptions();
+  body.innerHTML = `
+    <p class="nav-assign-categories__lead">${escapeHtml(interpolateLabel(t("ui.assignSelectedBookmarksLead"), { count: String(bookmarkIds.length) }))}</p>
+    <div class="nav-assign-categories__options" role="group" aria-label="${escapeHtml(t("ui.assignSelectedBookmarks"))}">
+      ${options.map((option) => `
+        <label class="theme-checkbox nav-assign-categories__option" data-nav-assign-option="${escapeHtml(option.id)}">
+          <input type="checkbox" class="theme-checkbox__input" name="navAssignCategory" value="${escapeHtml(option.id)}" />
+          <span class="theme-checkbox__box" aria-hidden="true"></span>
+          <span class="nav-assign-categories__option-icon" aria-hidden="true">${mdiIcon(option.icon)}</span>
+          <span class="theme-checkbox__label">${escapeHtml(option.label)}</span>
+        </label>
+      `).join("")}
+    </div>
+  `;
+
+  await showModal({
+    title: t("ui.assignSelectedBookmarks"),
+    content: body,
+    saveLabel: t("ui.assignSelectedBookmarksConfirm"),
+    cancelLabel: t("ui.cancel"),
+    modalClass: "modal--nav-assign",
+    onSave: async () => {
+      const selectedCategoryIds = [...body.querySelectorAll("input[name='navAssignCategory']:checked")]
+        .map((input) => input.value)
+        .filter(Boolean);
+      pushUndo();
+      for (const bookmarkId of bookmarkIds) {
+        const bookmark = findBookmarkById(state.config, bookmarkId);
+        if (!bookmark) continue;
+        assignBookmarkToNavCategoryTargets(state.config, bookmark, selectedCategoryIds);
+      }
+      await persistConfig();
+      pruneNavSelectionToVisible();
+      applyNavSelectionStateToDom();
+      updateNavSelectionToolbar();
+      refreshNavBookmarkList();
+    }
+  });
+}
+
+function clearNavLongPress() {
+  if (navLongPressTimer) {
+    window.clearTimeout(navLongPressTimer);
+    navLongPressTimer = null;
+  }
+  navLongPressStart = null;
+  navLongPressItemId = null;
+}
+
+function handleNavBookmarkLongPress(bookmarkId) {
+  if (!bookmarkId || shouldShowCategoryGrid(getActiveNavId())) return;
+  if (!navSelectionMode) {
+    setNavSelectionMode(true, { initialBookmarkId: bookmarkId });
+    return;
+  }
+  const anchor = navSelectionAnchorId
+    || (navSelectedBookmarkIds.size ? [...navSelectedBookmarkIds][0] : null);
+  if (anchor && anchor !== bookmarkId) {
+    selectNavBookmarkRange(anchor, bookmarkId);
+  } else if (!navSelectedBookmarkIds.has(bookmarkId)) {
+    toggleNavBookmarkSelection(bookmarkId);
+  }
+  clearNavSelectionPreview();
+  applyNavSelectionStateToDom();
+}
+
+function handleNavBookmarkTouchStart(event) {
+  if (!isMobileBookmarkLayout()) return;
+  if (!(event.target instanceof Element)) return;
+  if (isNavSelectionInteractionTarget(event.target)) return;
+  const item = event.target.closest(".bookmark-item--nav[data-bookmark-id]");
+  if (!(item instanceof HTMLElement) || !elements.navView?.contains(item)) return;
+  const touch = event.touches[0];
+  if (!touch) return;
+  clearNavLongPress();
+  navLongPressTriggered = false;
+  navLongPressStart = { x: touch.clientX, y: touch.clientY };
+  navLongPressItemId = item.dataset.bookmarkId || null;
+  navLongPressTimer = window.setTimeout(() => {
+    navLongPressTriggered = true;
+    if (typeof navigator.vibrate === "function") navigator.vibrate(10);
+    handleNavBookmarkLongPress(navLongPressItemId);
+  }, NAV_LONG_PRESS_MS);
+}
+
+function handleNavBookmarkTouchMove(event) {
+  if (!navLongPressStart) return;
+  const touch = event.touches[0];
+  if (!touch) return;
+  const dx = touch.clientX - navLongPressStart.x;
+  const dy = touch.clientY - navLongPressStart.y;
+  if (Math.hypot(dx, dy) > NAV_LONG_PRESS_MOVE_THRESHOLD) clearNavLongPress();
+}
+
+function handleNavBookmarkTouchEnd() {
+  clearNavLongPress();
 }
 
 function isNavSelectionInteractionTarget(target) {
@@ -996,6 +1135,12 @@ function isNavSelectionInteractionTarget(target) {
 }
 
 function handleNavBookmarkSelectionClick(event) {
+  if (navLongPressTriggered) {
+    navLongPressTriggered = false;
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   if (!navSelectionMode) return;
   if (isNavSelectionInteractionTarget(event.target)) return;
   const item = event.target.closest?.(".bookmark-item[data-bookmark-id]");
@@ -1029,6 +1174,17 @@ function ensureNavSelectionEvents() {
   document.addEventListener("keydown", handleNavDeleteSelectedShortcut);
   document.addEventListener("keyup", (event) => {
     if (event.key === "Shift") clearNavSelectionPreview();
+  });
+  document.addEventListener("touchstart", handleNavBookmarkTouchStart, { passive: true });
+  document.addEventListener("touchmove", handleNavBookmarkTouchMove, { passive: true });
+  document.addEventListener("touchend", handleNavBookmarkTouchEnd, { passive: true });
+  document.addEventListener("touchcancel", handleNavBookmarkTouchEnd, { passive: true });
+  document.addEventListener("contextmenu", (event) => {
+    if (!isMobileBookmarkLayout()) return;
+    const item = event.target.closest?.(".bookmark-item--nav[data-bookmark-id]");
+    if (item instanceof HTMLElement && elements.navView?.contains(item)) {
+      event.preventDefault();
+    }
   });
 }
 
@@ -1642,7 +1798,13 @@ function ensureSidebarBackdrop() {
 }
 
 function isSidebarMobileLayout() {
+  sidebarMobileQuery ??= window.matchMedia(SIDEBAR_MOBILE_BREAKPOINT);
   return Boolean(sidebarMobileQuery?.matches);
+}
+
+function isMobileBookmarkLayout() {
+  mobileBookmarkQuery ??= window.matchMedia(MOBILE_BOOKMARK_BREAKPOINT);
+  return Boolean(mobileBookmarkQuery?.matches);
 }
 
 function syncSidebarBackdrop() {
@@ -2726,6 +2888,13 @@ function renderNavSelectionActions() {
       variant: "btn--ghost",
       className: "btn--compact"
     })}
+    ${isMobileBookmarkLayout() ? button({
+      label: t("ui.assignSelectedBookmarks"),
+      icon: mdiIcon("folder-plus", "inline-icon"),
+      dataAttr: "data-nav-select-assign",
+      variant: "btn--ghost",
+      className: `btn--compact${selectedCount > 0 ? "" : " hidden"}`
+    }) : ""}
     ${button({
       label: interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(selectedCount) }),
       icon: iconSvg(ICONS.trash, "inline-icon"),
@@ -2742,6 +2911,9 @@ function renderNavSelectionActions() {
   });
   bar.querySelector("[data-nav-select-delete]")?.addEventListener("click", () => {
     void requestDeleteSelectedNavBookmarks();
+  });
+  bar.querySelector("[data-nav-select-assign]")?.addEventListener("click", () => {
+    void openAssignSelectedBookmarksModal();
   });
   return bar;
 }
@@ -3038,6 +3210,9 @@ function refreshStaticLocalizedTexts() {
     entry.textContent = t("ui.selectNone");
   });
   updateNavSelectionToolbar();
+  elements.navView?.querySelectorAll("[data-nav-select-assign] .btn__label").forEach((entry) => {
+    entry.textContent = t("ui.assignSelectedBookmarks");
+  });
   document.querySelectorAll("[data-add-bookmark] .service-name").forEach((entry) => {
     entry.textContent = t("ui.addBookmark");
   });

@@ -76,6 +76,8 @@ body {
   --sidebar-category-delete-hint-fg: #a8b6c5;
   --sidebar-category-delete-warning-fg: #ee6a6a;
   --toggle-switch-label-fg: #ecf2fb;
+  --nav-assign-lead-fg: #a8b6c5;
+  --nav-assign-option-hover-bg: #2a3746;
   --toast-bg: #212c38;
   --toast-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
   --toast-detail-fg: #a8b6c5;
