@@ -2309,8 +2309,10 @@ function patchSidebarCategoryLink(container, { navId, label, count, iconName }) 
   container.dataset.sidebarDrop = navId;
   const main = container.querySelector(":scope > .sidebar-link__main");
   main?.classList.toggle("is-active", isActive);
-  main?.querySelector(".sidebar-link__label").textContent = label;
-  container.querySelector(".sidebar-link__count").textContent = String(count);
+  const labelEl = main?.querySelector(".sidebar-link__label");
+  if (labelEl) labelEl.textContent = label;
+  const countEl = container.querySelector(".sidebar-link__count");
+  if (countEl) countEl.textContent = String(count);
   if (container.dataset.sidebarIcon !== iconName) {
     container.querySelector(".sidebar-link__icon").innerHTML = mdiIcon(iconName);
     container.dataset.sidebarIcon = iconName;
