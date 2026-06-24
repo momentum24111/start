@@ -147,7 +147,7 @@ let sidebarTooltipEl = null;
 let sidebarTooltipAnchor = null;
 
 function categoryEffectiveCollapsed(category) {
-  if (state.editMode) return false;
+  if (isHomepageEditMode()) return false;
   if (Object.hasOwn(state.sessionCategoryCollapsed, category.id)) {
     return Boolean(state.sessionCategoryCollapsed[category.id]);
   }
@@ -165,7 +165,8 @@ const elements = {
   navToggle: document.getElementById("nav-toggle-btn"),
   sidebar: document.getElementById("sidebar"),
   sidebarSystem: document.getElementById("sidebar-system"),
-  sidebarCategories: document.getElementById("sidebar-categories")
+  sidebarCategories: document.getElementById("sidebar-categories"),
+  sidebarFooter: document.getElementById("sidebar-footer")
 };
 
 const ICONS = {
@@ -550,6 +551,7 @@ async function confirmDeleteBookmark(bookmark) {
     content: body,
     saveLabel: t("ui.delete"),
     cancelLabel: t("ui.cancel"),
+    initialFocus: "save",
     onSave: async () => {
       confirmed = true;
     }
@@ -891,28 +893,32 @@ function applyNavSelectionStateToDom() {
     const checkbox = item.querySelector("[data-bookmark-select]");
     if (checkbox instanceof HTMLInputElement) checkbox.checked = selected;
   });
-  updateNavSelectionToolbar();
+  updateNavSelectionBar();
 }
 
-function updateNavSelectionToolbar() {
-  const bar = elements.navView?.querySelector(".nav-view-header__selection-actions");
+function updateNavSelectionBar() {
+  const panel = elements.navView?.querySelector(".nav-view-panel");
+  panel?.classList.toggle("is-selection-mode", navSelectionMode);
+  const bar = elements.navView?.querySelector("[data-nav-selection-bar]");
   if (!bar) return;
   const count = navSelectedBookmarkIds.size;
-  const visible = navSelectionMode && count > 0;
-  const deleteButton = bar.querySelector("[data-nav-select-delete]");
-  if (deleteButton instanceof HTMLElement) {
-    deleteButton.classList.toggle("hidden", !visible);
-    const label = deleteButton.querySelector(".btn__label");
-    if (label) {
-      label.textContent = interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(count) });
-    }
-  }
-  const assignButton = bar.querySelector("[data-nav-select-assign]");
-  if (assignButton instanceof HTMLElement) {
-    assignButton.classList.toggle("hidden", !visible || !isMobileBookmarkLayout());
-    const label = assignButton.querySelector(".btn__label");
-    if (label) label.textContent = t("ui.assignSelectedBookmarks");
-  }
+  const selectionActionsEnabled = count > 0;
+  syncNavSelectionActionButton(bar.querySelector("[data-nav-select-all]"), {
+    label: t("ui.selectAll"),
+    disabled: false
+  });
+  syncNavSelectionActionButton(bar.querySelector("[data-nav-select-none]"), {
+    label: t("ui.selectNone"),
+    disabled: false
+  });
+  syncNavSelectionActionButton(bar.querySelector("[data-nav-select-assign]"), {
+    label: t("ui.assignSelectedBookmarks"),
+    disabled: !selectionActionsEnabled
+  });
+  syncNavSelectionActionButton(bar.querySelector("[data-nav-select-delete]"), {
+    label: getNavSelectionDeleteLabel(count),
+    disabled: !selectionActionsEnabled
+  });
 }
 
 async function confirmDeleteSelectedNavBookmarks() {
@@ -926,7 +932,7 @@ async function confirmDeleteSelectedNavBookmarks() {
     content: body,
     saveLabel: t("ui.delete"),
     cancelLabel: t("ui.cancel"),
-    submitOnEnter: false,
+    initialFocus: "save",
     onSave: async () => {
       confirmed = true;
     }
@@ -1063,7 +1069,7 @@ async function openAssignSelectedBookmarksModal() {
       await persistConfig();
       pruneNavSelectionToVisible();
       applyNavSelectionStateToDom();
-      updateNavSelectionToolbar();
+      updateNavSelectionBar();
       refreshNavBookmarkList();
     }
   });
@@ -1242,7 +1248,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       view: normalizedView,
       homepage,
       navList: !homepage,
-      editMode: state.editMode,
+      editMode: isHomepageEditMode(),
       config: state.config,
       showUnsortedBrowserImportPath: navId === NAV_UNSORTED && shouldShowUnsortedBrowserImportPath(bookmark, state.config),
       showCategoryChips: navId !== NAV_UNSORTED,
@@ -1293,6 +1299,7 @@ function runGlobalShortcutAction(actionId) {
     return;
   }
   if (actionId === "toggleEditMode") {
+    if (!shouldShowCategoryGrid(getActiveNavId())) return;
     elements.edit.click();
     return;
   }
@@ -1503,8 +1510,41 @@ function iconSvg(path, extraClass = "") {
   return `<svg class="${extraClass}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${path}"></path></svg>`;
 }
 
-function button({ label = "", icon, dataAttr = "", variant = "", className = "", iconOnly = false }) {
-  return `<button type="button" class="btn ${variant} ${className} ${iconOnly ? "btn--icon" : ""}" ${dataAttr}>${icon ? `<span class="btn__icon">${icon}</span>` : ""}${iconOnly ? "" : `<span class="btn__label">${label}</span>`}</button>`;
+function button({
+  label = "",
+  icon,
+  dataAttr = "",
+  variant = "",
+  className = "",
+  iconOnly = false,
+  ariaLabel = "",
+  title = "",
+  disabled = false
+} = {}) {
+  const aria = ariaLabel ? ` aria-label="${escapeHtml(ariaLabel)}"` : "";
+  const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+  const disabledAttr = disabled ? " disabled" : "";
+  return `<button type="button" class="btn ${variant} ${className} ${iconOnly ? "btn--icon" : ""}" ${dataAttr}${aria}${titleAttr}${disabledAttr}>${icon ? `<span class="btn__icon">${icon}</span>` : ""}${iconOnly ? "" : `<span class="btn__label">${label}</span>`}</button>`;
+}
+
+function getNavSelectionDeleteLabel(count) {
+  if (count > 0) {
+    return interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(count) });
+  }
+  return t("ui.delete");
+}
+
+function syncNavSelectionActionButton(button, { label, disabled = false } = {}) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  button.disabled = Boolean(disabled);
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  const labelEl = button.querySelector(".btn__label");
+  if (labelEl) labelEl.textContent = label;
+}
+
+function isHomepageEditMode() {
+  return state.editMode && shouldShowCategoryGrid(getActiveNavId());
 }
 
 function isEditModeInUrl() {
@@ -1514,7 +1554,8 @@ function isEditModeInUrl() {
 function buildAppUrl({ navId = getActiveNavId(), editMode = state.editMode } = {}) {
   const url = new URL(window.location.href);
   url.hash = navIdToHash(state.config, navId);
-  if (editMode) url.searchParams.set(EDIT_MODE_URL_KEY, "1");
+  const effectiveEditMode = editMode && navId === NAV_ALL;
+  if (effectiveEditMode) url.searchParams.set(EDIT_MODE_URL_KEY, "1");
   else url.searchParams.delete(EDIT_MODE_URL_KEY);
   return url;
 }
@@ -1530,7 +1571,7 @@ function syncAppUrl({ navId = getActiveNavId(), editMode = state.editMode, histo
 }
 
 function applyStateFromUrl({ normalizeInvalidHash = false } = {}) {
-  const urlEditMode = isEditModeInUrl();
+  let urlEditMode = isEditModeInUrl();
   const parsedNavId = parseNavIdFromHash(window.location.hash, state.config);
   const nextNavId = resolveNavIdFromHash(state.config, window.location.hash, state.settings);
   let changed = false;
@@ -1540,6 +1581,15 @@ function applyStateFromUrl({ normalizeInvalidHash = false } = {}) {
     resetNavSelection();
     state.settings.activeNavId = nextNavId;
     changed = true;
+  }
+
+  if (urlEditMode && nextNavId !== NAV_ALL) {
+    urlEditMode = false;
+    restoreEditModeCollapsedSnapshot();
+    editModeHistoryPushed = false;
+    if (isEditModeInUrl()) {
+      syncAppUrl({ navId: nextNavId, editMode: false, historyMode: "replace" });
+    }
   }
 
   if (urlEditMode !== state.editMode) {
@@ -1579,6 +1629,7 @@ function restoreEditModeCollapsedSnapshot() {
 }
 
 function setEditMode(nextEditMode, { syncHistory = true } = {}) {
+  if (nextEditMode && !shouldShowCategoryGrid(getActiveNavId())) return;
   if (nextEditMode === state.editMode) return;
   if (syncHistory && !nextEditMode && editModeHistoryPushed) {
     editModeHistoryPushed = false;
@@ -1639,7 +1690,7 @@ async function bootstrap() {
   applyTheme(state.settings.theme);
   applyCategoryAccentStrength(state.settings.categoryAccentStrength);
   applyElementSize(state.settings.elementSize);
-  if (isEditModeInUrl()) {
+  if (isEditModeInUrl() && shouldShowCategoryGrid(state.settings.activeNavId)) {
     state.editMode = true;
     captureEditModeCollapsedSnapshot();
   }
@@ -1780,6 +1831,7 @@ function queryNavigationElements() {
   elements.sidebar = document.getElementById("sidebar");
   elements.sidebarSystem = document.getElementById("sidebar-system");
   elements.sidebarCategories = document.getElementById("sidebar-categories");
+  elements.sidebarFooter = document.getElementById("sidebar-footer");
 }
 
 function ensureSidebarBackdrop() {
@@ -1918,7 +1970,7 @@ function bindSidebarTooltipEvents() {
   elements.sidebar?.addEventListener("focusout", () => {
     hideSidebarTooltip();
   });
-  elements.sidebar?.querySelector(".sidebar-nav")?.addEventListener("scroll", hideSidebarTooltip, { passive: true });
+  elements.sidebar?.querySelector(".sidebar-nav__scroll, .sidebar-nav")?.addEventListener("scroll", hideSidebarTooltip, { passive: true });
   window.addEventListener("resize", hideSidebarTooltip);
 }
 
@@ -1955,8 +2007,11 @@ function ensureSidebarShell() {
     sidebar.innerHTML = `
       <div class="sidebar-header"></div>
       <nav class="sidebar-nav" aria-label="Navigation">
-        <ul id="sidebar-system" class="sidebar-list"></ul>
-        <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
+        <div class="sidebar-nav__scroll">
+          <ul id="sidebar-system" class="sidebar-list"></ul>
+          <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
+        </div>
+        <div class="sidebar-footer" id="sidebar-footer"></div>
       </nav>
     `;
     document.querySelector(".app-shell")?.prepend(sidebar);
@@ -1988,6 +2043,7 @@ function ensureSidebarShell() {
   }
 
   ensureSidebarHeader();
+  ensureSidebarNavLayout();
   if (elements.navToggle) {
     elements.navToggle.setAttribute("aria-controls", "sidebar");
   }
@@ -2031,19 +2087,24 @@ function bindSidebarEvents() {
     if (categoryMenuTrigger instanceof HTMLElement && elements.sidebar?.contains(categoryMenuTrigger)) {
       event.preventDefault();
       event.stopPropagation();
-      const row = categoryMenuTrigger.closest(".sidebar-link-row");
-      const navId = row?.querySelector(".sidebar-link[data-nav-id]")?.dataset.navId;
+      const container = categoryMenuTrigger.closest(".sidebar-link--category");
+      const navId = container?.dataset.navId;
       const category = findSidebarCategoryById(state.config, navId);
       if (!category) return;
       openSidebarCategoryMenu(categoryMenuTrigger, category);
       return;
     }
-    const link = event.target.closest(".sidebar-link[data-nav-id]");
+    const link = event.target.closest(".sidebar-link[data-nav-id], .sidebar-link__main");
     if (!(link instanceof HTMLElement)) return;
     if (!elements.sidebar?.contains(link)) return;
-    if (link.classList.contains("sidebar-link--add") || link.classList.contains("sidebar-link--draft")) return;
+    const categoryLink = link.closest(".sidebar-link--category");
+    if (categoryLink instanceof HTMLElement) {
+      if (event.target.closest("[data-sidebar-category-menu-trigger], .sidebar-link__meta")) return;
+    }
+    const navLink = categoryLink || link;
+    if (navLink.classList.contains("sidebar-link--add") || navLink.classList.contains("sidebar-link--draft")) return;
     event.preventDefault();
-    const navId = link.dataset.navId;
+    const navId = navLink.dataset.navId;
     if (!navId) return;
     void (async () => {
       await selectNav(navId);
@@ -2142,6 +2203,11 @@ async function selectNav(navId, { syncHistory = true, historyMode = "push" } = {
   }
   bookmarkSortDropdownOpen = false;
   resetNavSelection();
+  if (state.editMode && nextNavId !== NAV_ALL) {
+    restoreEditModeCollapsedSnapshot();
+    state.editMode = false;
+    editModeHistoryPushed = false;
+  }
   state.settings.activeNavId = nextNavId;
   if (syncHistory) {
     syncAppUrl({ navId: nextNavId, historyMode });
@@ -2189,12 +2255,76 @@ function isSidebarLinkStructureValid(button) {
   return Boolean(iconWrap && details && labelEl && countEl);
 }
 
-function isSidebarCategoryRowStructureValid(row) {
-  if (!(row instanceof HTMLElement)) return false;
-  const link = row.querySelector(":scope > .sidebar-link[data-nav-id]");
-  const menuTrigger = row.querySelector(":scope > [data-sidebar-category-menu-trigger]");
-  const menuPanel = row.querySelector(":scope > [data-sidebar-category-menu-panel]");
-  return isSidebarLinkStructureValid(link) && menuTrigger instanceof HTMLButtonElement && menuPanel instanceof HTMLElement;
+function isSidebarCategoryLinkStructureValid(container) {
+  if (!(container instanceof HTMLElement)) return false;
+  if (!container.classList.contains("sidebar-link--category")) return false;
+  const main = container.querySelector(":scope > .sidebar-link__main");
+  const meta = container.querySelector(":scope > .sidebar-link__meta");
+  const menuTrigger = container.querySelector(":scope > [data-sidebar-category-menu-trigger]");
+  const menuPanel = container.querySelector(":scope > [data-sidebar-category-menu-panel]");
+  const iconWrap = main?.querySelector(":scope > .sidebar-link__icon");
+  const labelEl = main?.querySelector(":scope > .sidebar-link__label");
+  const countEl = meta?.querySelector(":scope > .sidebar-link__count");
+  return Boolean(main && meta && iconWrap && labelEl && countEl && menuTrigger instanceof HTMLButtonElement && menuPanel instanceof HTMLElement);
+}
+
+function buildSidebarCategoryLink(container, { navId, label, count, iconName }) {
+  const isActive = getActiveNavId() === navId;
+  container.className = `sidebar-link sidebar-link--category ${isActive ? "is-active" : ""}`;
+  container.dataset.navId = navId;
+  container.dataset.sidebarDrop = navId;
+  container.dataset.sidebarIcon = iconName;
+  container.innerHTML = `
+    <button type="button" class="sidebar-link__main">
+      <span class="sidebar-link__icon">${mdiIcon(iconName)}</span>
+      <span class="sidebar-link__label">${escapeHtml(label)}</span>
+    </button>
+    <span class="sidebar-link__meta">
+      <span class="sidebar-link__count">${escapeHtml(String(count))}</span>
+      <button
+        type="button"
+        class="sidebar-category-menu__trigger"
+        data-sidebar-category-menu-trigger
+        aria-label="${escapeHtml(t("ui.sidebarCategoryActions"))}"
+        aria-haspopup="menu"
+        aria-expanded="false"
+      >
+        <span class="sidebar-category-menu__trigger-icon" aria-hidden="true">${iconSvg(ICONS.dotsVertical, "inline-icon")}</span>
+      </button>
+    </span>
+    <div class="sidebar-category-menu__panel sidebar-category-menu__panel--source hidden" data-sidebar-category-menu-panel role="menu" aria-hidden="true">
+      ${buildSidebarCategoryMenuPanel()}
+    </div>
+  `;
+}
+
+function patchSidebarCategoryLink(container, { navId, label, count, iconName }) {
+  if (!isSidebarCategoryLinkStructureValid(container)) {
+    buildSidebarCategoryLink(container, { navId, label, count, iconName });
+    return;
+  }
+  const isActive = getActiveNavId() === navId;
+  container.className = `sidebar-link sidebar-link--category ${isActive ? "is-active" : ""}`;
+  container.dataset.navId = navId;
+  container.dataset.sidebarDrop = navId;
+  const main = container.querySelector(":scope > .sidebar-link__main");
+  main?.classList.toggle("is-active", isActive);
+  main?.querySelector(".sidebar-link__label").textContent = label;
+  container.querySelector(".sidebar-link__count").textContent = String(count);
+  if (container.dataset.sidebarIcon !== iconName) {
+    container.querySelector(".sidebar-link__icon").innerHTML = mdiIcon(iconName);
+    container.dataset.sidebarIcon = iconName;
+  }
+}
+
+function ensureSidebarCategoryLink(li) {
+  let container = li.querySelector(":scope > .sidebar-link--category");
+  if (!(container instanceof HTMLElement)) {
+    li.replaceChildren();
+    container = document.createElement("div");
+    li.append(container);
+  }
+  return container;
 }
 
 function buildSidebarLink(button, { navId, label, count, iconName }) {
@@ -2238,45 +2368,6 @@ function buildSidebarCategoryMenuPanel() {
   `;
 }
 
-function buildSidebarCategoryRow(row, { navId, label, count, iconName }) {
-  row.className = "sidebar-link-row";
-  row.innerHTML = `
-    <button type="button" class="sidebar-link"></button>
-    <button
-      type="button"
-      class="btn btn--ghost btn--icon sidebar-category-menu__trigger"
-      data-sidebar-category-menu-trigger
-      aria-label="${escapeHtml(t("ui.sidebarCategoryActions"))}"
-      aria-haspopup="menu"
-      aria-expanded="false"
-    >
-      <span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.dotsVertical, "inline-icon")}</span>
-    </button>
-    <div class="sidebar-category-menu__panel sidebar-category-menu__panel--source hidden" data-sidebar-category-menu-panel role="menu" aria-hidden="true">
-      ${buildSidebarCategoryMenuPanel()}
-    </div>
-  `;
-  buildSidebarLink(row.querySelector(".sidebar-link"), { navId, label, count, iconName });
-}
-
-function patchSidebarCategoryRow(row, { navId, label, count, iconName }) {
-  if (!isSidebarCategoryRowStructureValid(row)) {
-    buildSidebarCategoryRow(row, { navId, label, count, iconName });
-    return;
-  }
-  patchSidebarLink(row.querySelector(".sidebar-link"), { navId, label, count, iconName });
-}
-
-function ensureSidebarCategoryItemRow(li) {
-  let row = li.querySelector(":scope > .sidebar-link-row");
-  if (!(row instanceof HTMLElement)) {
-    li.replaceChildren();
-    row = document.createElement("div");
-    li.append(row);
-  }
-  return row;
-}
-
 function ensureSidebarItemButton(li) {
   let button = li.querySelector(":scope > .sidebar-link");
   if (!(button instanceof HTMLButtonElement)) {
@@ -2310,7 +2401,7 @@ function syncSidebarNavList(list, entries, { showCategoryMenu = false } = {}) {
       li.classList.remove("sidebar-item--category");
     }
     if (showCategoryMenu) {
-      patchSidebarCategoryRow(ensureSidebarCategoryItemRow(li), entry);
+      patchSidebarCategoryLink(ensureSidebarCategoryLink(li), entry);
     } else {
       patchSidebarLink(ensureSidebarItemButton(li), entry);
     }
@@ -2372,41 +2463,63 @@ function renderSidebar() {
       count: getBookmarkCountForNav(state.config, category.id),
       iconName: category.icon || FALLBACK_MDI_ICON
     })),
-    { showCategoryMenu: state.editMode }
+    { showCategoryMenu: true }
   );
 
-  [...elements.sidebarCategories.children].forEach((child) => {
-    if (child instanceof HTMLElement && child.dataset.sidebarExtra === "true") {
-      child.remove();
-    }
-  });
+  renderSidebarAddCategoryTrigger();
+}
 
-  if (state.editMode) {
-    const li = renderSidebarAddCategoryTrigger();
-    li.dataset.sidebarExtra = "true";
-    elements.sidebarCategories.append(li);
+function ensureSidebarNavLayout() {
+  queryNavigationElements();
+  const nav = elements.sidebar?.querySelector(".sidebar-nav");
+  if (!nav) return;
+
+  let scroll = nav.querySelector(".sidebar-nav__scroll");
+  if (!(scroll instanceof HTMLElement)) {
+    scroll = document.createElement("div");
+    scroll.className = "sidebar-nav__scroll";
+    const lists = [...nav.querySelectorAll(":scope > .sidebar-list")];
+    lists.forEach((list) => scroll.append(list));
+    nav.prepend(scroll);
   }
+
+  let footer = nav.querySelector(".sidebar-footer");
+  if (!(footer instanceof HTMLElement)) {
+    footer = document.createElement("div");
+    footer.className = "sidebar-footer";
+    footer.id = "sidebar-footer";
+    nav.append(footer);
+  }
+  elements.sidebarFooter = footer;
 }
 
 function renderSidebarAddCategoryTrigger() {
-  const li = document.createElement("li");
-  li.className = "sidebar-item";
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "sidebar-link sidebar-link--add";
-  button.dataset.sidebarDrop = SIDEBAR_ADD_CATEGORY_DROP_ID;
-  button.innerHTML = `
-    <span class="sidebar-link__icon">${mdiIcon("plus")}</span>
-    <span class="sidebar-link__details">
-      <span class="sidebar-link__label">${escapeHtml(t("ui.addSidebarCategory"))}</span>
-      <span class="sidebar-link__count" aria-hidden="true"></span>
-    </span>
-  `;
-  button.addEventListener("click", () => {
-    openSidebarCategoryModal();
-  });
-  li.append(button);
-  return li;
+  ensureSidebarNavLayout();
+  const footer = elements.sidebarFooter;
+  if (!(footer instanceof HTMLElement)) return;
+
+  let button = footer.querySelector(".sidebar-link--add");
+  if (!(button instanceof HTMLButtonElement)) {
+    footer.replaceChildren();
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "sidebar-link sidebar-link--add";
+    button.dataset.sidebarDrop = SIDEBAR_ADD_CATEGORY_DROP_ID;
+    button.innerHTML = `
+      <span class="sidebar-link__icon">${mdiIcon("plus")}</span>
+      <span class="sidebar-link__details">
+        <span class="sidebar-link__label">${escapeHtml(t("ui.addSidebarCategory"))}</span>
+        <span class="sidebar-link__count" aria-hidden="true"></span>
+      </span>
+    `;
+    button.addEventListener("click", () => {
+      openSidebarCategoryModal();
+    });
+    footer.append(button);
+    return;
+  }
+
+  button.querySelector(".sidebar-link__label").textContent = t("ui.addSidebarCategory");
 }
 
 function createSidebarCategoryForm(category = null) {
@@ -2575,8 +2688,8 @@ function openSidebarCategoryMenu(trigger, category) {
 
   closeSidebarCategoryMenu();
 
-  const row = trigger.closest(".sidebar-link-row");
-  const sourcePanel = row?.querySelector("[data-sidebar-category-menu-panel]");
+  const container = trigger.closest(".sidebar-link--category");
+  const sourcePanel = container?.querySelector("[data-sidebar-category-menu-panel]");
   if (!(sourcePanel instanceof HTMLElement)) return;
 
   const overlay = getSidebarCategoryMenuOverlay();
@@ -2589,8 +2702,8 @@ function openSidebarCategoryMenu(trigger, category) {
   overlay.classList.remove("hidden");
   overlay.classList.add("is-open");
   trigger.setAttribute("aria-expanded", "true");
-  row?.classList.add("is-menu-open");
-  activeSidebarCategoryMenu = { trigger, row, categoryId: category.id };
+  container?.classList.add("is-menu-open");
+  activeSidebarCategoryMenu = { trigger, row: container, categoryId: category.id };
 
   requestAnimationFrame(() => {
     if (activeSidebarCategoryMenu?.trigger !== trigger) return;
@@ -2868,40 +2981,57 @@ function renderNavSelectionToggle() {
   return wrap;
 }
 
-function renderNavSelectionActions() {
+function renderNavSelectionBar() {
+  const count = navSelectedBookmarkIds.size;
+  const selectionActionsEnabled = count > 0;
+  const assignLabel = t("ui.assignSelectedBookmarks");
+  const deleteLabel = getNavSelectionDeleteLabel(count);
   const bar = document.createElement("div");
-  bar.className = "nav-view-header__selection-actions";
-  if (navSelectionMode) bar.classList.add("is-visible");
-  const selectedCount = navSelectedBookmarkIds.size;
+  bar.className = "nav-selection-bar";
+  bar.dataset.navSelectionBar = "true";
+  bar.setAttribute("role", "toolbar");
+  bar.setAttribute("aria-label", t("ui.selectMode"));
   bar.innerHTML = `
-    ${button({
-      label: t("ui.selectAll"),
-      icon: mdiIcon("select-all", "inline-icon"),
-      dataAttr: "data-nav-select-all",
-      variant: "btn--ghost",
-      className: "btn--compact"
-    })}
-    ${button({
-      label: t("ui.selectNone"),
-      icon: mdiIcon("select-off", "inline-icon"),
-      dataAttr: "data-nav-select-none",
-      variant: "btn--ghost",
-      className: "btn--compact"
-    })}
-    ${isMobileBookmarkLayout() ? button({
-      label: t("ui.assignSelectedBookmarks"),
-      icon: mdiIcon("folder-plus", "inline-icon"),
-      dataAttr: "data-nav-select-assign",
-      variant: "btn--ghost",
-      className: `btn--compact${selectedCount > 0 ? "" : " hidden"}`
-    }) : ""}
-    ${button({
-      label: interpolateLabel(t("ui.deleteSelectedBookmarks"), { count: String(selectedCount) }),
-      icon: iconSvg(ICONS.trash, "inline-icon"),
-      dataAttr: "data-nav-select-delete",
-      variant: "btn--ghost",
-      className: `btn--compact${selectedCount > 0 ? "" : " hidden"}`
-    })}
+    <div class="nav-selection-bar__inner">
+      ${button({
+        label: t("ui.selectAll"),
+        icon: mdiIcon("select-all", "inline-icon"),
+        dataAttr: "data-nav-select-all",
+        variant: "btn--ghost",
+        className: "btn--compact nav-selection-bar__btn",
+        ariaLabel: t("ui.selectAll"),
+        title: t("ui.selectAll")
+      })}
+      ${button({
+        label: t("ui.selectNone"),
+        icon: mdiIcon("select-off", "inline-icon"),
+        dataAttr: "data-nav-select-none",
+        variant: "btn--ghost",
+        className: "btn--compact nav-selection-bar__btn",
+        ariaLabel: t("ui.selectNone"),
+        title: t("ui.selectNone")
+      })}
+      ${button({
+        label: assignLabel,
+        icon: mdiIcon("folder-plus", "inline-icon"),
+        dataAttr: "data-nav-select-assign",
+        variant: "btn--ghost",
+        className: "btn--compact nav-selection-bar__btn",
+        ariaLabel: assignLabel,
+        title: assignLabel,
+        disabled: !selectionActionsEnabled
+      })}
+      ${button({
+        label: deleteLabel,
+        icon: iconSvg(ICONS.trash, "inline-icon"),
+        dataAttr: "data-nav-select-delete",
+        variant: "btn--ghost",
+        className: "btn--compact nav-selection-bar__btn",
+        ariaLabel: deleteLabel,
+        title: deleteLabel,
+        disabled: !selectionActionsEnabled
+      })}
+    </div>
   `;
   bar.querySelector("[data-nav-select-all]")?.addEventListener("click", () => {
     activateNavSelectionAndSelectAllVisible();
@@ -3085,10 +3215,10 @@ function renderNavView() {
   const viewMode = getActiveNavViewMode();
   const panel = document.createElement("section");
   panel.className = "nav-view-panel";
+  if (navSelectionMode) panel.classList.add("is-selection-mode");
 
   const header = document.createElement("div");
   header.className = "nav-view-header nav-view-header--toolbar";
-  header.append(renderNavSelectionActions());
   const actions = document.createElement("div");
   actions.className = "nav-view-header__actions";
   actions.append(renderNavSelectionToggle());
@@ -3099,6 +3229,10 @@ function renderNavView() {
   actions.append(renderViewModeToggle(viewMode, { showCategorySync: isCategoryNavId(state.config, navId) }));
   header.append(actions);
   panel.append(header);
+
+  if (navSelectionMode) {
+    panel.append(renderNavSelectionBar());
+  }
 
   const bookmarks = getActiveNavBookmarks();
   const collection = renderBookmarkCollection(bookmarks, navId, viewMode);
@@ -3118,18 +3252,19 @@ function render() {
   elements.edit.innerHTML = iconSvg(ICONS.edit, "inline-icon");
   elements.settings.innerHTML = iconSvg(ICONS.settings, "inline-icon");
   updateTopbarActionTexts();
-  elements.edit.classList.toggle("is-active", state.editMode);
-  elements.undo.classList.toggle("hidden", !state.editMode || state.undoStack.length === 0);
+  const activeNavId = getActiveNavId();
+  const showCategoryGrid = shouldShowCategoryGrid(activeNavId);
+  elements.edit.classList.toggle("is-active", isHomepageEditMode());
+  elements.edit.classList.toggle("hidden", !showCategoryGrid);
+  elements.undo.classList.toggle("hidden", !isHomepageEditMode() || state.undoStack.length === 0);
   if (elements.addBookmarkFab) {
-    elements.addBookmarkFab.classList.toggle("hidden", !state.editMode);
+    elements.addBookmarkFab.classList.toggle("hidden", !isHomepageEditMode());
     elements.addBookmarkFab.setAttribute("aria-label", t("ui.newBookmark"));
     elements.addBookmarkFab.innerHTML = iconSvg(ICONS.plus, "inline-icon");
   }
   renderSidebar();
 
-  const activeNavId = getActiveNavId();
   const viewMode = getActiveNavViewMode();
-  const showCategoryGrid = shouldShowCategoryGrid(activeNavId);
 
   if (elements.navView) elements.navView.innerHTML = "";
   elements.categories.innerHTML = "";
@@ -3148,7 +3283,7 @@ function render() {
     for (const category of getHomepageCategories(state.config)) {
       elements.categories.append(renderCategory(category));
     }
-    if (state.editMode) {
+    if (isHomepageEditMode()) {
       elements.categories.append(renderAddCategoryCard());
     }
     syncCategoryMetadataReloadBookmarkLoading();
@@ -3209,10 +3344,7 @@ function refreshStaticLocalizedTexts() {
   elements.navView?.querySelectorAll("[data-nav-select-none] .btn__label").forEach((entry) => {
     entry.textContent = t("ui.selectNone");
   });
-  updateNavSelectionToolbar();
-  elements.navView?.querySelectorAll("[data-nav-select-assign] .btn__label").forEach((entry) => {
-    entry.textContent = t("ui.assignSelectedBookmarks");
-  });
+  updateNavSelectionBar();
   document.querySelectorAll("[data-add-bookmark] .service-name").forEach((entry) => {
     entry.textContent = t("ui.addBookmark");
   });

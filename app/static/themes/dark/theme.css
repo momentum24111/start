@@ -73,11 +73,18 @@ body {
   --sidebar-category-menu-item-danger-fg: #ee6a6a;
   --sidebar-category-menu-trigger-active-bg: #2a3746;
   --sidebar-category-menu-trigger-active-fg: #ecf2fb;
+  --sidebar-category-menu-trigger-fg: #a8b6c5;
+  --sidebar-category-menu-trigger-opacity: 0.72;
   --sidebar-category-delete-hint-fg: #a8b6c5;
   --sidebar-category-delete-warning-fg: #ee6a6a;
   --toggle-switch-label-fg: #ecf2fb;
   --nav-assign-lead-fg: #a8b6c5;
   --nav-assign-option-hover-bg: #2a3746;
+  --nav-selection-bar-bg: #212c38;
+  --nav-selection-bar-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+  --nav-selection-bar-border: color-mix(in srgb, var(--text) 10%, transparent);
+  --nav-selection-bar-radius: 999px;
+  --nav-selection-bar-btn-size: 2.25rem;
   --toast-bg: #212c38;
   --toast-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
   --toast-detail-fg: #a8b6c5;
@@ -235,4 +242,9 @@ body {
 #metadata-status.is-error,
 #favicon-status.is-error {
   color: var(--metadata-status-error-fg);
+}
+
+.btn:focus-visible,
+.sidebar-category-menu__trigger:focus-visible {
+  box-shadow: var(--focus-ring);
 }

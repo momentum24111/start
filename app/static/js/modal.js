@@ -24,6 +24,66 @@ function keyHandler(event) {
   }
 }
 
+function hasActiveTextSelection() {
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed) return false;
+  return Boolean(String(selection).trim());
+}
+
+function focusModalInitialTarget(modal, { showSave = true, showCancel = true, initialFocus = "save" } = {}) {
+  const saveButton = modal.querySelector("[data-save]");
+  const cancelButton = modal.querySelector("[data-cancel]");
+  let target = null;
+  if (initialFocus === "save" && showSave && saveButton instanceof HTMLElement) {
+    target = saveButton;
+  } else if (initialFocus === "cancel" && showCancel && cancelButton instanceof HTMLElement) {
+    target = cancelButton;
+  } else if (showSave && saveButton instanceof HTMLElement) {
+    target = saveButton;
+  } else if (showCancel && cancelButton instanceof HTMLElement) {
+    target = cancelButton;
+  }
+  if (target) {
+    target.focus();
+    return;
+  }
+  modal.focus();
+}
+
+function bindOverlayDismiss(overlay, close) {
+  let overlayPointerId = null;
+  let overlayPointerX = 0;
+  let overlayPointerY = 0;
+
+  const resetOverlayPointer = () => {
+    overlayPointerId = null;
+  };
+
+  overlay.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target !== overlay) return;
+    overlayPointerId = event.pointerId;
+    overlayPointerX = event.clientX;
+    overlayPointerY = event.clientY;
+  });
+
+  overlay.addEventListener("pointerup", (event) => {
+    if (event.pointerId !== overlayPointerId) {
+      resetOverlayPointer();
+      return;
+    }
+    const startedOnOverlay = overlayPointerId !== null;
+    resetOverlayPointer();
+    if (!startedOnOverlay || event.target !== overlay) return;
+    if (hasActiveTextSelection()) return;
+    const dx = Math.abs(event.clientX - overlayPointerX);
+    const dy = Math.abs(event.clientY - overlayPointerY);
+    if (dx > 4 || dy > 4) return;
+    close("cancel");
+  });
+
+  overlay.addEventListener("pointercancel", resetOverlayPointer);
+}
+
 export function dismissActiveModalListeners() {
   while (modalStack.length) {
     const entry = modalStack.pop();
@@ -54,7 +114,7 @@ export function showStatusModal({ title = "", content }) {
   overlay.querySelector(".modal-content").append(content);
   root.innerHTML = "";
   root.append(overlay);
-  modal.focus();
+  focusModalInitialTarget(modal, { showSave: false, showCancel: false });
 }
 
 async function closeModal(reason = "cancel") {
@@ -73,7 +133,11 @@ async function closeModal(reason = "cancel") {
   if (modalStack.length > 0) {
     activeModal = modalStack.pop();
     activeModal.overlay.classList.remove("is-behind");
-    activeModal.modal.focus();
+    focusModalInitialTarget(activeModal.modal, {
+      showSave: activeModal.showSave,
+      showCancel: activeModal.showCancel,
+      initialFocus: activeModal.initialFocus
+    });
     document.addEventListener("keydown", keyHandler);
     isClosing = false;
     return;
@@ -97,7 +161,8 @@ export function showModal({
   showCancel = true,
   cancelVariant = "btn--ghost",
   submitOnEnter = true,
-  modalClass = ""
+  modalClass = "",
+  initialFocus = "save"
 }) {
   const root = document.getElementById("modal-root");
   const overlay = document.createElement("div");
@@ -122,16 +187,7 @@ export function showModal({
   if (modalClass) modal.classList.add(modalClass);
   overlay.querySelector(".modal-content").append(content);
 
-  let overlayPointerDown = false;
-  overlay.addEventListener("pointerdown", (event) => {
-    overlayPointerDown = event.target === overlay;
-  });
-  overlay.addEventListener("pointerup", (event) => {
-    if (overlayPointerDown && event.target === overlay) {
-      closeModal("cancel");
-    }
-    overlayPointerDown = false;
-  });
+  bindOverlayDismiss(overlay, closeModal);
 
   const save = async () => {
     if (!activeModal || isClosing) return;
@@ -168,7 +224,7 @@ export function showModal({
     root.innerHTML = "";
   }
   root.append(overlay);
-  modal.focus();
+  focusModalInitialTarget(modal, { showSave, showCancel, initialFocus });
   document.addEventListener("keydown", keyHandler);
   activeModal = {
     overlay,
@@ -176,7 +232,10 @@ export function showModal({
     onCancel,
     save,
     close: closeModal,
-    submitOnEnter
+    submitOnEnter,
+    showSave,
+    showCancel,
+    initialFocus
   };
   return new Promise((resolve) => {
     activeModal.resolve = resolve;
