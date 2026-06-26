@@ -76,7 +76,8 @@ import {
   createBookmarkElement,
   ensureBookmarkMenuDismiss,
   escapeHtml,
-  openBookmarkUrl
+  openBookmarkUrl,
+  positionFloatingMenuAtPoint
 } from "./bookmark-views.js";
 import { initBookmarkSearch, refreshBookmarkSearchTexts } from "./bookmark-search.js";
 import { bindBookmarkDrag, initBookmarkDragDrop, SIDEBAR_ADD_CATEGORY_DROP_ID } from "./bookmark-drag.js";
@@ -510,7 +511,8 @@ function createBookmarkUiDeps() {
     bookmarkStoredImageSrc,
     bindBookmarkDrag,
     renderShortcutChips,
-    icons: ICONS
+    icons: ICONS,
+    allowContextMenu: () => !isMobileBookmarkLayout()
   };
 }
 
@@ -2113,6 +2115,20 @@ function bindSidebarEvents() {
       }
     })();
   });
+  document.addEventListener("contextmenu", (event) => {
+    if (isSidebarMobileLayout()) return;
+    const categoryLink = event.target.closest(".sidebar-link--category");
+    if (!(categoryLink instanceof HTMLElement)) return;
+    if (!elements.sidebar?.contains(categoryLink)) return;
+    const navId = categoryLink.dataset.navId;
+    const category = findSidebarCategoryById(state.config, navId);
+    if (!category) return;
+    const menuTrigger = categoryLink.querySelector("[data-sidebar-category-menu-trigger]");
+    if (!(menuTrigger instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openSidebarCategoryMenu(menuTrigger, category, { atPoint: { x: event.clientX, y: event.clientY } });
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       if (!isSidebarMobileLayout() || !state.sidebarOpen) return;
@@ -2698,7 +2714,7 @@ function closeSidebarCategoryMenu() {
   activeSidebarCategoryMenu = null;
 }
 
-function openSidebarCategoryMenu(trigger, category) {
+function openSidebarCategoryMenu(trigger, category, { atPoint = null } = {}) {
   if (!(trigger instanceof HTMLElement)) return;
 
   if (activeSidebarCategoryMenu?.trigger === trigger) {
@@ -2721,13 +2737,20 @@ function openSidebarCategoryMenu(trigger, category) {
 
   overlay.classList.remove("hidden");
   overlay.classList.add("is-open");
-  trigger.setAttribute("aria-expanded", "true");
-  container?.classList.add("is-menu-open");
-  activeSidebarCategoryMenu = { trigger, row: container, categoryId: category.id };
+  const openedAtPoint = Boolean(atPoint);
+  if (!openedAtPoint) {
+    trigger.setAttribute("aria-expanded", "true");
+    container?.classList.add("is-menu-open");
+  }
+  activeSidebarCategoryMenu = { trigger, row: container, categoryId: category.id, openedAtPoint };
 
   requestAnimationFrame(() => {
     if (activeSidebarCategoryMenu?.trigger !== trigger) return;
-    positionSidebarCategoryMenuPanel(panel, trigger);
+    if (openedAtPoint && atPoint) {
+      positionFloatingMenuAtPoint(panel, atPoint.x, atPoint.y);
+    } else {
+      positionSidebarCategoryMenuPanel(panel, trigger);
+    }
   });
 }
 

@@ -440,6 +440,34 @@ function getBookmarkMenuOverlay() {
   return overlay;
 }
 
+export function positionFloatingMenuAtPoint(panel, clientX, clientY) {
+  const gap = 4;
+  const margin = 8;
+  panel.style.left = "0px";
+  panel.style.top = "0px";
+  const panelRect = panel.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let left = clientX;
+  let top = clientY + gap;
+
+  if (top + panelRect.height > viewportHeight - margin) {
+    const aboveTop = clientY - panelRect.height - gap;
+    if (aboveTop >= margin) top = aboveTop;
+    else top = Math.max(margin, viewportHeight - panelRect.height - margin);
+  }
+  if (top < margin) top = margin;
+
+  if (left + panelRect.width > viewportWidth - margin) {
+    left = Math.max(margin, viewportWidth - panelRect.width - margin);
+  }
+  if (left < margin) left = margin;
+
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+}
+
 function positionBookmarkMenuPanel(panel, trigger) {
   const gap = 6;
   const margin = 8;
@@ -513,7 +541,7 @@ export function closeBookmarkMenu() {
   activeBookmarkMenu = null;
 }
 
-function openBookmarkMenu(menuRoot, actions) {
+function openBookmarkMenu(menuRoot, actions, { atPoint = null } = {}) {
   const trigger = menuRoot?.querySelector("[data-bookmark-menu-trigger]");
   const sourcePanel = menuRoot?.querySelector("[data-bookmark-menu-panel]");
   if (!(trigger instanceof HTMLElement) || !(sourcePanel instanceof HTMLElement)) return;
@@ -534,13 +562,20 @@ function openBookmarkMenu(menuRoot, actions) {
 
   overlay.classList.remove("hidden");
   overlay.classList.add("is-open");
-  trigger.setAttribute("aria-expanded", "true");
-  menuRoot.classList.add("is-open");
-  activeBookmarkMenu = { menuRoot, trigger };
+  const openedAtPoint = Boolean(atPoint);
+  if (!openedAtPoint) {
+    trigger.setAttribute("aria-expanded", "true");
+    menuRoot.classList.add("is-open");
+  }
+  activeBookmarkMenu = { menuRoot, trigger, openedAtPoint };
 
   requestAnimationFrame(() => {
     if (activeBookmarkMenu?.menuRoot !== menuRoot) return;
-    positionBookmarkMenuPanel(panel, trigger);
+    if (openedAtPoint && atPoint) {
+      positionFloatingMenuAtPoint(panel, atPoint.x, atPoint.y);
+    } else {
+      positionBookmarkMenuPanel(panel, trigger);
+    }
   });
 }
 
@@ -601,6 +636,15 @@ export function createBookmarkElement(options, deps) {
     event.stopPropagation();
     if (!(menuRoot instanceof HTMLElement)) return;
     openBookmarkMenu(menuRoot, menuActions);
+  });
+
+  item.addEventListener("contextmenu", (event) => {
+    if (!item.classList.contains("bookmark-item--nav")) return;
+    if (!(menuRoot instanceof HTMLElement)) return;
+    if (typeof deps.allowContextMenu === "function" && !deps.allowContextMenu()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openBookmarkMenu(menuRoot, menuActions, { atPoint: { x: event.clientX, y: event.clientY } });
   });
 
   item.querySelector("[data-move-bookmark-left]")?.addEventListener("click", (event) => {
