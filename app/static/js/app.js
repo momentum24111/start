@@ -2007,8 +2007,8 @@ function ensureSidebarShell() {
     sidebar.innerHTML = `
       <div class="sidebar-header"></div>
       <nav class="sidebar-nav" aria-label="Navigation">
+        <ul id="sidebar-system" class="sidebar-list"></ul>
         <div class="sidebar-nav__scroll">
-          <ul id="sidebar-system" class="sidebar-list"></ul>
           <ul id="sidebar-categories" class="sidebar-list sidebar-list--categories"></ul>
         </div>
         <div class="sidebar-footer" id="sidebar-footer"></div>
@@ -2476,15 +2476,6 @@ function ensureSidebarNavLayout() {
   const nav = elements.sidebar?.querySelector(".sidebar-nav");
   if (!nav) return;
 
-  let scroll = nav.querySelector(".sidebar-nav__scroll");
-  if (!(scroll instanceof HTMLElement)) {
-    scroll = document.createElement("div");
-    scroll.className = "sidebar-nav__scroll";
-    const lists = [...nav.querySelectorAll(":scope > .sidebar-list")];
-    lists.forEach((list) => scroll.append(list));
-    nav.prepend(scroll);
-  }
-
   let footer = nav.querySelector(".sidebar-footer");
   if (!(footer instanceof HTMLElement)) {
     footer = document.createElement("div");
@@ -2492,6 +2483,33 @@ function ensureSidebarNavLayout() {
     footer.id = "sidebar-footer";
     nav.append(footer);
   }
+
+  let scroll = nav.querySelector(".sidebar-nav__scroll");
+  if (!(scroll instanceof HTMLElement)) {
+    scroll = document.createElement("div");
+    scroll.className = "sidebar-nav__scroll";
+    nav.insertBefore(scroll, footer);
+  }
+
+  const systemList = document.getElementById("sidebar-system");
+  const categoriesList = document.getElementById("sidebar-categories");
+
+  if (systemList instanceof HTMLElement && systemList.parentElement !== nav) {
+    nav.insertBefore(systemList, scroll);
+  } else if (systemList instanceof HTMLElement && scroll.compareDocumentPosition(systemList) & Node.DOCUMENT_POSITION_FOLLOWING) {
+    nav.insertBefore(systemList, scroll);
+  }
+
+  if (categoriesList instanceof HTMLElement && categoriesList.parentElement !== scroll) {
+    scroll.append(categoriesList);
+  }
+
+  if (scroll.nextElementSibling !== footer) {
+    nav.append(footer);
+  }
+
+  elements.sidebarSystem = systemList;
+  elements.sidebarCategories = categoriesList;
   elements.sidebarFooter = footer;
 }
 
