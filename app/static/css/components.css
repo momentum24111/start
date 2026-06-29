@@ -2683,7 +2683,8 @@ textarea {
 #nav-view {
   --nav-toolbar-btn-height: 32px;
   --size-bookmark-list-thumb: calc(72px * var(--element-scale));
-  --size-bookmark-list-height: calc(96px * var(--element-scale));
+  --size-bookmark-list-pad: calc(0.55rem * var(--element-scale));
+  --size-bookmark-list-height: calc(var(--size-bookmark-list-thumb) + 2 * var(--size-bookmark-list-pad));
   --size-bookmark-card-radius: calc(6px * var(--element-scale));
   --size-bookmark-gap: calc(0.55rem * var(--element-scale));
   --size-bookmark-chip-gap: calc(0.3rem * var(--element-scale));
@@ -2712,16 +2713,15 @@ textarea {
   background: var(--surface-2);
   box-shadow: var(--card-shadow-soft);
   content-visibility: auto;
-  contain-intrinsic-size: auto calc(96px * var(--element-scale));
+  contain-intrinsic-size: auto var(--size-bookmark-list-height);
 }
 
 .bookmark-item--list {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: stretch;
+  align-items: center;
   gap: var(--size-bookmark-gap);
-  min-height: var(--size-bookmark-list-height);
-  padding: calc(0.55rem * var(--element-scale));
+  padding: var(--size-bookmark-list-pad);
   contain-intrinsic-size: auto var(--size-bookmark-list-height);
 }
 
@@ -2907,10 +2907,12 @@ textarea {
 }
 
 .bookmark-thumb--list {
-  width: auto;
-  height: 100%;
+  width: var(--size-bookmark-list-thumb);
+  height: var(--size-bookmark-list-thumb);
+  min-width: var(--size-bookmark-list-thumb);
+  min-height: var(--size-bookmark-list-thumb);
   aspect-ratio: 1 / 1;
-  align-self: stretch;
+  align-self: center;
 }
 
 .bookmark-thumb--card {
@@ -2999,9 +3001,8 @@ textarea {
 .bookmark-item--nav {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: stretch;
+  align-items: center;
   padding: 0;
-  min-height: var(--size-bookmark-list-height);
   contain-intrinsic-size: auto var(--size-bookmark-list-height);
 }
 
@@ -3037,11 +3038,10 @@ textarea {
 }
 
 .bookmark-item__nav-link {
-  display: block;
+  display: flex;
+  align-items: center;
   min-width: 0;
-  min-height: var(--size-bookmark-list-height);
-  padding: calc(0.55rem * var(--element-scale));
-  padding-left: calc(0.55rem * var(--element-scale));
+  padding: var(--size-bookmark-list-pad);
   color: inherit;
   text-decoration: none;
 }
@@ -3051,6 +3051,8 @@ textarea {
   grid-template-columns: var(--size-bookmark-list-thumb) minmax(0, 1fr);
   gap: var(--size-bookmark-gap);
   align-items: center;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   transform: translateX(0);
   transition: transform 180ms ease;
@@ -3115,7 +3117,7 @@ textarea {
   justify-content: flex-end;
   gap: calc(0.35rem * var(--element-scale));
   flex: 0 0 auto;
-  align-self: stretch;
+  align-self: center;
   max-width: min(42%, 15rem);
   padding-right: calc(0.35rem * var(--element-scale));
   min-width: 0;
@@ -3435,8 +3437,7 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
 }
 
 .bookmark-item--list .bookmark-item__description--empty {
-  display: block;
-  min-height: calc(1.35em * 0.86);
+  display: none;
 }
 
 .bookmark-item__url {
@@ -3695,14 +3696,15 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
 
   #nav-view {
     --size-bookmark-list-thumb: calc(48px * var(--element-scale));
-    --size-bookmark-list-height: auto;
+    --size-bookmark-list-pad: calc(0.38rem * var(--element-scale));
+    --size-bookmark-list-height: calc(var(--size-bookmark-list-thumb) + 2 * var(--size-bookmark-list-pad));
   }
 
   .bookmark-item--nav {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     min-height: 0;
-    contain-intrinsic-size: auto calc(64px * var(--element-scale));
+    contain-intrinsic-size: auto var(--size-bookmark-list-height);
   }
 
   .bookmark-item--nav.is-select-mode,
@@ -3721,8 +3723,7 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
   }
 
   .bookmark-item--nav .bookmark-item__nav-link {
-    min-height: 0;
-    padding: calc(0.38rem * var(--element-scale)) calc(0.4rem * var(--element-scale));
+    padding: var(--size-bookmark-list-pad) calc(0.4rem * var(--element-scale));
   }
 
   .bookmark-item--nav .bookmark-item__nav-content {
@@ -3790,9 +3791,12 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
   }
 
   .bookmark-thumb--list {
-    width: calc(60px * var(--element-scale));
-    height: auto;
+    width: var(--size-bookmark-list-thumb);
+    height: var(--size-bookmark-list-thumb);
+    min-width: var(--size-bookmark-list-thumb);
+    min-height: var(--size-bookmark-list-thumb);
     aspect-ratio: 1 / 1;
+    align-self: center;
   }
 
   .bookmark-item__edit-actions {
