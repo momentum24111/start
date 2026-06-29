@@ -1549,6 +1549,10 @@ function isHomepageEditMode() {
   return state.editMode && shouldShowCategoryGrid(getActiveNavId());
 }
 
+function shouldShowAddBookmarkFab() {
+  return isValidNavId(state.config, getActiveNavId());
+}
+
 function isEditModeInUrl() {
   return new URLSearchParams(window.location.search).get(EDIT_MODE_URL_KEY) === "1";
 }
@@ -3301,8 +3305,9 @@ function render() {
   elements.edit.classList.toggle("hidden", !showCategoryGrid);
   elements.undo.classList.toggle("hidden", !isHomepageEditMode() || state.undoStack.length === 0);
   if (elements.addBookmarkFab) {
-    elements.addBookmarkFab.classList.toggle("hidden", !isHomepageEditMode());
+    elements.addBookmarkFab.classList.toggle("hidden", !shouldShowAddBookmarkFab());
     elements.addBookmarkFab.setAttribute("aria-label", t("ui.newBookmark"));
+    elements.addBookmarkFab.title = t("ui.newBookmark");
     elements.addBookmarkFab.innerHTML = iconSvg(ICONS.plus, "inline-icon");
   }
   renderSidebar();
