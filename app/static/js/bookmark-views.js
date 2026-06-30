@@ -2,7 +2,7 @@
 
 import { t } from "./i18n.js";
 import { getBookmarkDisplayDomain, isBookmarkInFavorites, formatUnsortedBrowserImportPathLine } from "./bookmarks.js";
-import { VIEW_LIST, VIEW_CARDS, VIEW_MIXED, VIEW_MODE_OPTIONS } from "./navigation.js";
+import { VIEW_LIST, VIEW_CARDS, VIEW_MIXED, VIEW_MODE_OPTIONS } from "./view-modes.js";
 
 export { VIEW_LIST, VIEW_CARDS, VIEW_MIXED, VIEW_MODE_OPTIONS };
 

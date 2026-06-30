@@ -45,9 +45,6 @@ import {
   NAV_ALL,
   NAV_FAVORITES,
   NAV_UNSORTED,
-  VIEW_LIST,
-  VIEW_CARDS,
-  VIEW_MIXED,
   SYSTEM_NAV_ITEMS,
   normalizeNavViewModes,
   normalizeActiveNavId,
@@ -74,6 +71,11 @@ import {
   isValidNavId,
   isCategoryNavId
 } from "./navigation.js";
+import {
+  VIEW_LIST,
+  VIEW_CARDS,
+  VIEW_MIXED
+} from "./view-modes.js";
 import {
   normalizeBookmarkView,
   bookmarksContainerClass,
