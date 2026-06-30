@@ -2926,7 +2926,12 @@ textarea {
 .bookmark-item--card {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  align-self: stretch;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
   height: 100%;
   margin-bottom: 0;
   contain-intrinsic-size: auto calc(280px * var(--element-scale));
@@ -2936,8 +2941,11 @@ textarea {
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   height: 100%;
 }
 
@@ -3103,6 +3111,12 @@ textarea {
 
 .bookmark-item--nav-card.is-select-mode .bookmark-item__select-checkbox {
   align-self: stretch;
+}
+
+.bookmark-item--nav-card.is-select-mode .bookmark-card__surface {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .bookmark-item--nav-card.is-select-mode .bookmark-card__link {
@@ -3691,7 +3705,10 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
 .bookmark-card__link {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 1;
+  display: block;
 }
 
 .bookmark-item--card.is-edit-mode .bookmark-card__link {
@@ -3712,6 +3729,9 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
   grid-template-rows: auto auto auto;
   align-items: start;
   flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   gap: calc(0.2rem * var(--element-scale));
   min-height: calc(5.75rem * var(--element-scale));
   padding: calc(0.55rem * var(--element-scale)) calc(2.45rem * var(--element-scale)) calc(0.65rem * var(--element-scale)) calc(0.6rem * var(--element-scale));

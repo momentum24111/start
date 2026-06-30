@@ -288,7 +288,7 @@ function renderHomepageCardBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--card bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--card bookmark-item--homepage-card ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
       draggable="true"
@@ -465,7 +465,7 @@ function renderNavCardBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--card bookmark-item--nav-card service ${options.editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(options.bookmark) ? "is-favorite" : ""} ${selectionClass}"
+      class="bookmark-item bookmark-item--card bookmark-item--nav-card ${options.editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(options.bookmark) ? "is-favorite" : ""} ${selectionClass}"
       data-bookmark-id="${escapeHtml(options.bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
       draggable="true"
@@ -491,7 +491,7 @@ function renderCardBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--card ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
     >
