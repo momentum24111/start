@@ -454,7 +454,7 @@ export function getBookmarksForCategory(config, categoryId) {
     if (!bookmark.categoryIds.includes(categoryId) || seen.has(bookmark.id)) continue;
     result.push(bookmark);
   }
-  return result;
+  return prioritizeFavoriteBookmarks(result);
 }
 
 export function findBookmarkById(config, bookmarkId) {
@@ -568,7 +568,7 @@ export function getBookmarksForSidebarCategory(config, categoryId) {
     if (!(bookmark.sidebarCategoryIds || []).includes(categoryId) || seen.has(bookmark.id)) continue;
     result.push(bookmark);
   }
-  return result;
+  return prioritizeFavoriteBookmarks(result);
 }
 
 export function ensureBookmarkInSidebarCategoryOrder(config, categoryId, bookmarkId) {
@@ -637,6 +637,35 @@ export function assignBookmarkToFavorites(bookmark) {
     bookmark.sidebarCategoryIds.push(FAVORITES_CATEGORY_ID);
   }
   bookmark.favorite = true;
+}
+
+export function removeBookmarkFromFavorites(bookmark) {
+  if (!bookmark) return;
+  bookmark.favorite = false;
+  bookmark.sidebarCategoryIds = (bookmark.sidebarCategoryIds || []).filter((id) => id !== FAVORITES_CATEGORY_ID);
+}
+
+export function setBookmarkFavorite(bookmark, isFavorite) {
+  if (!bookmark) return;
+  if (isFavorite) assignBookmarkToFavorites(bookmark);
+  else removeBookmarkFromFavorites(bookmark);
+}
+
+export function toggleBookmarkFavorite(bookmark) {
+  if (!bookmark) return false;
+  const nextFavorite = !isBookmarkInFavorites(bookmark);
+  setBookmarkFavorite(bookmark, nextFavorite);
+  return nextFavorite;
+}
+
+export function prioritizeFavoriteBookmarks(bookmarks) {
+  const favorites = [];
+  const rest = [];
+  for (const bookmark of bookmarks || []) {
+    if (isBookmarkInFavorites(bookmark)) favorites.push(bookmark);
+    else rest.push(bookmark);
+  }
+  return [...favorites, ...rest];
 }
 
 export function assignBookmarkToHomepageCategory(config, bookmark, categoryId) {

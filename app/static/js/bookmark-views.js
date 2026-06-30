@@ -1,7 +1,7 @@
 /** Lesezeichen-Darstellung: Listen- und Kartenansicht. */
 
 import { t } from "./i18n.js";
-import { getBookmarkDisplayDomain, getBookmarkDisplayCategoryLabels, isBookmarkInFavorites, formatUnsortedBrowserImportPathLine } from "./bookmarks.js";
+import { getBookmarkDisplayDomain, isBookmarkInFavorites, formatUnsortedBrowserImportPathLine } from "./bookmarks.js";
 import { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS } from "./navigation.js";
 
 export { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS };
@@ -175,9 +175,39 @@ function bookmarkShowsFavorite(bookmark) {
   return isBookmarkInFavorites(bookmark);
 }
 
+function renderFavoriteToggle(bookmark, deps) {
+  const isFavorite = bookmarkShowsFavorite(bookmark);
+  const label = isFavorite ? t("ui.removeFavorite") : t("ui.addFavorite");
+  const iconName = isFavorite ? "star" : "star-outline";
+  return `
+    <button
+      type="button"
+      class="btn btn--ghost btn--icon btn--bookmark-favorite${isFavorite ? " is-active" : ""}"
+      data-toggle-bookmark-favorite
+      aria-pressed="${isFavorite ? "true" : "false"}"
+      aria-label="${escapeHtml(label)}"
+      title="${escapeHtml(label)}"
+    >
+      <span class="btn__icon">${deps.mdiIcon(iconName, "inline-icon")}</span>
+    </button>
+  `;
+}
+
+function renderCardActions(options, deps, { nav = false } = {}) {
+  const { bookmark, editMode } = options;
+  if (editMode) return "";
+  return `
+    <div class="bookmark-item__card-actions">
+      ${renderFavoriteToggle(bookmark, deps)}
+      ${renderOverflowMenu(deps, { nav })}
+    </div>
+  `;
+}
+
 function renderHomepageCardBookmark(options, deps) {
   const { bookmark, editMode } = options;
   const title = escapeHtml(bookmark.title || "");
+  const description = escapeHtml(bookmark.description || "");
   const url = escapeHtml(bookmark.url || "");
 
   return `
@@ -199,13 +229,14 @@ function renderHomepageCardBookmark(options, deps) {
       ${renderThumbnail(bookmark, deps, "homepage-card")}
       <div class="bookmark-homepage-card__body">
         <h3 class="bookmark-item__title">${title}</h3>
+        ${description ? `<p class="bookmark-item__description">${description}</p>` : ""}
       </div>
       ${editMode ? `
         <div class="bookmark-item__edit-actions bookmark-item__edit-actions--homepage-card">
           ${renderActionButtons(options, deps, { editOnly: true })}
           ${renderReorderActions(options, deps)}
         </div>
-      ` : ""}
+      ` : renderCardActions(options, deps)}
     </article>
   `;
 }
@@ -242,7 +273,7 @@ function renderHomepageBookmark(options, deps) {
           ${renderActionButtons(options, deps, { editOnly: true })}
           ${renderReorderActions(options, deps)}
         </div>
-      ` : ""}
+      ` : renderFavoriteToggle(bookmark, deps)}
     </article>
   `;
 }
@@ -263,17 +294,13 @@ function renderBookmarkSelectCheckbox(selected) {
 }
 
 function renderNavBookmark(options, deps) {
-  const { bookmark, editMode, showUnsortedBrowserImportPath, showCategoryChips, selectionMode, selected, selectionPreview } = options;
+  const { bookmark, editMode, showUnsortedBrowserImportPath, selectionMode, selected, selectionPreview } = options;
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = String(bookmark.url || "").trim();
   const urlAttr = escapeHtml(url);
   const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
   const unsortedPathLine = showUnsortedBrowserImportPath ? renderUnsortedBrowserImportPathLine(bookmark) : "";
-  const categoryLabels = showCategoryChips
-    ? getBookmarkDisplayCategoryLabels(options.config, bookmark, t("ui.navFavorites"))
-    : [];
-  const categoryChips = renderCategoryChips(categoryLabels);
   const selectionClass = [
     selectionMode ? "is-select-mode" : "",
     selected ? "is-selected" : "",
@@ -312,7 +339,7 @@ function renderNavBookmark(options, deps) {
             ${renderReorderActions(options, deps)}
           </div>
         ` : `
-          ${categoryChips ? `<div class="bookmark-item__categories bookmark-item__categories--aside">${categoryChips}</div>` : ""}
+          ${renderFavoriteToggle(bookmark, deps)}
           ${renderOverflowMenu(deps, { nav: true })}
         `}
       </div>
@@ -328,7 +355,6 @@ function renderListBookmark(options, deps) {
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = escapeHtml(bookmark.url || "");
-  const categoryChips = renderCategoryChips(getBookmarkCategoryLabels(options.config, bookmark));
   const shortcutMarkup = !editMode && hasShortcut
     ? `<div class="bookmark-shortcut">${deps.renderShortcutChips(bookmark.shortcut)}</div>`
     : "";
@@ -353,11 +379,11 @@ function renderListBookmark(options, deps) {
           </a>
           ${shortcutMarkup}
           ${editMode ? "" : `<div class="bookmark-item__hover-actions">${renderActionButtons(options, deps, { compact: true })}</div>`}
+          ${editMode ? "" : renderFavoriteToggle(bookmark, deps)}
           ${editMode ? "" : renderOverflowMenu(deps)}
         </div>
         ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
         ${url ? `<span class="bookmark-item__url">${url}</span>` : ""}
-        ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
       </div>
       ${editMode ? `
         <div class="bookmark-item__edit-actions">
@@ -369,12 +395,63 @@ function renderListBookmark(options, deps) {
   `;
 }
 
+function renderNavCardBookmark(options, deps) {
+  const { bookmark, editMode, showUnsortedBrowserImportPath, selectionMode, selected, selectionPreview } = options;
+  const title = escapeHtml(bookmark.title || "");
+  const description = escapeHtml(bookmark.description || "");
+  const url = String(bookmark.url || "").trim();
+  const urlAttr = escapeHtml(url);
+  const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
+  const unsortedPathLine = showUnsortedBrowserImportPath ? renderUnsortedBrowserImportPathLine(bookmark) : "";
+  const selectionClass = [
+    selectionMode ? "is-select-mode" : "",
+    selected ? "is-selected" : "",
+    selectionPreview ? "is-selection-preview" : ""
+  ].filter(Boolean).join(" ");
+
+  return `
+    <article
+      class="bookmark-item bookmark-item--card bookmark-item--nav-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""} ${selectionClass}"
+      data-bookmark-id="${escapeHtml(bookmark.id)}"
+      data-category-id="${escapeHtml(options.category.id)}"
+      draggable="true"
+      data-bookmark-drag
+    >
+      ${selectionMode ? renderBookmarkSelectCheckbox(selected) : ""}
+      <div class="bookmark-item__nav-card-shell">
+        <a
+          class="bookmark-card__link"
+          href="${urlAttr}"
+          target="${bookmarkLinkTarget(bookmark, { navList: true })}"
+          rel="noreferrer"
+          data-bookmark-open
+          aria-label="${title}"
+        ></a>
+        ${renderThumbnail(bookmark, deps, "card")}
+        <div class="bookmark-card__body">
+          <h3 class="bookmark-item__title">${title}</h3>
+          ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
+          ${unsortedPathLine || (!showUnsortedBrowserImportPath && domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : "")}
+        </div>
+        ${editMode ? `
+          <div class="bookmark-item__edit-actions bookmark-item__edit-actions--card">
+            ${renderActionButtons(options, deps)}
+            ${renderReorderActions(options, deps)}
+          </div>
+        ` : renderCardActions(options, deps, { nav: true })}
+        <div class="bookmark-item__loading hidden" data-bookmark-loading aria-hidden="true">
+          <span class="spinner" aria-hidden="true"></span>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function renderCardBookmark(options, deps) {
   const { bookmark, editMode } = options;
   const title = escapeHtml(bookmark.title || "");
   const description = escapeHtml(bookmark.description || "");
   const url = escapeHtml(bookmark.url || "");
-  const categoryChips = renderCategoryChips(getBookmarkCategoryLabels(options.config, bookmark));
 
   return `
     <article
@@ -394,16 +471,14 @@ function renderCardBookmark(options, deps) {
       <div class="bookmark-card__body">
         <h3 class="bookmark-item__title">${title}</h3>
         ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-        ${categoryChips ? `<div class="bookmark-item__categories">${categoryChips}</div>` : ""}
       </div>
       ${editMode ? "" : `<div class="bookmark-card__hover-actions">${renderActionButtons(options, deps, { compact: true })}</div>`}
-      ${editMode ? "" : renderOverflowMenu(deps)}
       ${editMode ? `
         <div class="bookmark-item__edit-actions bookmark-item__edit-actions--card">
           ${renderActionButtons(options, deps)}
           ${renderReorderActions(options, deps)}
         </div>
-      ` : ""}
+      ` : renderCardActions(options, deps)}
     </article>
   `;
 }
@@ -416,6 +491,7 @@ export function renderBookmarkMarkup(options, deps) {
   }
   const view = normalizeBookmarkView(options.view);
   if (options.navList) {
+    if (view === VIEW_CARDS) return renderNavCardBookmark(options, deps);
     return renderNavBookmark(options, deps);
   }
   if (view === "cards") return renderCardBookmark(options, deps);
@@ -639,7 +715,7 @@ export function createBookmarkElement(options, deps) {
   });
 
   item.addEventListener("contextmenu", (event) => {
-    if (!item.classList.contains("bookmark-item--nav")) return;
+    if (!item.classList.contains("bookmark-item--nav") && !item.classList.contains("bookmark-item--nav-card")) return;
     if (!(menuRoot instanceof HTMLElement)) return;
     if (typeof deps.allowContextMenu === "function" && !deps.allowContextMenu()) return;
     event.preventDefault();
@@ -665,6 +741,12 @@ export function createBookmarkElement(options, deps) {
     event.preventDefault();
     event.stopPropagation();
     deps.onDelete?.();
+  });
+
+  item.querySelector("[data-toggle-bookmark-favorite]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deps.onToggleFavorite?.();
   });
 
   deps.bindBookmarkDrag?.(item);

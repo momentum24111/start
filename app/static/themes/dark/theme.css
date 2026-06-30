@@ -167,6 +167,13 @@ body {
   --fab-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
   --fab-disabled-bg: color-mix(in srgb, var(--primary) 45%, var(--surface-2));
   --fab-disabled-fg: color-mix(in srgb, var(--fab-fg) 55%, transparent);
+  --scrollbar-track: var(--bg);
+  --scrollbar-thumb: color-mix(in srgb, var(--surface-hover) 72%, var(--bg));
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--muted) 32%, var(--surface-hover));
+  --bookmark-favorite-fg: var(--muted);
+  --bookmark-favorite-hover-fg: color-mix(in srgb, var(--primary) 70%, var(--text));
+  --bookmark-favorite-active-fg: var(--primary);
+  --bookmark-favorite-active-bg: color-mix(in srgb, var(--primary) 14%, transparent);
   --metadata-status-error-fg: var(--danger);
 }
 
@@ -237,6 +244,21 @@ body {
 .fab:disabled {
   background: var(--fab-disabled-bg);
   color: var(--fab-disabled-fg);
+}
+
+.btn--bookmark-favorite {
+  color: var(--bookmark-favorite-fg);
+  background: transparent;
+}
+
+.btn--bookmark-favorite:hover:not(:disabled) {
+  color: var(--bookmark-favorite-hover-fg);
+  background: var(--bookmark-favorite-active-bg);
+}
+
+.btn--bookmark-favorite.is-active {
+  color: var(--bookmark-favorite-active-fg);
+  background: var(--bookmark-favorite-active-bg);
 }
 
 #metadata-status.is-error,

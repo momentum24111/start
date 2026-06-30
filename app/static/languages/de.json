@@ -27,6 +27,8 @@
     "image": "Vorschaubild",
     "description": "Beschreibung",
     "favorite": "Favorit",
+    "addFavorite": "Zu Favoriten hinzufügen",
+    "removeFavorite": "Aus Favoriten entfernen",
     "source": "Quelle",
     "sourceManual": "Manuell angelegt",
     "sourceBrowserImport": "Browser-Import",

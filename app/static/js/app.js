@@ -36,7 +36,9 @@ import {
   shouldShowUnsortedBrowserImportPath,
   collectUnsortedBrowserFolderPaths,
   filterBookmarksByBrowserFolderPaths,
-  bookmarkTimestampNow
+  bookmarkTimestampNow,
+  toggleBookmarkFavorite,
+  prioritizeFavoriteBookmarks
 } from "./bookmarks.js";
 import {
   NAV_ALL,
@@ -817,7 +819,16 @@ function getActiveNavBookmarks() {
   if (navId === NAV_UNSORTED) {
     bookmarks = filterUnsortedNavBookmarks(bookmarks);
   }
-  return sortNavBookmarks(bookmarks, getNavSortSetting(state.settings, navId));
+  return prioritizeFavoriteBookmarks(sortNavBookmarks(bookmarks, getNavSortSetting(state.settings, navId)));
+}
+
+async function handleToggleBookmarkFavorite(bookmark) {
+  const existing = findBookmarkById(state.config, bookmark.id);
+  if (!existing) return;
+  pushUndo();
+  toggleBookmarkFavorite(existing);
+  await persistConfig();
+  render();
 }
 
 function getVisibleNavBookmarkIds() {
@@ -1107,7 +1118,7 @@ function handleNavBookmarkTouchStart(event) {
   if (!isMobileBookmarkLayout()) return;
   if (!(event.target instanceof Element)) return;
   if (isNavSelectionInteractionTarget(event.target)) return;
-  const item = event.target.closest(".bookmark-item--nav[data-bookmark-id]");
+  const item = event.target.closest(".bookmark-item--nav[data-bookmark-id], .bookmark-item--nav-card[data-bookmark-id]");
   if (!(item instanceof HTMLElement) || !elements.navView?.contains(item)) return;
   const touch = event.touches[0];
   if (!touch) return;
@@ -1138,7 +1149,7 @@ function handleNavBookmarkTouchEnd() {
 function isNavSelectionInteractionTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    "[data-edit-bookmark], [data-delete-bookmark], [data-move-bookmark-left], [data-move-bookmark-right], [data-bookmark-menu-trigger], .bookmark-menu__item, .bookmark-reorder"
+    "[data-edit-bookmark], [data-delete-bookmark], [data-move-bookmark-left], [data-move-bookmark-right], [data-bookmark-menu-trigger], [data-toggle-bookmark-favorite], .bookmark-menu__item, .bookmark-reorder"
   ));
 }
 
@@ -1189,7 +1200,7 @@ function ensureNavSelectionEvents() {
   document.addEventListener("touchcancel", handleNavBookmarkTouchEnd, { passive: true });
   document.addEventListener("contextmenu", (event) => {
     if (!isMobileBookmarkLayout()) return;
-    const item = event.target.closest?.(".bookmark-item--nav[data-bookmark-id]");
+    const item = event.target.closest?.(".bookmark-item--nav[data-bookmark-id], .bookmark-item--nav-card[data-bookmark-id]");
     if (item instanceof HTMLElement && elements.navView?.contains(item)) {
       event.preventDefault();
     }
@@ -1279,6 +1290,9 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
         : undefined,
       onReloadMetadata: (item) => {
         void applyBookmarkMetadata(bookmark.id, { item });
+      },
+      onToggleFavorite: () => {
+        void handleToggleBookmarkFavorite(bookmark);
       }
     }
   );

@@ -27,6 +27,8 @@
     "image": "Preview image",
     "description": "Description",
     "favorite": "Favorite",
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites",
     "source": "Source",
     "sourceManual": "Manually created",
     "sourceBrowserImport": "Browser import",
