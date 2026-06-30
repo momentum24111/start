@@ -38,7 +38,8 @@ import {
   filterBookmarksByBrowserFolderPaths,
   bookmarkTimestampNow,
   toggleBookmarkFavorite,
-  prioritizeFavoriteBookmarks
+  prioritizeFavoriteBookmarks,
+  isBookmarkInFavorites
 } from "./bookmarks.js";
 import {
   NAV_ALL,
@@ -46,6 +47,7 @@ import {
   NAV_UNSORTED,
   VIEW_LIST,
   VIEW_CARDS,
+  VIEW_MIXED,
   SYSTEM_NAV_ITEMS,
   normalizeNavViewModes,
   normalizeActiveNavId,
@@ -188,6 +190,7 @@ const ICONS = {
   menu: "M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z",
   viewList: "M3 5h18v2H3V5m0 6h18v2H3v-2m0 6h18v2H3v-2z",
   viewCards: "M3 5h8v8H3V5m10 0h8v4H13V5m0 6h8v8H13v-8M3 13h8v6H3v-6z",
+  viewMixed: "M3 4h18v2H3V4m0 4h18v2H3V8M3 14h7v7H3v-7m10-6h8v4h-8V8m0 6h8v7h-8v-7",
   sync: "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
   open: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
   dotsVertical: "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
@@ -1250,7 +1253,7 @@ function restoreUnsortedFolderFilterScroll(scrollTop) {
   });
 }
 
-function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false, navId = null } = {}) {
+function createBookmarkElementForBookmark(bookmark, category, view, { homepage = false, navId = null, forceCardLayout = false } = {}) {
   const categoryContext = category || { id: navId || resolveBookmarkModalCategoryId(bookmark, category) };
   const reorder = getBookmarkReorderState(category, bookmark);
   const normalizedView = normalizeBookmarkView(view);
@@ -1261,6 +1264,7 @@ function createBookmarkElementForBookmark(bookmark, category, view, { homepage =
       view: normalizedView,
       homepage,
       navList: !homepage,
+      forceCardLayout,
       editMode: isHomepageEditMode(),
       config: state.config,
       showUnsortedBrowserImportPath: navId === NAV_UNSORTED && shouldShowUnsortedBrowserImportPath(bookmark, state.config),
@@ -2867,6 +2871,9 @@ function resolveBookmarkCategoryForNav(bookmark, navId) {
 
 function renderBookmarkCollection(bookmarks, navId, viewMode) {
   const normalizedView = normalizeBookmarkView(viewMode);
+  if (normalizedView === VIEW_MIXED && navId !== NAV_ALL) {
+    return renderMixedBookmarkCollection(bookmarks, navId);
+  }
   const root = document.createElement("div");
   root.className = `${bookmarksContainerClass(normalizedView)} bookmark-collection view-mode--${normalizedView}`;
   for (const bookmark of bookmarks) {
@@ -2877,6 +2884,48 @@ function renderBookmarkCollection(bookmarks, navId, viewMode) {
       { homepage: navId === NAV_ALL, navId }
     ));
   }
+  return root;
+}
+
+function renderMixedBookmarkCollection(bookmarks, navId) {
+  const favoriteBookmarks = [];
+  const regularBookmarks = [];
+  for (const bookmark of bookmarks) {
+    if (isBookmarkInFavorites(bookmark)) favoriteBookmarks.push(bookmark);
+    else regularBookmarks.push(bookmark);
+  }
+
+  const root = document.createElement("div");
+  root.className = "bookmarks bookmarks--mixed bookmark-collection view-mode--mixed";
+
+  if (favoriteBookmarks.length) {
+    const cardsSection = document.createElement("div");
+    cardsSection.className = "bookmarks bookmarks--cards bookmark-collection__section bookmark-collection__section--cards";
+    for (const bookmark of favoriteBookmarks) {
+      cardsSection.append(createBookmarkElementForBookmark(
+        bookmark,
+        resolveBookmarkCategoryForNav(bookmark, navId),
+        VIEW_CARDS,
+        { homepage: false, navId, forceCardLayout: true }
+      ));
+    }
+    root.append(cardsSection);
+  }
+
+  if (regularBookmarks.length) {
+    const listSection = document.createElement("div");
+    listSection.className = "bookmarks bookmarks--list bookmark-collection__section bookmark-collection__section--list";
+    for (const bookmark of regularBookmarks) {
+      listSection.append(createBookmarkElementForBookmark(
+        bookmark,
+        resolveBookmarkCategoryForNav(bookmark, navId),
+        VIEW_LIST,
+        { homepage: false, navId }
+      ));
+    }
+    root.append(listSection);
+  }
+
   return root;
 }
 
@@ -3218,7 +3267,7 @@ function renderUnsortedFolderFilter() {
   return wrap;
 }
 
-function renderViewModeToggle(viewMode, { showCategorySync = false } = {}) {
+function renderViewModeToggle(viewMode, { showCategorySync = false, showMixedMode = false } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "view-mode-toggle";
   const syncDisabled = isCategoryMetadataReloadRunning() ? "disabled" : "";
@@ -3239,6 +3288,14 @@ function renderViewModeToggle(viewMode, { showCategorySync = false } = {}) {
       className: `btn--compact ${viewMode === VIEW_CARDS ? "is-active" : ""}`,
       iconOnly: true
     })}
+    ${showMixedMode ? button({
+      label: t("ui.viewMixed"),
+      icon: iconSvg(ICONS.viewMixed, "inline-icon"),
+      dataAttr: `data-view-mode="${VIEW_MIXED}"`,
+      variant: "btn--ghost",
+      className: `btn--compact ${viewMode === VIEW_MIXED ? "is-active" : ""}`,
+      iconOnly: true
+    }) : ""}
     ${showCategorySync ? button({
       label: t("ui.reloadCategoryMetadata"),
       icon: iconSvg(ICONS.sync, "inline-icon"),
@@ -3250,11 +3307,14 @@ function renderViewModeToggle(viewMode, { showCategorySync = false } = {}) {
   `;
   const listButton = wrap.querySelector(`[data-view-mode="${VIEW_LIST}"]`);
   const cardsButton = wrap.querySelector(`[data-view-mode="${VIEW_CARDS}"]`);
+  const mixedButton = wrap.querySelector(`[data-view-mode="${VIEW_MIXED}"]`);
   const syncButton = wrap.querySelector("[data-reload-category-metadata]");
   listButton?.setAttribute("aria-label", t("ui.viewList"));
   listButton?.setAttribute("title", t("ui.viewList"));
   cardsButton?.setAttribute("aria-label", t("ui.viewCards"));
   cardsButton?.setAttribute("title", t("ui.viewCards"));
+  mixedButton?.setAttribute("aria-label", t("ui.viewMixed"));
+  mixedButton?.setAttribute("title", t("ui.viewMixed"));
   if (syncButton instanceof HTMLButtonElement) {
     syncButton.setAttribute("aria-label", t("ui.reloadCategoryMetadata"));
     syncButton.setAttribute("title", t("ui.reloadCategoryMetadata"));
@@ -3267,6 +3327,9 @@ function renderViewModeToggle(viewMode, { showCategorySync = false } = {}) {
   });
   cardsButton?.addEventListener("click", () => {
     void setNavViewModeForActive(VIEW_CARDS);
+  });
+  mixedButton?.addEventListener("click", () => {
+    void setNavViewModeForActive(VIEW_MIXED);
   });
   return wrap;
 }
@@ -3287,7 +3350,10 @@ function renderNavView() {
   if (navId === NAV_UNSORTED) {
     actions.append(renderUnsortedFolderFilter());
   }
-  actions.append(renderViewModeToggle(viewMode, { showCategorySync: isCategoryNavId(state.config, navId) }));
+  actions.append(renderViewModeToggle(viewMode, {
+    showCategorySync: isCategoryNavId(state.config, navId),
+    showMixedMode: true
+  }));
   header.append(actions);
   panel.append(header);
 
@@ -3390,8 +3456,13 @@ function refreshStaticLocalizedTexts() {
   renderSidebar();
   elements.navView?.querySelectorAll("[data-view-mode]").forEach((button) => {
     const mode = button.dataset.viewMode;
-    button.title = mode === VIEW_LIST ? t("ui.viewList") : t("ui.viewCards");
-    button.setAttribute("aria-label", button.title);
+    const title = mode === VIEW_LIST
+      ? t("ui.viewList")
+      : mode === VIEW_CARDS
+        ? t("ui.viewCards")
+        : t("ui.viewMixed");
+    button.title = title;
+    button.setAttribute("aria-label", title);
   });
   elements.navView?.querySelectorAll("[data-reload-category-metadata]").forEach((button) => {
     button.title = t("ui.reloadCategoryMetadata");

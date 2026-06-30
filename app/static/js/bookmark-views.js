@@ -2,9 +2,9 @@
 
 import { t } from "./i18n.js";
 import { getBookmarkDisplayDomain, isBookmarkInFavorites, formatUnsortedBrowserImportPathLine } from "./bookmarks.js";
-import { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS } from "./navigation.js";
+import { VIEW_LIST, VIEW_CARDS, VIEW_MIXED, VIEW_MODE_OPTIONS } from "./navigation.js";
 
-export { VIEW_LIST, VIEW_CARDS, VIEW_MODE_OPTIONS };
+export { VIEW_LIST, VIEW_CARDS, VIEW_MIXED, VIEW_MODE_OPTIONS };
 
 export function normalizeBookmarkView(value) {
   const normalized = String(value || "").trim().toLowerCase();
@@ -29,6 +29,7 @@ export function getBookmarkCategoryLabels(config, bookmark) {
 
 export function bookmarksContainerClass(view) {
   const normalized = normalizeBookmarkView(view);
+  if (normalized === VIEW_MIXED) return "bookmarks bookmarks--mixed";
   return `bookmarks bookmarks--${normalized}`;
 }
 
@@ -229,14 +230,14 @@ function renderHomepageCardBookmark(options, deps) {
       ${renderThumbnail(bookmark, deps, "homepage-card")}
       <div class="bookmark-homepage-card__body">
         <h3 class="bookmark-item__title">${title}</h3>
-        ${description ? `<p class="bookmark-item__description">${description}</p>` : ""}
+        ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
       </div>
       ${editMode ? `
         <div class="bookmark-item__edit-actions bookmark-item__edit-actions--homepage-card">
           ${renderActionButtons(options, deps, { editOnly: true })}
           ${renderReorderActions(options, deps)}
         </div>
-      ` : renderCardActions(options, deps)}
+      ` : ""}
     </article>
   `;
 }
@@ -273,7 +274,7 @@ function renderHomepageBookmark(options, deps) {
           ${renderActionButtons(options, deps, { editOnly: true })}
           ${renderReorderActions(options, deps)}
         </div>
-      ` : renderFavoriteToggle(bookmark, deps)}
+      ` : ""}
     </article>
   `;
 }
@@ -431,7 +432,9 @@ function renderNavCardBookmark(options, deps) {
         <div class="bookmark-card__body">
           <h3 class="bookmark-item__title">${title}</h3>
           ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-          ${unsortedPathLine || (!showUnsortedBrowserImportPath && domain ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>` : "")}
+          ${unsortedPathLine || (!showUnsortedBrowserImportPath && domain
+    ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>`
+    : (!unsortedPathLine ? `<span class="bookmark-item__domain bookmark-item__domain--empty" aria-hidden="true"></span>` : ""))}
         </div>
         ${editMode ? `
           <div class="bookmark-item__edit-actions bookmark-item__edit-actions--card">
@@ -491,7 +494,7 @@ export function renderBookmarkMarkup(options, deps) {
   }
   const view = normalizeBookmarkView(options.view);
   if (options.navList) {
-    if (view === VIEW_CARDS) return renderNavCardBookmark(options, deps);
+    if (view === VIEW_CARDS || options.forceCardLayout) return renderNavCardBookmark(options, deps);
     return renderNavBookmark(options, deps);
   }
   if (view === "cards") return renderCardBookmark(options, deps);

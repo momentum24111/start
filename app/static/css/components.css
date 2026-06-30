@@ -1344,6 +1344,23 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-category-menu__trigger
   gap: calc(0.65rem * var(--element-scale));
 }
 
+.bookmark-collection.view-mode--mixed {
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.65rem * var(--element-scale));
+}
+
+.bookmarks--mixed {
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.65rem * var(--element-scale));
+}
+
+.bookmark-collection__section--list {
+  display: grid;
+  gap: var(--size-gap-services);
+}
+
 .bookmark-card {
   display: flex;
   flex-direction: column;
@@ -2831,14 +2848,12 @@ textarea {
   background: transparent;
 }
 
-.bookmark-thumb--homepage .bookmark-thumb__img,
-.bookmark-thumb--homepage-card .bookmark-thumb__img {
+.bookmark-thumb--homepage .bookmark-thumb__img {
   object-fit: contain;
   object-position: center;
 }
 
-.bookmark-thumb--homepage .bookmark-thumb__placeholder,
-.bookmark-thumb--homepage-card .bookmark-thumb__placeholder {
+.bookmark-thumb--homepage .bookmark-thumb__placeholder {
   background: transparent;
 }
 
@@ -2895,21 +2910,36 @@ textarea {
 
 .bookmark-thumb--homepage-card {
   width: 100%;
+  flex: 0 0 auto;
   aspect-ratio: 16 / 10;
-  background: transparent;
+  height: auto;
+  background: var(--bookmark-thumb-bg);
+}
+
+.bookmark-thumb--homepage-card .bookmark-thumb__img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.bookmark-thumb--homepage-card .bookmark-thumb__placeholder {
+  background: var(--bookmark-thumb-bg);
+}
+
+.bookmark-thumb--homepage-card .bookmark-thumb__placeholder-icon {
+  width: calc(36px * var(--element-scale));
+  height: calc(36px * var(--element-scale));
 }
 
 .bookmark-homepage-card__body {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-items: start;
   flex: 1 1 auto;
   gap: calc(0.2rem * var(--element-scale));
-  min-height: calc(4.5rem * var(--element-scale));
-  padding: calc(0.45rem * var(--element-scale)) calc(2.4rem * var(--element-scale)) calc(0.55rem * var(--element-scale)) calc(0.5rem * var(--element-scale));
+  min-height: calc(5.25rem * var(--element-scale));
+  padding: calc(0.45rem * var(--element-scale)) calc(0.55rem * var(--element-scale)) calc(0.55rem * var(--element-scale));
   pointer-events: none;
   text-align: left;
 }
@@ -2926,11 +2956,19 @@ textarea {
   overflow: hidden;
   text-align: left;
   white-space: normal;
+  min-height: calc(2.5rem * var(--element-scale));
 }
 
 .bookmark-item--homepage-card .bookmark-item__description {
   text-align: left;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
+  min-height: calc(2.35rem * var(--element-scale));
+}
+
+.bookmark-item--homepage-card .bookmark-item__description--empty {
+  display: block;
+  visibility: hidden;
+  min-height: calc(2.35rem * var(--element-scale));
 }
 
 .bookmark-item--homepage-card.is-edit-mode .bookmark-card__link {
@@ -2974,7 +3012,15 @@ textarea {
 
 .bookmark-thumb--card {
   width: 100%;
+  flex: 0 0 auto;
   aspect-ratio: 16 / 10;
+  height: auto;
+  background: var(--bookmark-thumb-bg);
+}
+
+.bookmark-thumb--card .bookmark-thumb__placeholder-icon {
+  width: calc(36px * var(--element-scale));
+  height: calc(36px * var(--element-scale));
 }
 
 .bookmark-thumb__img {
@@ -3251,14 +3297,7 @@ textarea {
 
 .bookmark-item--homepage .btn--bookmark-favorite,
 .bookmark-item--homepage-card .btn--bookmark-favorite {
-  position: absolute;
-  top: calc(0.28rem * var(--element-scale));
-  right: calc(0.2rem * var(--element-scale));
-  z-index: 5;
-}
-
-.bookmark-item--homepage.has-shortcut:not(.is-edit-mode) .btn--bookmark-favorite {
-  right: calc(5.2rem * var(--element-scale));
+  display: none;
 }
 
 .bookmark-item__edit-actions--nav {
@@ -3713,20 +3752,53 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
 .bookmark-card__body {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-items: start;
   flex: 1 1 auto;
-  gap: calc(0.28rem * var(--element-scale));
-  min-height: calc(4.75rem * var(--element-scale));
+  gap: calc(0.2rem * var(--element-scale));
+  min-height: calc(5.75rem * var(--element-scale));
   padding: calc(0.55rem * var(--element-scale)) calc(2.45rem * var(--element-scale)) calc(0.65rem * var(--element-scale)) calc(0.6rem * var(--element-scale));
   pointer-events: none;
 }
 
+.bookmark-item--card .bookmark-item__title,
+.bookmark-item--nav-card .bookmark-item__title {
+  -webkit-line-clamp: 2;
+  min-height: calc(2.6rem * var(--element-scale));
+}
+
+.bookmark-item--card .bookmark-item__description,
+.bookmark-item--nav-card .bookmark-item__description {
+  -webkit-line-clamp: 2;
+  min-height: calc(2.35rem * var(--element-scale));
+}
+
+.bookmark-item--card .bookmark-item__description--empty,
+.bookmark-item--nav-card .bookmark-item__description--empty {
+  display: block;
+  visibility: hidden;
+  min-height: calc(2.35rem * var(--element-scale));
+}
+
+.bookmark-item--card .bookmark-item__domain,
+.bookmark-item--nav-card .bookmark-item__domain {
+  -webkit-line-clamp: 1;
+  min-height: calc(1.25rem * var(--element-scale));
+}
+
+.bookmark-item--card .bookmark-item__domain--empty,
+.bookmark-item--nav-card .bookmark-item__domain--empty {
+  display: block;
+  visibility: hidden;
+  min-height: calc(1.25rem * var(--element-scale));
+}
+
 .bookmark-item__card-actions {
   position: absolute;
-  top: calc(0.28rem * var(--element-scale));
-  right: calc(0.15rem * var(--element-scale));
-  z-index: 5;
+  top: calc(0.2rem * var(--element-scale));
+  right: calc(0.12rem * var(--element-scale));
+  z-index: 6;
   display: inline-flex;
   align-items: center;
   gap: calc(0.05rem * var(--element-scale));
@@ -3964,7 +4036,12 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
 
   .bookmark-card__body,
   .bookmark-homepage-card__body {
-    min-height: calc(4.25rem * var(--element-scale));
-    padding-right: calc(2.2rem * var(--element-scale));
+    min-height: calc(5rem * var(--element-scale));
+    padding-right: calc(0.55rem * var(--element-scale));
+  }
+
+  .bookmark-item--nav-card .bookmark-item__card-actions {
+    top: calc(0.15rem * var(--element-scale));
+    right: calc(0.1rem * var(--element-scale));
   }
 }

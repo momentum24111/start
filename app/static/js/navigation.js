@@ -18,7 +18,8 @@ export const NAV_UNSORTED = "unsorted";
 
 export const VIEW_LIST = "list";
 export const VIEW_CARDS = "cards";
-export const VIEW_MODE_OPTIONS = [VIEW_LIST, VIEW_CARDS];
+export const VIEW_MIXED = "mixed";
+export const VIEW_MODE_OPTIONS = [VIEW_LIST, VIEW_CARDS, VIEW_MIXED];
 
 export const SORT_FIELD_NAME = "name";
 export const SORT_FIELD_CREATED_AT = "createdAt";
