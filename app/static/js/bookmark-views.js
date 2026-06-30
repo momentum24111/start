@@ -72,6 +72,84 @@ function renderThumbnail(bookmark, deps, variant = "") {
   `;
 }
 
+function renderBookmarkCardMedia(bookmark, deps) {
+  return `
+    <div class="bookmark-card__media">
+      ${renderThumbnail(bookmark, deps, "card")}
+    </div>
+  `;
+}
+
+function renderBookmarkCardBodySlots({ title, description, domain, urlAttr, unsortedPathLine = "", showDomain = false }) {
+  const domainMarkup = unsortedPathLine || (showDomain && domain
+    ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>`
+    : (showDomain ? `<span class="bookmark-item__domain bookmark-item__domain--empty" aria-hidden="true"></span>` : ""));
+  return `
+    <h3 class="bookmark-item__title">${title}</h3>
+    ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
+    ${domainMarkup}
+  `;
+}
+
+function renderBookmarkCardSurface(options, deps, {
+  nav = false,
+  navList = false,
+  showDomain = false,
+  showUnsortedBrowserImportPath = false,
+  showLoading = false,
+  hoverActions = "",
+  editActionsClass = "bookmark-item__edit-actions--card"
+} = {}) {
+  const { bookmark, editMode, showUnsortedBrowserImportPath: showPath } = options;
+  const title = escapeHtml(bookmark.title || "");
+  const description = escapeHtml(bookmark.description || "");
+  const url = String(bookmark.url || "").trim();
+  const urlAttr = escapeHtml(url);
+  const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
+  const unsortedPathLine = (showUnsortedBrowserImportPath || showPath)
+    ? renderUnsortedBrowserImportPathLine(bookmark)
+    : "";
+
+  return `
+    <div class="bookmark-card__surface">
+      <a
+        class="bookmark-card__link"
+        href="${urlAttr}"
+        target="${bookmarkLinkTarget(bookmark, { navList })}"
+        rel="noreferrer"
+        data-bookmark-open
+        aria-label="${title}"
+      ></a>
+      ${renderBookmarkCardMedia(bookmark, deps)}
+      ${editMode ? "" : `
+        ${hoverActions}
+        ${renderCardActions(options, deps, { nav })}
+      `}
+      <div class="bookmark-card__body">
+        ${renderBookmarkCardBodySlots({
+    title,
+    description,
+    domain,
+    urlAttr,
+    unsortedPathLine,
+    showDomain: showDomain || Boolean(unsortedPathLine)
+  })}
+      </div>
+      ${editMode ? `
+        <div class="bookmark-item__edit-actions ${editActionsClass}">
+          ${renderActionButtons(options, deps, { editOnly: editActionsClass.includes("homepage") })}
+          ${renderReorderActions(options, deps)}
+        </div>
+      ` : ""}
+      ${showLoading ? `
+        <div class="bookmark-item__loading hidden" data-bookmark-loading aria-hidden="true">
+          <span class="spinner" aria-hidden="true"></span>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
 function renderReorderActions(options, deps) {
   const { canMoveLeft, canMoveRight } = options;
   return `
@@ -207,37 +285,18 @@ function renderCardActions(options, deps, { nav = false } = {}) {
 
 function renderHomepageCardBookmark(options, deps) {
   const { bookmark, editMode } = options;
-  const title = escapeHtml(bookmark.title || "");
-  const description = escapeHtml(bookmark.description || "");
-  const url = escapeHtml(bookmark.url || "");
 
   return `
     <article
-      class="bookmark-item bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
+      class="bookmark-item bookmark-item--card bookmark-item--homepage-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""}"
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
       draggable="true"
       data-bookmark-drag
     >
-      <a
-        class="bookmark-card__link"
-        href="${url}"
-        target="${bookmarkLinkTarget(bookmark)}"
-        rel="noreferrer"
-        data-bookmark-open
-        aria-label="${title}"
-      ></a>
-      ${renderThumbnail(bookmark, deps, "homepage-card")}
-      <div class="bookmark-homepage-card__body">
-        <h3 class="bookmark-item__title">${title}</h3>
-        ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-      </div>
-      ${editMode ? `
-        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--homepage-card">
-          ${renderActionButtons(options, deps, { editOnly: true })}
-          ${renderReorderActions(options, deps)}
-        </div>
-      ` : ""}
+      ${renderBookmarkCardSurface(options, deps, {
+    editActionsClass: "bookmark-item__edit-actions--homepage-card"
+  })}
     </article>
   `;
 }
@@ -397,13 +456,7 @@ function renderListBookmark(options, deps) {
 }
 
 function renderNavCardBookmark(options, deps) {
-  const { bookmark, editMode, showUnsortedBrowserImportPath, selectionMode, selected, selectionPreview } = options;
-  const title = escapeHtml(bookmark.title || "");
-  const description = escapeHtml(bookmark.description || "");
-  const url = String(bookmark.url || "").trim();
-  const urlAttr = escapeHtml(url);
-  const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
-  const unsortedPathLine = showUnsortedBrowserImportPath ? renderUnsortedBrowserImportPathLine(bookmark) : "";
+  const { selectionMode, selected, selectionPreview } = options;
   const selectionClass = [
     selectionMode ? "is-select-mode" : "",
     selected ? "is-selected" : "",
@@ -412,49 +465,29 @@ function renderNavCardBookmark(options, deps) {
 
   return `
     <article
-      class="bookmark-item bookmark-item--card bookmark-item--nav-card service ${editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(bookmark) ? "is-favorite" : ""} ${selectionClass}"
-      data-bookmark-id="${escapeHtml(bookmark.id)}"
+      class="bookmark-item bookmark-item--card bookmark-item--nav-card service ${options.editMode ? "is-edit-mode" : ""} ${bookmarkShowsFavorite(options.bookmark) ? "is-favorite" : ""} ${selectionClass}"
+      data-bookmark-id="${escapeHtml(options.bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
       draggable="true"
       data-bookmark-drag
     >
       ${selectionMode ? renderBookmarkSelectCheckbox(selected) : ""}
-      <div class="bookmark-item__nav-card-shell">
-        <a
-          class="bookmark-card__link"
-          href="${urlAttr}"
-          target="${bookmarkLinkTarget(bookmark, { navList: true })}"
-          rel="noreferrer"
-          data-bookmark-open
-          aria-label="${title}"
-        ></a>
-        ${renderThumbnail(bookmark, deps, "card")}
-        <div class="bookmark-card__body">
-          <h3 class="bookmark-item__title">${title}</h3>
-          ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-          ${unsortedPathLine || (!showUnsortedBrowserImportPath && domain
-    ? `<span class="bookmark-item__domain" title="${urlAttr}">${domain}</span>`
-    : (!unsortedPathLine ? `<span class="bookmark-item__domain bookmark-item__domain--empty" aria-hidden="true"></span>` : ""))}
-        </div>
-        ${editMode ? `
-          <div class="bookmark-item__edit-actions bookmark-item__edit-actions--card">
-            ${renderActionButtons(options, deps)}
-            ${renderReorderActions(options, deps)}
-          </div>
-        ` : renderCardActions(options, deps, { nav: true })}
-        <div class="bookmark-item__loading hidden" data-bookmark-loading aria-hidden="true">
-          <span class="spinner" aria-hidden="true"></span>
-        </div>
-      </div>
+      ${renderBookmarkCardSurface(options, deps, {
+    nav: true,
+    navList: true,
+    showDomain: true,
+    showUnsortedBrowserImportPath: options.showUnsortedBrowserImportPath,
+    showLoading: true
+  })}
     </article>
   `;
 }
 
 function renderCardBookmark(options, deps) {
   const { bookmark, editMode } = options;
-  const title = escapeHtml(bookmark.title || "");
-  const description = escapeHtml(bookmark.description || "");
-  const url = escapeHtml(bookmark.url || "");
+  const hoverActions = editMode
+    ? ""
+    : `<div class="bookmark-card__hover-actions">${renderActionButtons(options, deps, { compact: true })}</div>`;
 
   return `
     <article
@@ -462,26 +495,7 @@ function renderCardBookmark(options, deps) {
       data-bookmark-id="${escapeHtml(bookmark.id)}"
       data-category-id="${escapeHtml(options.category.id)}"
     >
-      <a
-        class="bookmark-card__link"
-        href="${url}"
-        target="${bookmarkLinkTarget(bookmark)}"
-        rel="noreferrer"
-        data-bookmark-open
-        aria-label="${title}"
-      ></a>
-      ${renderThumbnail(bookmark, deps, "card")}
-      <div class="bookmark-card__body">
-        <h3 class="bookmark-item__title">${title}</h3>
-        ${description ? `<p class="bookmark-item__description">${description}</p>` : `<p class="bookmark-item__description bookmark-item__description--empty" aria-hidden="true"></p>`}
-      </div>
-      ${editMode ? "" : `<div class="bookmark-card__hover-actions">${renderActionButtons(options, deps, { compact: true })}</div>`}
-      ${editMode ? `
-        <div class="bookmark-item__edit-actions bookmark-item__edit-actions--card">
-          ${renderActionButtons(options, deps)}
-          ${renderReorderActions(options, deps)}
-        </div>
-      ` : renderCardActions(options, deps)}
+      ${renderBookmarkCardSurface(options, deps, { hoverActions })}
     </article>
   `;
 }

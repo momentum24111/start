@@ -2749,6 +2749,7 @@ textarea {
   --size-bookmark-list-pad: calc(0.55rem * var(--element-scale));
   --size-bookmark-list-height: calc(var(--size-bookmark-list-thumb) + 2 * var(--size-bookmark-list-pad));
   --size-bookmark-card-radius: calc(6px * var(--element-scale));
+  --size-bookmark-card-thumb-ratio: 62.5%;
   --size-bookmark-gap: calc(0.55rem * var(--element-scale));
   --size-bookmark-chip-gap: calc(0.3rem * var(--element-scale));
   --size-bookmark-menu-width: calc(9.5rem * var(--element-scale));
@@ -2908,69 +2909,6 @@ textarea {
   --service-fade-bg: var(--service-active-bg);
 }
 
-.bookmark-thumb--homepage-card {
-  width: 100%;
-  flex: 0 0 auto;
-  aspect-ratio: 16 / 10;
-  height: auto;
-  background: var(--bookmark-thumb-bg);
-}
-
-.bookmark-thumb--homepage-card .bookmark-thumb__img {
-  object-fit: cover;
-  object-position: center;
-}
-
-.bookmark-thumb--homepage-card .bookmark-thumb__placeholder {
-  background: var(--bookmark-thumb-bg);
-}
-
-.bookmark-thumb--homepage-card .bookmark-thumb__placeholder-icon {
-  width: calc(36px * var(--element-scale));
-  height: calc(36px * var(--element-scale));
-}
-
-.bookmark-homepage-card__body {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  grid-template-rows: auto auto;
-  align-items: start;
-  flex: 1 1 auto;
-  gap: calc(0.2rem * var(--element-scale));
-  min-height: calc(5.25rem * var(--element-scale));
-  padding: calc(0.45rem * var(--element-scale)) calc(0.55rem * var(--element-scale)) calc(0.55rem * var(--element-scale));
-  pointer-events: none;
-  text-align: left;
-}
-
-.bookmark-item--homepage-card .bookmark-item__title {
-  margin: 0;
-  width: 100%;
-  font-weight: 500;
-  font-size: var(--size-service-font);
-  line-height: 1.25;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  text-align: left;
-  white-space: normal;
-  min-height: calc(2.5rem * var(--element-scale));
-}
-
-.bookmark-item--homepage-card .bookmark-item__description {
-  text-align: left;
-  -webkit-line-clamp: 2;
-  min-height: calc(2.35rem * var(--element-scale));
-}
-
-.bookmark-item--homepage-card .bookmark-item__description--empty {
-  display: block;
-  visibility: hidden;
-  min-height: calc(2.35rem * var(--element-scale));
-}
-
 .bookmark-item--homepage-card.is-edit-mode .bookmark-card__link {
   pointer-events: none;
 }
@@ -2994,6 +2932,46 @@ textarea {
   contain-intrinsic-size: auto calc(280px * var(--element-scale));
 }
 
+.bookmark-card__surface {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.bookmark-card__media {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bookmark-thumb-bg);
+  border-radius: calc(var(--size-bookmark-card-radius) - 2px) calc(var(--size-bookmark-card-radius) - 2px) 0 0;
+}
+
+.bookmark-card__media::before {
+  content: "";
+  display: block;
+  width: 100%;
+  padding-top: var(--size-bookmark-card-thumb-ratio);
+}
+
+.bookmark-card__media > .bookmark-thumb--card {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: unset;
+  border-radius: 0;
+  background: transparent;
+}
+
+.bookmark-card__media .bookmark-thumb--card .bookmark-thumb__placeholder-icon {
+  width: calc(36px * var(--element-scale));
+  height: calc(36px * var(--element-scale));
+}
+
 .bookmark-thumb {
   position: relative;
   overflow: hidden;
@@ -3008,19 +2986,6 @@ textarea {
   min-height: var(--size-bookmark-list-thumb);
   aspect-ratio: 1 / 1;
   align-self: center;
-}
-
-.bookmark-thumb--card {
-  width: 100%;
-  flex: 0 0 auto;
-  aspect-ratio: 16 / 10;
-  height: auto;
-  background: var(--bookmark-thumb-bg);
-}
-
-.bookmark-thumb--card .bookmark-thumb__placeholder-icon {
-  width: calc(36px * var(--element-scale));
-  height: calc(36px * var(--element-scale));
 }
 
 .bookmark-thumb__img {
@@ -3124,15 +3089,6 @@ textarea {
 
 .bookmark-item--nav-card {
   position: relative;
-}
-
-.bookmark-item__nav-card-shell {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
 }
 
 .bookmark-item--nav-card.is-select-mode {
@@ -3763,19 +3719,32 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
 }
 
 .bookmark-item--card .bookmark-item__title,
-.bookmark-item--nav-card .bookmark-item__title {
+.bookmark-item--nav-card .bookmark-item__title,
+.bookmark-item--homepage-card .bookmark-item__title {
   -webkit-line-clamp: 2;
   min-height: calc(2.6rem * var(--element-scale));
 }
 
+.bookmark-item--homepage-card .bookmark-item__title {
+  margin: 0;
+  width: 100%;
+  font-weight: 500;
+  font-size: var(--size-service-font);
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
+}
+
 .bookmark-item--card .bookmark-item__description,
-.bookmark-item--nav-card .bookmark-item__description {
+.bookmark-item--nav-card .bookmark-item__description,
+.bookmark-item--homepage-card .bookmark-item__description {
   -webkit-line-clamp: 2;
   min-height: calc(2.35rem * var(--element-scale));
 }
 
 .bookmark-item--card .bookmark-item__description--empty,
-.bookmark-item--nav-card .bookmark-item__description--empty {
+.bookmark-item--nav-card .bookmark-item__description--empty,
+.bookmark-item--homepage-card .bookmark-item__description--empty {
   display: block;
   visibility: hidden;
   min-height: calc(2.35rem * var(--element-scale));
@@ -3803,6 +3772,11 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
   align-items: center;
   gap: calc(0.05rem * var(--element-scale));
   pointer-events: auto;
+}
+
+.bookmark-card__surface > .bookmark-item__card-actions {
+  top: calc(0.2rem * var(--element-scale));
+  right: calc(0.12rem * var(--element-scale));
 }
 
 .bookmark-item__card-actions .bookmark-menu {
@@ -4034,12 +4008,12 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
     -webkit-line-clamp: 2;
   }
 
-  .bookmark-card__body,
-  .bookmark-homepage-card__body {
+  .bookmark-card__body {
     min-height: calc(5rem * var(--element-scale));
     padding-right: calc(0.55rem * var(--element-scale));
   }
 
+  .bookmark-card__surface > .bookmark-item__card-actions,
   .bookmark-item--nav-card .bookmark-item__card-actions {
     top: calc(0.15rem * var(--element-scale));
     right: calc(0.1rem * var(--element-scale));
