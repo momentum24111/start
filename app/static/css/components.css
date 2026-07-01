@@ -3967,7 +3967,7 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
   z-index: 6;
   display: inline-flex;
   align-items: center;
-  gap: calc(0.05rem * var(--element-scale));
+  gap: calc(0.22rem * var(--element-scale));
   pointer-events: auto;
 }
 
