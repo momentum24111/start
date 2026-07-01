@@ -267,6 +267,7 @@ body {
 }
 
 .btn:focus-visible,
+.sidebar-link--category .sidebar-link__main:focus-visible,
 .sidebar-category-menu__trigger:focus-visible {
   box-shadow: var(--focus-ring);
 }
