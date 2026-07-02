@@ -2155,7 +2155,7 @@ textarea {
 
 .bookmark-placement-homepage {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
@@ -2163,12 +2163,12 @@ textarea {
 }
 
 .bookmark-placement-homepage > .theme-checkbox {
-  flex: 0 0 auto;
-  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .bookmark-placement-homepage.is-homepage-active > .theme-checkbox {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -2200,7 +2200,7 @@ textarea {
 
 .bookmark-placement-sidebar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
@@ -2217,6 +2217,11 @@ textarea {
   width: 100%;
   min-height: calc(2.125rem * var(--element-scale, 1));
   padding: 0.35rem 2rem 0.35rem 0.5rem;
+}
+
+.bookmark-placement-sidebar > .theme-checkbox {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .section-inline-create {
@@ -2239,10 +2244,17 @@ textarea {
   padding: 0;
 }
 
+.bookmark-placement-inline-slot {
+  flex: 1 1 18rem;
+  min-width: min(100%, 16rem);
+  max-width: 100%;
+}
+
 @media (max-width: 650px) {
   .bookmark-placement-homepage {
     flex-direction: column;
     align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .bookmark-placement-homepage__select-wrap {
@@ -2257,6 +2269,10 @@ textarea {
     min-width: 0;
     width: 100%;
     padding-left: calc(1rem + 0.5rem);
+  }
+
+  .bookmark-placement-sidebar {
+    flex-wrap: wrap;
   }
 
   .section-inline-create {
@@ -3579,9 +3595,15 @@ textarea {
   overflow: auto;
 }
 
-.nav-assign-categories__section {
-  margin-left: 2rem;
-  margin-top: 0.25rem;
+.nav-assign-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 44%);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-assign-row__section {
+  min-width: 0;
 }
 
 .nav-assign-categories__option {
@@ -3610,6 +3632,16 @@ textarea {
 .nav-assign-categories__option-icon .mdi-icon {
   width: calc(1.15rem * var(--element-scale));
   height: calc(1.15rem * var(--element-scale));
+}
+
+@media (max-width: 650px) {
+  .nav-assign-row {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-assign-row__section {
+    padding-left: calc(1rem + 0.5rem);
+  }
 }
 
 .bookmark-item.is-dragging {

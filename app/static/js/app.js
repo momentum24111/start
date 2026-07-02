@@ -1063,23 +1063,35 @@ async function openAssignSelectedBookmarksModal() {
   const body = document.createElement("div");
   body.className = "nav-assign-categories";
   const options = getAssignableNavCategoryOptions();
-  const sectionPickerRows = options
-    .filter((option) => option.id === NAV_ALL || isCategoryNavId(state.config, option.id))
+  const rows = options
     .map((option) => {
+      const supportsSections = option.id === NAV_ALL || isCategoryNavId(state.config, option.id);
       const includeUnsectioned = option.id !== NAV_ALL;
-      const selectOptions = getSectionOptionsForNav(option.id, { includeUnsectioned })
-        .map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`)
-        .join("");
+      const selectOptions = supportsSections
+        ? getSectionOptionsForNav(option.id, { includeUnsectioned })
+          .map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`)
+          .join("")
+        : "";
       return `
-        <div class="nav-assign-categories__section hidden" data-nav-assign-section-row="${escapeHtml(option.id)}">
-          <div class="select-wrap">
-            <select data-nav-assign-section-select="${escapeHtml(option.id)}">
-              <option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>
-              ${selectOptions}
-              <option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>
-            </select>
-            <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
-          </div>
+        <div class="nav-assign-row" data-nav-assign-row="${escapeHtml(option.id)}">
+          <label class="theme-checkbox nav-assign-categories__option" data-nav-assign-option="${escapeHtml(option.id)}">
+            <input type="checkbox" class="theme-checkbox__input" name="navAssignCategory" value="${escapeHtml(option.id)}" />
+            <span class="theme-checkbox__box" aria-hidden="true"></span>
+            <span class="nav-assign-categories__option-icon" aria-hidden="true">${mdiIcon(option.icon)}</span>
+            <span class="theme-checkbox__label">${escapeHtml(option.label)}</span>
+          </label>
+          ${supportsSections ? `
+            <div class="nav-assign-row__section hidden" data-nav-assign-section-row="${escapeHtml(option.id)}">
+              <div class="select-wrap">
+                <select data-nav-assign-section-select="${escapeHtml(option.id)}">
+                  <option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>
+                  ${selectOptions}
+                  <option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>
+                </select>
+                <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
+              </div>
+            </div>
+          ` : ""}
         </div>
       `;
     })
@@ -1087,16 +1099,8 @@ async function openAssignSelectedBookmarksModal() {
   body.innerHTML = `
     <p class="nav-assign-categories__lead">${escapeHtml(interpolateLabel(t("ui.assignSelectedBookmarksLead"), { count: String(bookmarkIds.length) }))}</p>
     <div class="nav-assign-categories__options" role="group" aria-label="${escapeHtml(t("ui.assignSelectedBookmarks"))}">
-      ${options.map((option) => `
-        <label class="theme-checkbox nav-assign-categories__option" data-nav-assign-option="${escapeHtml(option.id)}">
-          <input type="checkbox" class="theme-checkbox__input" name="navAssignCategory" value="${escapeHtml(option.id)}" />
-          <span class="theme-checkbox__box" aria-hidden="true"></span>
-          <span class="nav-assign-categories__option-icon" aria-hidden="true">${mdiIcon(option.icon)}</span>
-          <span class="theme-checkbox__label">${escapeHtml(option.label)}</span>
-        </label>
-      `).join("")}
+      ${rows}
     </div>
-    ${sectionPickerRows}
   `;
   const syncAssignSectionRows = () => {
     body.querySelectorAll("[data-nav-assign-section-row]").forEach((row) => {
@@ -3793,14 +3797,15 @@ function mountInlineSectionCreator(select, navId, {
   if (!(wrap instanceof HTMLElement)) return;
   const previousValue = String(select.dataset.lastValue || select.value || "").trim();
   const inline = document.createElement("div");
-  inline.className = "section-inline-create";
+  inline.className = "section-inline-create bookmark-placement-inline-slot";
   inline.innerHTML = `
     <input type="text" class="section-inline-create__input" />
     <button type="button" class="btn btn--ghost btn--compact btn--icon section-inline-create__save" disabled aria-label="${escapeHtml(t("ui.save"))}">${iconSvg(ICONS.done, "inline-icon")}</button>
     <button type="button" class="btn btn--ghost btn--compact btn--icon section-inline-create__cancel" aria-label="${escapeHtml(t("ui.cancel"))}">${iconSvg(ICONS.close, "inline-icon")}</button>
   `;
+  const parent = wrap.parentElement;
   wrap.classList.add("hidden");
-  wrap.parentElement?.append(inline);
+  parent?.insertBefore(inline, wrap.nextSibling);
   const input = inline.querySelector(".section-inline-create__input");
   const saveBtn = inline.querySelector(".section-inline-create__save");
   const cancelBtn = inline.querySelector(".section-inline-create__cancel");
