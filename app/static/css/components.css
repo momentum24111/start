@@ -1276,8 +1276,9 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-category-menu__trigger
   word-break: break-word;
 }
 
-.nav-view-panel > .bookmark-collection {
-  margin-top: var(--size-gap-card);
+.nav-view-panel > .bookmark-collection,
+.nav-view-panel > .nav-sections-grid {
+  margin-top: var(--size-gap-grid);
 }
 
 .nav-view-title {
