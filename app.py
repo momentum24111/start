@@ -138,6 +138,7 @@ def _legacy_service_image(service: dict) -> str:
 
 
 UNSORTED_CATEGORY_ID = "unsorted"
+UNSECTIONED_SECTION_ID = "__unsectioned__"
 
 
 def _normalize_bookmark(raw: dict, *, category_id: str | None = None) -> dict:
@@ -183,6 +184,15 @@ def _normalize_bookmark(raw: dict, *, category_id: str | None = None) -> dict:
     created_at = str(raw.get("createdAt") or "").strip()
     if created_at:
         bookmark["createdAt"] = created_at
+    raw_assignments = raw.get("navSectionAssignments")
+    if isinstance(raw_assignments, dict):
+        bookmark["navSectionAssignments"] = {
+            str(nav_id).strip(): str(section_id).strip()
+            for nav_id, section_id in raw_assignments.items()
+            if str(nav_id).strip() and str(section_id).strip()
+        }
+    else:
+        bookmark["navSectionAssignments"] = {}
     return bookmark
 
 
@@ -349,6 +359,85 @@ def _merge_bookmark_lists(existing: list[dict], legacy: list[dict]) -> list[dict
     return list(by_id.values())
 
 
+def _normalize_nav_section_entry(raw: dict) -> dict:
+    entry = raw if isinstance(raw, dict) else {}
+    section_type = str(entry.get("type") or "service-list").strip().lower()
+    if section_type not in {"service-list", "iframe"}:
+        section_type = "service-list"
+    icon = str(entry.get("icon") or "folder").strip() or "folder"
+    return {
+        "id": str(entry.get("id") or "").strip(),
+        "name": str(entry.get("name") or "").strip(),
+        "icon": icon,
+        "color": str(entry.get("color") or "primary").strip() or "primary",
+        "collapsed": bool(entry.get("collapsed")),
+        "type": section_type,
+        "iframeUrl": str(entry.get("iframeUrl") or "").strip(),
+        "slots": 1,
+    }
+
+
+def _normalize_nav_sections(raw: object, valid_nav_ids: list[str]) -> dict[str, list[dict]]:
+    source = raw if isinstance(raw, dict) else {}
+    normalized: dict[str, list[dict]] = {}
+    for nav_id in valid_nav_ids:
+        listed = source.get(nav_id) if isinstance(source.get(nav_id), list) else []
+        normalized[nav_id] = [
+            section
+            for section in (_normalize_nav_section_entry(entry) for entry in listed if isinstance(entry, dict))
+            if section.get("id")
+        ]
+    return normalized
+
+
+def _normalize_nav_section_order(
+    raw: object, valid_nav_ids: list[str], nav_sections_by_nav_id: dict[str, list[dict]]
+) -> dict[str, list[str]]:
+    source = raw if isinstance(raw, dict) else {}
+    normalized: dict[str, list[str]] = {}
+    for nav_id in valid_nav_ids:
+        listed = source.get(nav_id) if isinstance(source.get(nav_id), list) else []
+        valid_ids = {str(section.get("id") or "").strip() for section in nav_sections_by_nav_id.get(nav_id, [])}
+        valid_ids.discard("")
+        seen: set[str] = set()
+        order: list[str] = []
+        for raw_id in listed:
+            section_id = str(raw_id or "").strip()
+            if (
+                not section_id
+                or (section_id not in valid_ids and section_id != UNSECTIONED_SECTION_ID)
+                or section_id in seen
+            ):
+                continue
+            seen.add(section_id)
+            order.append(section_id)
+        for section_id in valid_ids:
+            if section_id in seen:
+                continue
+            seen.add(section_id)
+            order.append(section_id)
+        if UNSECTIONED_SECTION_ID not in seen:
+            order.append(UNSECTIONED_SECTION_ID)
+        normalized[nav_id] = order
+    return normalized
+
+
+def _normalize_bookmark_section_assignments(
+    raw_assignments: object, valid_nav_ids: list[str], nav_sections_by_nav_id: dict[str, list[dict]]
+) -> dict[str, str]:
+    source = raw_assignments if isinstance(raw_assignments, dict) else {}
+    normalized: dict[str, str] = {}
+    for nav_id in valid_nav_ids:
+        section_id = str(source.get(nav_id) or "").strip()
+        if not section_id:
+            continue
+        valid_ids = {str(section.get("id") or "").strip() for section in nav_sections_by_nav_id.get(nav_id, [])}
+        valid_ids.discard("")
+        if section_id in valid_ids:
+            normalized[nav_id] = section_id
+    return normalized
+
+
 def migrate_config(data: object) -> dict:
     """Legacy-Config (services in Kategorien) in einheitliches Lesezeichenmodell überführen."""
     if not isinstance(data, dict):
@@ -359,6 +448,8 @@ def migrate_config(data: object) -> dict:
             "bookmarks": [],
             "categoryBookmarkOrder": {},
             "sidebarCategoryBookmarkOrder": {},
+            "navSections": {},
+            "navSectionOrder": {},
         }
 
     categories = [
@@ -399,6 +490,20 @@ def migrate_config(data: object) -> dict:
         sidebar_order_source.update(raw_sidebar_order)
     sidebar_order_source.pop(UNSORTED_CATEGORY_ID, None)
 
+    sidebar_nav_ids = [
+        str(category.get("id") or "").strip()
+        for category in sidebar_categories
+        if str(category.get("id") or "").strip()
+    ]
+    nav_sections = _normalize_nav_sections(data.get("navSections"), sidebar_nav_ids)
+    nav_section_order = _normalize_nav_section_order(data.get("navSectionOrder"), sidebar_nav_ids, nav_sections)
+    for bookmark in bookmarks:
+        bookmark["navSectionAssignments"] = _normalize_bookmark_section_assignments(
+            bookmark.get("navSectionAssignments"),
+            sidebar_nav_ids,
+            nav_sections,
+        )
+
     return {
         "schemaVersion": SCHEMA_VERSION,
         "categories": categories,
@@ -410,6 +515,8 @@ def migrate_config(data: object) -> dict:
         "sidebarCategoryBookmarkOrder": _normalize_sidebar_category_bookmark_order(
             sidebar_order_source, sidebar_categories, bookmarks
         ),
+        "navSections": nav_sections,
+        "navSectionOrder": nav_section_order,
     }
 
 

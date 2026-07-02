@@ -1411,6 +1411,29 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-category-menu__trigger
   gap: var(--size-gap-services);
 }
 
+.bookmark-collection__section--cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(16rem * var(--element-scale))), 1fr));
+  gap: var(--size-gap-services);
+  align-items: stretch;
+}
+
+.category-content > .bookmark-collection {
+  width: 100%;
+  min-width: 0;
+}
+
+.category-content > .bookmark-collection.view-mode--mixed {
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.65rem * var(--element-scale));
+}
+
+.category-content > .bookmark-collection.view-mode--list,
+.category-content > .bookmark-collection.view-mode--cards {
+  margin-top: var(--size-gap-card);
+}
+
 .bookmark-card {
   display: flex;
   flex-direction: column;
@@ -1609,6 +1632,22 @@ main {
 
 .nav-sections-grid .nav-section {
   grid-column: 1 / -1;
+}
+
+.nav-unsectioned-bookmarks {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
+.nav-unsectioned-bookmarks__content {
+  width: 100%;
+  min-width: 0;
+}
+
+.nav-unsectioned-bookmarks__content > .bookmark-collection {
+  width: 100%;
+  min-width: 0;
 }
 
 .category {
@@ -4155,10 +4194,18 @@ body.bookmark-drag-active--multi .sidebar-link.is-drop-target--multi {
   .bookmarks--cards {
     grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(16rem * var(--element-scale))), 1fr));
   }
+
+  .bookmark-collection__section--cards {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(16rem * var(--element-scale))), 1fr));
+  }
 }
 
 @media (min-width: 1100px) {
   .bookmarks--cards {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(18rem * var(--element-scale))), 1fr));
+  }
+
+  .bookmark-collection__section--cards {
     grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(18rem * var(--element-scale))), 1fr));
   }
 }

@@ -41,12 +41,16 @@ import {
   prioritizeFavoriteBookmarks,
   isBookmarkInFavorites,
   UNSECTIONED_SECTION_ID,
+  HOMEPAGE_SECTIONS_CATEGORY_ID,
   getNavSections,
   setNavSections,
   getNavSectionOrder,
   setNavSectionOrder,
   getBookmarkSectionIdForNav,
-  setBookmarkSectionIdForNav
+  setBookmarkSectionIdForNav,
+  createSectionForCategory,
+  findSectionIdByNameForCategory,
+  HOMEPAGE_SECTIONS_CATEGORY_ID
 } from "./bookmarks.js";
 import {
   NAV_ALL,
@@ -861,6 +865,7 @@ function pruneNavSelectionToVisible() {
       ? [...navSelectedBookmarkIds][navSelectedBookmarkIds.size - 1]
       : null;
   }
+  syncNavSelectionModeFromSelection();
 }
 
 function clearNavSelectionPreview() {
@@ -883,6 +888,22 @@ function toggleNavBookmarkSelection(bookmarkId) {
   if (navSelectedBookmarkIds.has(bookmarkId)) navSelectedBookmarkIds.delete(bookmarkId);
   else navSelectedBookmarkIds.add(bookmarkId);
   navSelectionAnchorId = bookmarkId;
+}
+
+function areAllVisibleNavBookmarksSelected() {
+  const visible = getVisibleNavBookmarkIds();
+  if (!visible.length) return false;
+  return visible.every((id) => navSelectedBookmarkIds.has(id));
+}
+
+function syncNavSelectionModeFromSelection() {
+  if (!navSelectionMode || navSelectedBookmarkIds.size > 0) return false;
+  setNavSelectionMode(false);
+  return true;
+}
+
+function isNavBookmarkSelectionModifierClick(event) {
+  return Boolean(event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey);
 }
 
 function selectNavBookmarkRange(anchorId, targetId) {
@@ -908,9 +929,8 @@ function setNavSelectionPreviewForTarget(targetId) {
 }
 
 function applyNavSelectionStateToDom() {
-  const collection = elements.navView?.querySelector(".bookmark-collection");
-  if (!collection) return;
-  collection.querySelectorAll(".bookmark-item[data-bookmark-id]").forEach((item) => {
+  if (!elements.navView) return;
+  elements.navView.querySelectorAll(".bookmark-item[data-bookmark-id]").forEach((item) => {
     const bookmarkId = item.dataset.bookmarkId;
     const selected = navSelectedBookmarkIds.has(bookmarkId);
     const preview = navSelectionPreviewIds.has(bookmarkId);
@@ -979,7 +999,9 @@ async function requestDeleteSelectedNavBookmarks() {
   navSelectionAnchorId = null;
   navSelectionPreviewIds.clear();
   await persistConfig();
-  render();
+  if (!syncNavSelectionModeFromSelection()) {
+    render();
+  }
 }
 
 function handleNavDeleteSelectedShortcut(event) {
@@ -1015,6 +1037,10 @@ function handleNavSelectAllShortcut(event) {
   if (isBlockingFocusTarget(document.activeElement) || isBlockingFocusTarget(event.target)) return;
   if (shouldShowCategoryGrid(getActiveNavId())) return;
   event.preventDefault();
+  if (areAllVisibleNavBookmarksSelected()) {
+    clearAllNavBookmarkSelection();
+    return;
+  }
   activateNavSelectionAndSelectAllVisible();
 }
 
@@ -1022,7 +1048,9 @@ function clearAllNavBookmarkSelection() {
   navSelectedBookmarkIds.clear();
   navSelectionAnchorId = null;
   clearNavSelectionPreview();
-  applyNavSelectionStateToDom();
+  if (!syncNavSelectionModeFromSelection()) {
+    applyNavSelectionStateToDom();
+  }
 }
 
 function setNavSelectionMode(active, { initialBookmarkId = null } = {}) {
@@ -1195,7 +1223,9 @@ function handleNavBookmarkLongPress(bookmarkId) {
     toggleNavBookmarkSelection(bookmarkId);
   }
   clearNavSelectionPreview();
-  applyNavSelectionStateToDom();
+  if (!syncNavSelectionModeFromSelection()) {
+    applyNavSelectionStateToDom();
+  }
 }
 
 function handleNavBookmarkTouchStart(event) {
@@ -1237,6 +1267,27 @@ function isNavSelectionInteractionTarget(target) {
   ));
 }
 
+function handleNavBookmarkModifierClick(event) {
+  if (shouldShowCategoryGrid(getActiveNavId())) return;
+  if (!isNavBookmarkSelectionModifierClick(event)) return;
+  if (isNavSelectionInteractionTarget(event.target)) return;
+  const item = event.target.closest?.(".bookmark-item--nav[data-bookmark-id], .bookmark-item--nav-card[data-bookmark-id]");
+  if (!(item instanceof HTMLElement) || !elements.navView?.contains(item)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const bookmarkId = item.dataset.bookmarkId;
+  if (!bookmarkId) return;
+  if (!navSelectionMode) {
+    setNavSelectionMode(true, { initialBookmarkId: bookmarkId });
+    return;
+  }
+  toggleNavBookmarkSelection(bookmarkId);
+  clearNavSelectionPreview();
+  if (!syncNavSelectionModeFromSelection()) {
+    applyNavSelectionStateToDom();
+  }
+}
+
 function handleNavBookmarkSelectionClick(event) {
   if (navLongPressTriggered) {
     navLongPressTriggered = false;
@@ -1255,11 +1306,14 @@ function handleNavBookmarkSelectionClick(event) {
   if (event.shiftKey && navSelectionAnchorId) {
     selectNavBookmarkRange(navSelectionAnchorId, bookmarkId);
     clearNavSelectionPreview();
-  } else {
-    toggleNavBookmarkSelection(bookmarkId);
-    clearNavSelectionPreview();
+    applyNavSelectionStateToDom();
+    return;
   }
-  applyNavSelectionStateToDom();
+  toggleNavBookmarkSelection(bookmarkId);
+  clearNavSelectionPreview();
+  if (!syncNavSelectionModeFromSelection()) {
+    applyNavSelectionStateToDom();
+  }
 }
 
 function handleNavBookmarkSelectionHover(event) {
@@ -1275,6 +1329,7 @@ function ensureNavSelectionEvents() {
   navSelectionEventsBound = true;
   document.addEventListener("keydown", handleNavSelectAllShortcut);
   document.addEventListener("keydown", handleNavDeleteSelectedShortcut);
+  document.addEventListener("click", handleNavBookmarkModifierClick, true);
   document.addEventListener("keyup", (event) => {
     if (event.key === "Shift") clearNavSelectionPreview();
   });
@@ -2738,6 +2793,7 @@ function openSidebarCategoryModal({ category = null, bookmarkIdsToAssign = [] } 
         navSelectedBookmarkIds.clear();
         navSelectionAnchorId = null;
         navSelectionPreviewIds.clear();
+        syncNavSelectionModeFromSelection();
       }
       await persistConfig();
       render();
@@ -3023,19 +3079,13 @@ function openNavSectionModal(navId, section = null) {
         return false;
       }
       pushUndo();
-      const sections = getNavSections(state.config, navId);
       if (isEdit) {
+        const sections = getNavSections(state.config, navId);
         const idx = sections.findIndex((entry) => entry.id === section.id);
         if (idx >= 0) sections[idx] = nextSection;
+        setNavSections(state.config, navId, sections);
       } else {
-        sections.push(nextSection);
-      }
-      setNavSections(state.config, navId, sections);
-      if (!isEdit) {
-        const order = getNavSectionOrder(state.config, navId);
-        const withoutUnsectioned = order.filter((entry) => entry !== UNSECTIONED_SECTION_ID);
-        withoutUnsectioned.push(nextSection.id, UNSECTIONED_SECTION_ID);
-        setNavSectionOrder(state.config, navId, withoutUnsectioned);
+        createSectionForCategory(state.config, navId, nextSection);
       }
       await persistConfig();
       render();
@@ -3206,11 +3256,51 @@ function resolveBookmarkCategoryForNav(bookmark, navId) {
   return findCategoryById(state.config, firstCategoryId) || null;
 }
 
-function renderBookmarkCollection(bookmarks, navId, viewMode) {
+function renderBookmarkGroup(bookmarks, navId, viewMode, { homepage = false } = {}) {
   const normalizedView = normalizeBookmarkView(viewMode);
-  if (normalizedView === VIEW_MIXED && navId !== NAV_ALL) {
-    return renderMixedBookmarkCollection(bookmarks, navId);
+
+  if (normalizedView === VIEW_MIXED) {
+    const favoriteBookmarks = [];
+    const regularBookmarks = [];
+    for (const bookmark of bookmarks) {
+      if (isBookmarkInFavorites(bookmark)) favoriteBookmarks.push(bookmark);
+      else regularBookmarks.push(bookmark);
+    }
+
+    const root = document.createElement("div");
+    root.className = "bookmarks bookmarks--mixed bookmark-collection view-mode--mixed";
+
+    if (favoriteBookmarks.length) {
+      const cardsSection = document.createElement("div");
+      cardsSection.className = "bookmarks bookmarks--cards bookmark-collection__section bookmark-collection__section--cards";
+      for (const bookmark of favoriteBookmarks) {
+        cardsSection.append(createBookmarkElementForBookmark(
+          bookmark,
+          resolveBookmarkCategoryForNav(bookmark, navId),
+          VIEW_CARDS,
+          { homepage, navId, forceCardLayout: true }
+        ));
+      }
+      root.append(cardsSection);
+    }
+
+    if (regularBookmarks.length) {
+      const listSection = document.createElement("div");
+      listSection.className = "bookmarks bookmarks--list bookmark-collection__section bookmark-collection__section--list";
+      for (const bookmark of regularBookmarks) {
+        listSection.append(createBookmarkElementForBookmark(
+          bookmark,
+          resolveBookmarkCategoryForNav(bookmark, navId),
+          VIEW_LIST,
+          { homepage, navId }
+        ));
+      }
+      root.append(listSection);
+    }
+
+    return root;
   }
+
   const root = document.createElement("div");
   root.className = `${bookmarksContainerClass(normalizedView)} bookmark-collection view-mode--${normalizedView}`;
   for (const bookmark of bookmarks) {
@@ -3218,52 +3308,28 @@ function renderBookmarkCollection(bookmarks, navId, viewMode) {
       bookmark,
       resolveBookmarkCategoryForNav(bookmark, navId),
       normalizedView,
-      { homepage: navId === NAV_ALL, navId }
+      { homepage, navId }
     ));
   }
   return root;
 }
 
-function renderMixedBookmarkCollection(bookmarks, navId) {
-  const favoriteBookmarks = [];
-  const regularBookmarks = [];
-  for (const bookmark of bookmarks) {
-    if (isBookmarkInFavorites(bookmark)) favoriteBookmarks.push(bookmark);
-    else regularBookmarks.push(bookmark);
-  }
-
-  const root = document.createElement("div");
-  root.className = "bookmarks bookmarks--mixed bookmark-collection view-mode--mixed";
-
-  if (favoriteBookmarks.length) {
-    const cardsSection = document.createElement("div");
-    cardsSection.className = "bookmarks bookmarks--cards bookmark-collection__section bookmark-collection__section--cards";
-    for (const bookmark of favoriteBookmarks) {
-      cardsSection.append(createBookmarkElementForBookmark(
+function renderBookmarkCollection(bookmarks, navId, viewMode) {
+  const normalizedView = normalizeBookmarkView(viewMode);
+  if (normalizedView === VIEW_MIXED && navId === NAV_ALL) {
+    const root = document.createElement("div");
+    root.className = `${bookmarksContainerClass(normalizedView)} bookmark-collection view-mode--${normalizedView}`;
+    for (const bookmark of bookmarks) {
+      root.append(createBookmarkElementForBookmark(
         bookmark,
         resolveBookmarkCategoryForNav(bookmark, navId),
-        VIEW_CARDS,
-        { homepage: false, navId, forceCardLayout: true }
+        normalizedView,
+        { homepage: true, navId }
       ));
     }
-    root.append(cardsSection);
+    return root;
   }
-
-  if (regularBookmarks.length) {
-    const listSection = document.createElement("div");
-    listSection.className = "bookmarks bookmarks--list bookmark-collection__section bookmark-collection__section--list";
-    for (const bookmark of regularBookmarks) {
-      listSection.append(createBookmarkElementForBookmark(
-        bookmark,
-        resolveBookmarkCategoryForNav(bookmark, navId),
-        VIEW_LIST,
-        { homepage: false, navId }
-      ));
-    }
-    root.append(listSection);
-  }
-
-  return root;
+  return renderBookmarkGroup(bookmarks, navId, viewMode, { homepage: navId === NAV_ALL });
 }
 
 function isUnsortedBrowserFolderFilterActive() {
@@ -3728,49 +3794,13 @@ function getSectionOptionsForNav(navId, { includeUnsectioned = false } = {}) {
 async function ensureSectionExistsForNav(navId, rawName) {
   const name = String(rawName || "").trim();
   if (!name) return "";
-  if (navId === NAV_ALL) {
-    const existing = listBookmarkListCategories(state.config).find(
-      (section) => String(section.name || "").trim().toLowerCase() === name.toLowerCase()
-    );
-    if (existing) return existing.id;
-    const created = {
-      id: uid(),
-      name,
-      icon: FALLBACK_MDI_ICON,
-      color: "primary",
-      collapsed: false,
-      slots: 1,
-      type: "service-list",
-      iframeUrl: ""
-    };
-    state.config.categories.push(created);
-    state.config.categoryBookmarkOrder = state.config.categoryBookmarkOrder || {};
-    state.config.categoryBookmarkOrder[created.id] = [];
-    await persistConfig();
-    return created.id;
-  }
-  const existing = getNavSections(state.config, navId).find(
-    (section) => String(section.name || "").trim().toLowerCase() === name.toLowerCase()
-  );
-  if (existing) return existing.id;
-  const created = {
-    id: uid(),
-    name,
-    icon: FALLBACK_MDI_ICON,
-    color: "primary",
-    collapsed: false,
-    type: "service-list",
-    iframeUrl: "",
-    slots: 1
-  };
-  const sections = getNavSections(state.config, navId);
-  sections.push(created);
-  setNavSections(state.config, navId, sections);
-  const order = getNavSectionOrder(state.config, navId).filter((entry) => entry !== UNSECTIONED_SECTION_ID);
-  order.push(created.id, UNSECTIONED_SECTION_ID);
-  setNavSectionOrder(state.config, navId, order);
+  const existingId = findSectionIdByNameForCategory(state.config, navId, name);
+  if (existingId) return existingId;
+  pushUndo();
+  const result = createSectionForCategory(state.config, navId, { name });
+  if (!result.sectionId) return "";
   await persistConfig();
-  return created.id;
+  return result.sectionId;
 }
 
 function rebuildSectionSelect(select, navId, {
@@ -3799,7 +3829,7 @@ function mountInlineSectionCreator(select, navId, {
   const inline = document.createElement("div");
   inline.className = "section-inline-create bookmark-placement-inline-slot";
   inline.innerHTML = `
-    <input type="text" class="section-inline-create__input" />
+    <input type="text" class="section-inline-create__input" data-enter-submit="false" />
     <button type="button" class="btn btn--ghost btn--compact btn--icon section-inline-create__save" disabled aria-label="${escapeHtml(t("ui.save"))}">${iconSvg(ICONS.done, "inline-icon")}</button>
     <button type="button" class="btn btn--ghost btn--compact btn--icon section-inline-create__cancel" aria-label="${escapeHtml(t("ui.cancel"))}">${iconSvg(ICONS.close, "inline-icon")}</button>
   `;
@@ -3824,25 +3854,38 @@ function mountInlineSectionCreator(select, navId, {
   const saveInline = async () => {
     const nextName = String(input?.value || "").trim();
     if (!nextName) return;
-    const sectionId = await ensureSectionExistsForNav(navId, nextName);
-    closeInline(sectionId);
+    try {
+      const sectionId = await ensureSectionExistsForNav(navId, nextName);
+      if (!sectionId) return;
+      closeInline(sectionId);
+    } catch {
+      closeInline(previousValue);
+    }
   };
   input?.addEventListener("input", syncSaveState);
   input?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
+      event.stopPropagation();
       void saveInline();
       return;
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       closeInline(previousValue);
     }
   });
-  saveBtn?.addEventListener("click", () => {
+  saveBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     void saveInline();
   });
-  cancelBtn?.addEventListener("click", () => closeInline(previousValue));
+  cancelBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeInline(previousValue);
+  });
   syncSaveState();
   input?.focus();
 }
@@ -3860,6 +3903,16 @@ function collectBookmarksBySection(navId) {
     grouped.get(sectionId).push(bookmark);
   }
   return grouped;
+}
+
+function renderUnsectionedNavBookmarks(navId, bookmarks, viewMode) {
+  const wrap = document.createElement("div");
+  wrap.className = "nav-unsectioned-bookmarks";
+  const inner = document.createElement("div");
+  inner.className = "nav-unsectioned-bookmarks__content";
+  inner.append(renderBookmarkGroup(bookmarks, navId, viewMode));
+  wrap.append(inner);
+  return wrap;
 }
 
 function renderSidebarCategorySectionCard({ navId, sectionId, section, bookmarks, viewMode }) {
@@ -3907,21 +3960,13 @@ function renderSidebarCategorySectionCard({ navId, sectionId, section, bookmarks
           ></iframe>
         </div>
       `
-    : `<div data-bookmarks-container class="${bookmarksContainerClass(normalizeBookmarkView(viewMode))}"></div>`}
+    : ""}
     </div>
   `;
-  const collection = card.querySelector("[data-bookmarks-container]");
-  if (collection) {
-    for (const bookmark of bookmarks) {
-      collection.append(createBookmarkElementForBookmark(
-        bookmark,
-        findSidebarCategoryById(state.config, navId),
-        viewMode,
-        { homepage: false, navId }
-      ));
-    }
-  }
   const content = card.querySelector(".category-content");
+  if (content && sectionType !== "iframe") {
+    content.append(renderBookmarkGroup(bookmarks, navId, viewMode));
+  }
   const arrow = card.querySelector(".collapse-arrow");
   const collapsed = Boolean(section?.collapsed);
   syncCategoryContentHeight(content, collapsed);
@@ -3948,9 +3993,16 @@ function renderSidebarCategorySections(navId, viewMode) {
   const sectionsById = new Map(getNavSections(state.config, navId).map((section) => [section.id, section]));
   const bookmarksBySection = collectBookmarksBySection(navId);
   for (const sectionId of getOrderedSidebarSectionIds(navId)) {
+    if (sectionId === UNSECTIONED_SECTION_ID) {
+      const unsectionedBookmarks = bookmarksBySection.get(UNSECTIONED_SECTION_ID) || [];
+      if (unsectionedBookmarks.length) {
+        wrap.append(renderUnsectionedNavBookmarks(navId, unsectionedBookmarks, viewMode));
+      }
+      continue;
+    }
     const section = sectionsById.get(sectionId) || null;
     const bookmarks = bookmarksBySection.get(sectionId) || [];
-    if (!section && sectionId !== UNSECTIONED_SECTION_ID) continue;
+    if (!section) continue;
     wrap.append(renderSidebarCategorySectionCard({
       navId,
       sectionId,
@@ -4540,29 +4592,16 @@ function openCategoryModal(category = null) {
         }
       } else {
         const typeForNew = normalizeCategoryType(fd.get("type") || DEFAULT_CATEGORY_TYPE);
-        const createdCategory = {
+        createSectionForCategory(state.config, HOMEPAGE_SECTIONS_CATEGORY_ID, {
           id: uid(),
-          name: fd.get("name"),
+          name: String(fd.get("name") || "").trim(),
           icon: selectedIcon,
-          color: fd.get("color"),
+          color: String(fd.get("color") || "primary").trim() || "primary",
           collapsed: form.querySelector("input[name='collapsed']").checked,
-          slots: normalizeCategorySlots(fd.get("slots"))
-        };
-        if (typeForNew === "iframe") {
-          state.config.categories.push({
-            ...createdCategory,
-            type: "iframe",
-            iframeUrl: iframeUrlValue
-          });
-        } else {
-          state.config.categories.push({
-            ...createdCategory,
-            type: "service-list",
-            iframeUrl: ""
-          });
-          state.config.categoryBookmarkOrder = state.config.categoryBookmarkOrder || {};
-          state.config.categoryBookmarkOrder[createdCategory.id] = [];
-        }
+          slots: normalizeCategorySlots(fd.get("slots")),
+          type: typeForNew,
+          iframeUrl: iframeUrlValue
+        });
       }
       await persistConfig();
       render();

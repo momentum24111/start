@@ -4,6 +4,7 @@ export const SCHEMA_VERSION = 2;
 export const UNSORTED_CATEGORY_ID = "unsorted";
 export const FAVORITES_CATEGORY_ID = "favorites";
 export const UNSECTIONED_SECTION_ID = "__unsectioned__";
+export const HOMEPAGE_SECTIONS_CATEGORY_ID = "all";
 
 const RESERVED_SIDEBAR_SLUGS = new Set(["start", "favoriten", "unsortiert", "kategorie"]);
 
@@ -834,4 +835,74 @@ export function setBookmarkSectionIdForNav(bookmark, navId, sectionId) {
   const normalized = String(sectionId || "").trim();
   if (normalized) bookmark.navSectionAssignments[navId] = normalized;
   else delete bookmark.navSectionAssignments[navId];
+}
+
+function generateSectionId() {
+  return crypto.randomUUID().slice(0, 8);
+}
+
+export function findSectionIdByNameForCategory(config, categoryId, rawName) {
+  const name = String(rawName || "").trim();
+  if (!name) return "";
+  const normalizedName = name.toLowerCase();
+  if (categoryId === HOMEPAGE_SECTIONS_CATEGORY_ID) {
+    const existing = listBookmarkListCategories(config).find(
+      (section) => String(section.name || "").trim().toLowerCase() === normalizedName
+    );
+    return existing?.id || "";
+  }
+  const existing = getNavSections(config, categoryId).find(
+    (section) => String(section.name || "").trim().toLowerCase() === normalizedName
+  );
+  return existing?.id || "";
+}
+
+function buildSectionEntry(sectionData = {}) {
+  const type = normalizeCategoryType(sectionData.type || "service-list");
+  return {
+    id: String(sectionData.id || "").trim() || generateSectionId(),
+    name: String(sectionData.name || "").trim(),
+    icon: String(sectionData.icon || "folder").trim() || "folder",
+    color: String(sectionData.color || "primary").trim() || "primary",
+    collapsed: Boolean(sectionData.collapsed),
+    type,
+    iframeUrl: type === "iframe" ? normalizeIframeUrl(sectionData.iframeUrl) : "",
+    slots: normalizeCategorySlots(sectionData.slots ?? 1)
+  };
+}
+
+/**
+ * Legt einen Abschnitt in genau einer Kategorie an oder wählt einen bestehenden gleichnamigen Abschnitt.
+ * Für die Startseite categoryId = HOMEPAGE_SECTIONS_CATEGORY_ID ("all"), sonst Sidebar-Kategorie-ID.
+ */
+export function createSectionForCategory(config, categoryId, sectionData = {}) {
+  const name = String(sectionData.name || "").trim();
+  if (!name) return { sectionId: "", created: false, changed: false, section: null };
+
+  const existingId = findSectionIdByNameForCategory(config, categoryId, name);
+  if (existingId) {
+    const section = categoryId === HOMEPAGE_SECTIONS_CATEGORY_ID
+      ? listBookmarkListCategories(config).find((entry) => entry.id === existingId) || null
+      : getNavSections(config, categoryId).find((entry) => entry.id === existingId) || null;
+    return { sectionId: existingId, created: false, changed: false, section };
+  }
+
+  if (categoryId === HOMEPAGE_SECTIONS_CATEGORY_ID) {
+    const created = buildSectionEntry(sectionData);
+    created.name = name;
+    config.categories.push(created);
+    config.categoryBookmarkOrder = config.categoryBookmarkOrder || {};
+    config.categoryBookmarkOrder[created.id] = [];
+    return { sectionId: created.id, created: true, changed: true, section: created };
+  }
+
+  const created = buildSectionEntry({ ...sectionData, slots: 1 });
+  created.name = name;
+  const sections = getNavSections(config, categoryId);
+  sections.push(created);
+  setNavSections(config, categoryId, sections);
+  const order = getNavSectionOrder(config, categoryId).filter((entry) => entry !== UNSECTIONED_SECTION_ID);
+  order.push(created.id, UNSECTIONED_SECTION_ID);
+  setNavSectionOrder(config, categoryId, order);
+  return { sectionId: created.id, created: true, changed: true, section: created };
 }
