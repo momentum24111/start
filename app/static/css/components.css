@@ -2219,6 +2219,26 @@ textarea {
   padding: 0.35rem 2rem 0.35rem 0.5rem;
 }
 
+.section-inline-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.section-inline-create__input {
+  width: 100%;
+  min-width: 0;
+}
+
+.section-inline-create__save,
+.section-inline-create__cancel {
+  width: 2.125rem;
+  min-width: 2.125rem;
+  min-height: 2.125rem;
+  padding: 0;
+}
+
 @media (max-width: 650px) {
   .bookmark-placement-homepage {
     flex-direction: column;
@@ -2237,6 +2257,16 @@ textarea {
     min-width: 0;
     width: 100%;
     padding-left: calc(1rem + 0.5rem);
+  }
+
+  .section-inline-create {
+    grid-template-columns: 1fr;
+  }
+
+  .section-inline-create__save,
+  .section-inline-create__cancel {
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -3547,6 +3577,11 @@ textarea {
   gap: 0.25rem;
   max-height: min(50vh, 18rem);
   overflow: auto;
+}
+
+.nav-assign-categories__section {
+  margin-left: 2rem;
+  margin-top: 0.25rem;
 }
 
 .nav-assign-categories__option {

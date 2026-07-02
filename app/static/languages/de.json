@@ -11,6 +11,7 @@
     "addSection": "Abschnitt hinzufügen",
     "editSection": "Abschnitt bearbeiten",
     "newSection": "Neuer Abschnitt",
+    "addNewSectionInline": "+ Neuen Abschnitt hinzufügen",
     "deleteSection": "Abschnitt löschen",
     "deleteSectionConfirm": "Möchtest du den Abschnitt „{name}“ wirklich löschen?",
     "addService": "Service hinzufügen",

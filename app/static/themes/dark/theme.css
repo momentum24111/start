@@ -309,6 +309,15 @@ body {
   color: var(--bookmark-placement-select-fg);
 }
 
+.section-inline-create__input {
+  background: var(--bookmark-placement-select-bg);
+  color: var(--bookmark-placement-select-fg);
+}
+
+.section-inline-create__save:disabled {
+  opacity: 0.6;
+}
+
 .bookmark-placement-homepage__select:focus,
 .bookmark-placement-sidebar__select:focus {
   outline: none;

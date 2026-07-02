@@ -146,6 +146,7 @@ const state = {
 };
 
 const CATEGORY_METADATA_TOAST_ID = "category-metadata-reload";
+const CREATE_SECTION_OPTION_VALUE = "__create_section__";
 const SIDEBAR_MOBILE_BREAKPOINT = "(max-width: 900px)";
 const MOBILE_BOOKMARK_BREAKPOINT = "(max-width: 650px)";
 const NAV_LONG_PRESS_MS = 500;
@@ -1042,6 +1043,7 @@ function setNavSelectionMode(active, { initialBookmarkId = null } = {}) {
 
 function getAssignableNavCategoryOptions() {
   const options = [
+    { id: NAV_ALL, label: getHomepageName(), icon: "play" },
     { id: NAV_FAVORITES, label: t("ui.navFavorites"), icon: "star" },
     { id: NAV_UNSORTED, label: t("ui.navUnsorted"), icon: "folder-outline" }
   ];
@@ -1061,6 +1063,27 @@ async function openAssignSelectedBookmarksModal() {
   const body = document.createElement("div");
   body.className = "nav-assign-categories";
   const options = getAssignableNavCategoryOptions();
+  const sectionPickerRows = options
+    .filter((option) => option.id === NAV_ALL || isCategoryNavId(state.config, option.id))
+    .map((option) => {
+      const includeUnsectioned = option.id !== NAV_ALL;
+      const selectOptions = getSectionOptionsForNav(option.id, { includeUnsectioned })
+        .map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`)
+        .join("");
+      return `
+        <div class="nav-assign-categories__section hidden" data-nav-assign-section-row="${escapeHtml(option.id)}">
+          <div class="select-wrap">
+            <select data-nav-assign-section-select="${escapeHtml(option.id)}">
+              <option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>
+              ${selectOptions}
+              <option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>
+            </select>
+            <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
   body.innerHTML = `
     <p class="nav-assign-categories__lead">${escapeHtml(interpolateLabel(t("ui.assignSelectedBookmarksLead"), { count: String(bookmarkIds.length) }))}</p>
     <div class="nav-assign-categories__options" role="group" aria-label="${escapeHtml(t("ui.assignSelectedBookmarks"))}">
@@ -1073,7 +1096,30 @@ async function openAssignSelectedBookmarksModal() {
         </label>
       `).join("")}
     </div>
+    ${sectionPickerRows}
   `;
+  const syncAssignSectionRows = () => {
+    body.querySelectorAll("[data-nav-assign-section-row]").forEach((row) => {
+      const navId = String(row.getAttribute("data-nav-assign-section-row") || "").trim();
+      const checked = body.querySelector(`input[name='navAssignCategory'][value='${CSS.escape(navId)}']`)?.checked;
+      row.classList.toggle("hidden", !checked);
+    });
+  };
+  body.querySelectorAll("input[name='navAssignCategory']").forEach((input) => {
+    input.addEventListener("change", syncAssignSectionRows);
+  });
+  body.querySelectorAll("[data-nav-assign-section-select]").forEach((select) => {
+    const navId = String(select.getAttribute("data-nav-assign-section-select") || "").trim();
+    const includeUnsectioned = navId !== NAV_ALL;
+    select.addEventListener("change", () => {
+      if (select.value !== CREATE_SECTION_OPTION_VALUE) {
+        select.dataset.lastValue = String(select.value || "").trim();
+        return;
+      }
+      mountInlineSectionCreator(select, navId, { includeUnsectioned });
+    });
+  });
+  syncAssignSectionRows();
 
   await showModal({
     title: t("ui.assignSelectedBookmarks"),
@@ -1085,11 +1131,33 @@ async function openAssignSelectedBookmarksModal() {
       const selectedCategoryIds = [...body.querySelectorAll("input[name='navAssignCategory']:checked")]
         .map((input) => input.value)
         .filter(Boolean);
+      const homepageSectionId = String(body.querySelector("[data-nav-assign-section-select='all']")?.value || "").trim();
+      if (selectedCategoryIds.includes(NAV_ALL) && !homepageSectionId) {
+        return false;
+      }
+      const navSectionAssignments = {};
+      body.querySelectorAll("[data-nav-assign-section-select]").forEach((select) => {
+        const navId = String(select.getAttribute("data-nav-assign-section-select") || "").trim();
+        const value = String(select.value || "").trim();
+        if (!navId || !value || value === CREATE_SECTION_OPTION_VALUE) return;
+        navSectionAssignments[navId] = value;
+      });
       pushUndo();
       for (const bookmarkId of bookmarkIds) {
         const bookmark = findBookmarkById(state.config, bookmarkId);
         if (!bookmark) continue;
         assignBookmarkToNavCategoryTargets(state.config, bookmark, selectedCategoryIds);
+        if (selectedCategoryIds.includes(NAV_ALL) && homepageSectionId) {
+          const listCategoryIds = new Set(listBookmarkListCategories(state.config).map((category) => category.id));
+          const preserved = (bookmark.categoryIds || []).filter((id) => !listCategoryIds.has(id));
+          bookmark.categoryIds = [...preserved, homepageSectionId];
+          ensureBookmarkInCategoryOrder(state.config, homepageSectionId, bookmark.id);
+        }
+        for (const [navId, sectionId] of Object.entries(navSectionAssignments)) {
+          if (!selectedCategoryIds.includes(navId) || navId === NAV_ALL) continue;
+          if (!(bookmark.sidebarCategoryIds || []).includes(navId)) continue;
+          setBookmarkSectionIdForNav(bookmark, navId, sectionId === UNSECTIONED_SECTION_ID ? "" : sectionId);
+        }
       }
       await persistConfig();
       pruneNavSelectionToVisible();
@@ -3642,6 +3710,138 @@ function getSectionTitleForNav(sectionId) {
   return "";
 }
 
+function getSectionOptionsForNav(navId, { includeUnsectioned = false } = {}) {
+  if (navId === NAV_ALL) {
+    return listBookmarkListCategories(state.config).map((section) => ({ id: section.id, name: section.name }));
+  }
+  const sections = getNavSections(state.config, navId).map((section) => ({ id: section.id, name: section.name }));
+  if (includeUnsectioned) {
+    return [{ id: UNSECTIONED_SECTION_ID, name: t("ui.unsectioned") }, ...sections];
+  }
+  return sections;
+}
+
+async function ensureSectionExistsForNav(navId, rawName) {
+  const name = String(rawName || "").trim();
+  if (!name) return "";
+  if (navId === NAV_ALL) {
+    const existing = listBookmarkListCategories(state.config).find(
+      (section) => String(section.name || "").trim().toLowerCase() === name.toLowerCase()
+    );
+    if (existing) return existing.id;
+    const created = {
+      id: uid(),
+      name,
+      icon: FALLBACK_MDI_ICON,
+      color: "primary",
+      collapsed: false,
+      slots: 1,
+      type: "service-list",
+      iframeUrl: ""
+    };
+    state.config.categories.push(created);
+    state.config.categoryBookmarkOrder = state.config.categoryBookmarkOrder || {};
+    state.config.categoryBookmarkOrder[created.id] = [];
+    await persistConfig();
+    return created.id;
+  }
+  const existing = getNavSections(state.config, navId).find(
+    (section) => String(section.name || "").trim().toLowerCase() === name.toLowerCase()
+  );
+  if (existing) return existing.id;
+  const created = {
+    id: uid(),
+    name,
+    icon: FALLBACK_MDI_ICON,
+    color: "primary",
+    collapsed: false,
+    type: "service-list",
+    iframeUrl: "",
+    slots: 1
+  };
+  const sections = getNavSections(state.config, navId);
+  sections.push(created);
+  setNavSections(state.config, navId, sections);
+  const order = getNavSectionOrder(state.config, navId).filter((entry) => entry !== UNSECTIONED_SECTION_ID);
+  order.push(created.id, UNSECTIONED_SECTION_ID);
+  setNavSectionOrder(state.config, navId, order);
+  await persistConfig();
+  return created.id;
+}
+
+function rebuildSectionSelect(select, navId, {
+  includeUnsectioned = false,
+  selectedId = ""
+} = {}) {
+  if (!(select instanceof HTMLSelectElement)) return;
+  const options = getSectionOptionsForNav(navId, { includeUnsectioned });
+  const entries = [
+    `<option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>`,
+    ...options.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`),
+    `<option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>`
+  ];
+  select.innerHTML = entries.join("");
+  select.value = selectedId && [...options.map((entry) => entry.id)].includes(selectedId) ? selectedId : "";
+}
+
+function mountInlineSectionCreator(select, navId, {
+  includeUnsectioned = false,
+  onSelectionChanged = null
+} = {}) {
+  if (!(select instanceof HTMLSelectElement)) return;
+  const wrap = select.closest(".select-wrap");
+  if (!(wrap instanceof HTMLElement)) return;
+  const previousValue = String(select.dataset.lastValue || select.value || "").trim();
+  const inline = document.createElement("div");
+  inline.className = "section-inline-create";
+  inline.innerHTML = `
+    <input type="text" class="section-inline-create__input" />
+    <button type="button" class="btn btn--ghost btn--compact btn--icon section-inline-create__save" disabled aria-label="${escapeHtml(t("ui.save"))}">${iconSvg(ICONS.done, "inline-icon")}</button>
+    <button type="button" class="btn btn--ghost btn--compact btn--icon section-inline-create__cancel" aria-label="${escapeHtml(t("ui.cancel"))}">${iconSvg(ICONS.close, "inline-icon")}</button>
+  `;
+  wrap.classList.add("hidden");
+  wrap.parentElement?.append(inline);
+  const input = inline.querySelector(".section-inline-create__input");
+  const saveBtn = inline.querySelector(".section-inline-create__save");
+  const cancelBtn = inline.querySelector(".section-inline-create__cancel");
+  const closeInline = (restoredValue = previousValue) => {
+    inline.remove();
+    rebuildSectionSelect(select, navId, { includeUnsectioned, selectedId: restoredValue });
+    wrap.classList.remove("hidden");
+    select.focus();
+    select.dataset.lastValue = String(select.value || "").trim();
+    onSelectionChanged?.(select.value);
+  };
+  const syncSaveState = () => {
+    const valid = Boolean(String(input?.value || "").trim());
+    if (saveBtn instanceof HTMLButtonElement) saveBtn.disabled = !valid;
+  };
+  const saveInline = async () => {
+    const nextName = String(input?.value || "").trim();
+    if (!nextName) return;
+    const sectionId = await ensureSectionExistsForNav(navId, nextName);
+    closeInline(sectionId);
+  };
+  input?.addEventListener("input", syncSaveState);
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void saveInline();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeInline(previousValue);
+    }
+  });
+  saveBtn?.addEventListener("click", () => {
+    void saveInline();
+  });
+  cancelBtn?.addEventListener("click", () => closeInline(previousValue));
+  syncSaveState();
+  input?.focus();
+}
+
 function getOrderedSidebarSectionIds(navId) {
   return getNavSectionOrder(state.config, navId);
 }
@@ -4469,6 +4669,7 @@ function renderBookmarkPlacementFields({
             >
               <option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>
               ${sectionOptions}
+              <option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>
             </select>
             <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
           </div>
@@ -4501,6 +4702,7 @@ function renderBookmarkPlacementFields({
         >
           <option value="">${escapeHtml(t("ui.homepageCategoryPlaceholder"))}</option>
           ${homepageOptions}
+          <option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>
         </select>
         <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
       </div>
@@ -4951,6 +5153,24 @@ function openBookmarkModal(arg = {}) {
       syncPlacementState();
     });
   });
+  homepageCategorySelect?.addEventListener("change", () => {
+    if (homepageCategorySelect.value !== CREATE_SECTION_OPTION_VALUE) {
+      homepageCategorySelect.dataset.lastValue = String(homepageCategorySelect.value || "").trim();
+      return;
+    }
+    mountInlineSectionCreator(homepageCategorySelect, NAV_ALL, { includeUnsectioned: false });
+  });
+  form.querySelectorAll("[data-sidebar-section-select]").forEach((select) => {
+    const navId = String(select.getAttribute("data-sidebar-section-select") || "").trim();
+    if (!navId) return;
+    select.addEventListener("change", () => {
+      if (select.value !== CREATE_SECTION_OPTION_VALUE) {
+        select.dataset.lastValue = String(select.value || "").trim();
+        return;
+      }
+      mountInlineSectionCreator(select, navId, { includeUnsectioned: true });
+    });
+  });
   syncUnsortedExclusive(null);
   syncPlacementState();
   syncIconPreviewFromField();
@@ -5007,7 +5227,7 @@ function openBookmarkModal(arg = {}) {
         const select = form.querySelector(`[data-sidebar-section-select="${CSS.escape(categoryId)}"]`);
         if (!(select instanceof HTMLSelectElement)) continue;
         const sectionId = String(select.value || "").trim();
-        if (sectionId) sidebarSectionAssignments[categoryId] = sectionId;
+        if (sectionId && sectionId !== CREATE_SECTION_OPTION_VALUE) sidebarSectionAssignments[categoryId] = sectionId;
       }
 
       form.querySelector("[data-bookmark-placements]")?.removeAttribute("data-invalid");
@@ -5015,7 +5235,7 @@ function openBookmarkModal(arg = {}) {
 
       let categoryIds = [];
       if (homepageEnabledValue) {
-        if (!homepageCategoryIdValue || !listCategoryIds.has(homepageCategoryIdValue)) {
+        if (!homepageCategoryIdValue || homepageCategoryIdValue === CREATE_SECTION_OPTION_VALUE || !listCategoryIds.has(homepageCategoryIdValue)) {
           form.querySelector("[data-bookmark-placements]")?.setAttribute("data-invalid", "true");
           homepageCategorySelectEl?.setAttribute("data-invalid", "true");
           return false;
