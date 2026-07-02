@@ -4064,23 +4064,32 @@ function renderBookmarkPlacementFields({
     .join("");
 
   return `
-    <div class="bookmark-placement-option bookmark-placement-option--with-select">
+    <div
+      class="bookmark-placement-homepage${homepageEnabled ? " is-homepage-active" : ""}"
+      data-homepage-placement
+    >
       ${renderBookmarkThemeCheckbox({
     name: "homepageEnabled",
     checked: homepageEnabled,
     label: getHomepageName(),
-    inputAttrs: "data-homepage-toggle",
-    extraClass: "bookmark-placement-option__toggle"
+    inputAttrs: "data-homepage-toggle"
   })}
-      <select
-        name="homepageCategoryId"
-        data-homepage-category
-        class="bookmark-placement-option__select"
-        ${homepageEnabled ? "" : "disabled"}
+      <div
+        class="select-wrap bookmark-placement-homepage__select-wrap${homepageEnabled ? "" : " hidden"}"
+        data-homepage-select-wrap
       >
-        <option value="">${escapeHtml(t("ui.homepageCategoryPlaceholder"))}</option>
-        ${homepageOptions}
-      </select>
+        <select
+          name="homepageCategoryId"
+          data-homepage-category
+          class="bookmark-placement-homepage__select"
+          ${homepageEnabled ? "" : "disabled"}
+          aria-hidden="${homepageEnabled ? "false" : "true"}"
+        >
+          <option value="">${escapeHtml(t("ui.homepageCategoryPlaceholder"))}</option>
+          ${homepageOptions}
+        </select>
+        <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
+      </div>
     </div>
     ${renderBookmarkThemeCheckbox({
     name: "sidebarCategoryIds",
@@ -4449,9 +4458,14 @@ function openBookmarkModal(arg = {}) {
 
   const syncHomepageCategorySelect = () => {
     const enabled = Boolean(homepageToggle?.checked);
+    const selectWrap = form.querySelector("[data-homepage-select-wrap]");
+    const placementRow = form.querySelector("[data-homepage-placement]");
     if (!homepageCategorySelect) return;
     homepageCategorySelect.disabled = !enabled;
+    homepageCategorySelect.setAttribute("aria-hidden", enabled ? "false" : "true");
     if (!enabled) homepageCategorySelect.removeAttribute("data-invalid");
+    selectWrap?.classList.toggle("hidden", !enabled);
+    placementRow?.classList.toggle("is-homepage-active", enabled);
   };
 
   const syncUnsortedExclusive = (source) => {

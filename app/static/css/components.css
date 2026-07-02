@@ -2121,7 +2121,7 @@ textarea {
 }
 
 .checkbox-group .theme-checkbox,
-.checkbox-group .bookmark-placement-option--with-select {
+.checkbox-group .bookmark-placement-homepage {
   min-height: calc(2.125rem * var(--element-scale, 1));
 }
 
@@ -2144,46 +2144,62 @@ textarea {
   align-items: start;
 }
 
-.bookmark-placement-option--with-select {
+.bookmark-placement-homepage {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.15rem 0.45rem;
-}
-
-.bookmark-placement-option__toggle {
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
-  min-height: 0;
 }
 
-.bookmark-placement-option__select {
+.bookmark-placement-homepage > .theme-checkbox {
   flex: 0 0 auto;
-  width: min(14rem, 42%);
-  min-width: 10rem;
-  min-height: calc(2.125rem * var(--element-scale, 1));
-  padding: 0.35rem 0.5rem;
+  max-width: 100%;
 }
 
-.bookmark-placement-option__select:disabled {
-  opacity: 0.6;
+.bookmark-placement-homepage.is-homepage-active > .theme-checkbox {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.bookmark-placement-homepage__select-wrap {
+  flex: 1 1 18rem;
+  min-width: min(100%, 16rem);
+  max-width: 100%;
+}
+
+.modal.modal--bookmark-form .bookmark-placement-homepage__select-wrap {
+  flex: 1 1 20rem;
+  min-width: min(100%, 18rem);
+}
+
+.bookmark-placement-homepage__select {
+  width: 100%;
+  min-height: calc(2.125rem * var(--element-scale, 1));
+  padding: 0.35rem 2rem 0.35rem 0.5rem;
+}
+
+.bookmark-placement-homepage__select:disabled {
   cursor: not-allowed;
 }
 
-.bookmark-placement-option__select[data-invalid="true"] {
+.bookmark-placement-homepage__select[data-invalid="true"] {
   outline: 1px solid var(--danger);
   outline-offset: 1px;
 }
 
 @media (max-width: 650px) {
-  .bookmark-placement-option--with-select {
+  .bookmark-placement-homepage {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .bookmark-placement-option__select {
-    width: 100%;
+  .bookmark-placement-homepage__select-wrap {
+    flex: 1 1 auto;
     min-width: 0;
+    width: 100%;
+    padding-left: calc(1rem + 0.5rem);
   }
 }
 

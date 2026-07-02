@@ -131,6 +131,7 @@ async function closeModal(reason = "cancel") {
   overlay.remove();
 
   if (modalStack.length > 0) {
+    const closingResolve = resolve;
     activeModal = modalStack.pop();
     activeModal.overlay.classList.remove("is-behind");
     focusModalInitialTarget(activeModal.modal, {
@@ -140,6 +141,7 @@ async function closeModal(reason = "cancel") {
     });
     document.addEventListener("keydown", keyHandler);
     isClosing = false;
+    closingResolve?.();
     return;
   }
 
