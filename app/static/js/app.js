@@ -1102,6 +1102,38 @@ function getAssignNavTargetSectionId(bookmark, navTargetId) {
   return "";
 }
 
+function syncUnsortedExclusiveSelection({ unsortedInput, otherInputs, source }) {
+  if (!(unsortedInput instanceof HTMLInputElement)) return;
+  const others = otherInputs.filter((input) => input instanceof HTMLInputElement);
+  const anyOtherChecked = others.some((input) => input.checked);
+
+  if (source === unsortedInput) {
+    if (unsortedInput.checked) {
+      others.forEach((input) => {
+        input.checked = false;
+      });
+    } else if (!anyOtherChecked) {
+      unsortedInput.checked = true;
+    }
+    return;
+  }
+
+  if (anyOtherChecked) {
+    unsortedInput.checked = false;
+  } else {
+    unsortedInput.checked = true;
+  }
+}
+
+function normalizeAssignSelectedCategoryIds(selectedCategoryIds) {
+  const selected = [...new Set((selectedCategoryIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
+  const hasNonUnsorted = selected.some((id) => id !== NAV_UNSORTED);
+  if (!hasNonUnsorted) {
+    return selected.includes(NAV_UNSORTED) ? selected : [NAV_UNSORTED, ...selected];
+  }
+  return selected.filter((id) => id !== NAV_UNSORTED);
+}
+
 function resolveAssignModalPrefill(bookmarkIds) {
   const bookmarks = bookmarkIds
     .map((id) => findBookmarkById(state.config, id))
@@ -1185,8 +1217,19 @@ async function openAssignSelectedBookmarksModal() {
       row.classList.toggle("hidden", !checked);
     });
   };
+  const assignCategoryInputs = () => [...body.querySelectorAll("input[name='navAssignCategory']")];
+  const assignUnsortedInput = () => body.querySelector(`input[name='navAssignCategory'][value='${CSS.escape(NAV_UNSORTED)}']`);
+  const assignNonUnsortedInputs = () => assignCategoryInputs().filter((input) => input.value !== NAV_UNSORTED);
+  const syncAssignCategorySelection = (source) => {
+    syncUnsortedExclusiveSelection({
+      unsortedInput: assignUnsortedInput(),
+      otherInputs: assignNonUnsortedInputs(),
+      source
+    });
+    syncAssignSectionRows();
+  };
   body.querySelectorAll("input[name='navAssignCategory']").forEach((input) => {
-    input.addEventListener("change", syncAssignSectionRows);
+    input.addEventListener("change", () => syncAssignCategorySelection(input));
   });
   body.querySelectorAll("[data-nav-assign-section-select]").forEach((select) => {
     const navId = String(select.getAttribute("data-nav-assign-section-select") || "").trim();
@@ -1199,7 +1242,7 @@ async function openAssignSelectedBookmarksModal() {
       mountInlineSectionCreator(select, navId, { includeUnsectioned });
     });
   });
-  syncAssignSectionRows();
+  syncAssignCategorySelection(null);
   body.querySelectorAll("[data-nav-assign-section-select]").forEach((select) => {
     const value = String(select.value || "").trim();
     if (value && value !== CREATE_SECTION_OPTION_VALUE) {
@@ -1214,9 +1257,10 @@ async function openAssignSelectedBookmarksModal() {
     cancelLabel: t("ui.cancel"),
     modalClass: "modal--nav-assign",
     onSave: async () => {
-      const selectedCategoryIds = [...body.querySelectorAll("input[name='navAssignCategory']:checked")]
-        .map((input) => input.value)
-        .filter(Boolean);
+      const selectedCategoryIds = normalizeAssignSelectedCategoryIds(
+        [...body.querySelectorAll("input[name='navAssignCategory']:checked")]
+          .map((input) => input.value)
+      );
       const homepageSectionId = String(body.querySelector("[data-nav-assign-section-select='all']")?.value || "").trim();
       if (selectedCategoryIds.includes(NAV_ALL) && !homepageSectionId) {
         return false;
@@ -5243,26 +5287,11 @@ function openBookmarkModal(arg = {}) {
   };
 
   const syncUnsortedExclusive = (source) => {
-    if (!unsortedToggle) return;
-    const sidebarInputs = [...sidebarCategoryInputs()];
-    const anySidebarChecked = sidebarInputs.some((input) => input.checked);
-
-    if (source === unsortedToggle) {
-      if (unsortedToggle.checked) {
-        sidebarInputs.forEach((input) => {
-          input.checked = false;
-        });
-      } else if (!anySidebarChecked) {
-        unsortedToggle.checked = true;
-      }
-      return;
-    }
-
-    if (anySidebarChecked) {
-      unsortedToggle.checked = false;
-    } else {
-      unsortedToggle.checked = true;
-    }
+    syncUnsortedExclusiveSelection({
+      unsortedInput: unsortedToggle,
+      otherInputs: [...sidebarCategoryInputs()],
+      source
+    });
   };
 
   const syncSidebarSectionSelects = () => {
