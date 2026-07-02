@@ -3,6 +3,7 @@
 export const SCHEMA_VERSION = 2;
 export const UNSORTED_CATEGORY_ID = "unsorted";
 export const FAVORITES_CATEGORY_ID = "favorites";
+export const UNSECTIONED_SECTION_ID = "__unsectioned__";
 
 const RESERVED_SIDEBAR_SLUGS = new Set(["start", "favoriten", "unsortiert", "kategorie"]);
 
@@ -154,7 +155,14 @@ function normalizeBookmarkEntry(raw) {
     categoryIds,
     sidebarCategoryIds,
     favorite: Boolean(raw?.favorite),
-    source: normalizeBookmarkSource(raw?.source)
+    source: normalizeBookmarkSource(raw?.source),
+    navSectionAssignments: raw?.navSectionAssignments && typeof raw.navSectionAssignments === "object"
+      ? Object.fromEntries(
+        Object.entries(raw.navSectionAssignments)
+          .map(([navId, sectionId]) => [String(navId || "").trim(), String(sectionId || "").trim()])
+          .filter(([navId, sectionId]) => navId && sectionId)
+      )
+      : {}
   };
   if (raw?.openMode) bookmark.openMode = raw.openMode;
   if (raw?.shortcut) bookmark.shortcut = raw.shortcut;
@@ -213,6 +221,73 @@ function normalizeSidebarCategoryBookmarkOrder(raw, sidebarCategories, bookmarks
       seen.add(bookmark.id);
     }
     normalized[categoryId] = order;
+  }
+  return normalized;
+}
+
+function normalizeBookmarkSectionAssignments(rawAssignments, validNavIds, navSectionsByNavId) {
+  const source = rawAssignments && typeof rawAssignments === "object" ? rawAssignments : {};
+  const normalized = {};
+  for (const navId of validNavIds) {
+    const sectionId = String(source[navId] || "").trim();
+    if (!sectionId) continue;
+    const sections = navSectionsByNavId[navId] || [];
+    if (sections.some((section) => section.id === sectionId)) {
+      normalized[navId] = sectionId;
+    }
+  }
+  return normalized;
+}
+
+function normalizeNavSectionEntry(raw) {
+  const entry = raw && typeof raw === "object" ? raw : {};
+  return {
+    id: String(entry.id || "").trim(),
+    name: String(entry.name || "").trim(),
+    icon: String(entry.icon || "folder").trim() || "folder",
+    color: String(entry.color || "primary").trim() || "primary",
+    collapsed: Boolean(entry.collapsed),
+    type: normalizeCategoryType(entry.type || "service-list"),
+    iframeUrl: normalizeIframeUrl(entry.iframeUrl),
+    slots: 1
+  };
+}
+
+function normalizeNavSections(raw, validNavIds) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const normalized = {};
+  for (const navId of validNavIds) {
+    const list = Array.isArray(source[navId]) ? source[navId] : [];
+    normalized[navId] = list
+      .map(normalizeNavSectionEntry)
+      .filter((section) => section.id);
+  }
+  return normalized;
+}
+
+function normalizeNavSectionOrder(raw, validNavIds, navSectionsByNavId) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const normalized = {};
+  for (const navId of validNavIds) {
+    const listed = Array.isArray(source[navId]) ? source[navId] : [];
+    const validIds = new Set((navSectionsByNavId[navId] || []).map((section) => section.id));
+    const seen = new Set();
+    const order = [];
+    for (const rawId of listed) {
+      const id = String(rawId || "").trim();
+      if (!id || (!validIds.has(id) && id !== UNSECTIONED_SECTION_ID) || seen.has(id)) continue;
+      seen.add(id);
+      order.push(id);
+    }
+    for (const sectionId of validIds) {
+      if (seen.has(sectionId)) continue;
+      seen.add(sectionId);
+      order.push(sectionId);
+    }
+    if (!seen.has(UNSECTIONED_SECTION_ID)) {
+      order.push(UNSECTIONED_SECTION_ID);
+    }
+    normalized[navId] = order;
   }
   return normalized;
 }
@@ -338,6 +413,16 @@ export function normalizeConfig(config) {
 
   const sidebarOrderSource = { ...(input.sidebarCategoryBookmarkOrder || {}) };
   delete sidebarOrderSource[UNSORTED_CATEGORY_ID];
+  const sidebarNavIds = sidebarCategories.map((category) => category.id).filter(Boolean);
+  const navSections = normalizeNavSections(input.navSections, sidebarNavIds);
+  const navSectionOrder = normalizeNavSectionOrder(input.navSectionOrder, sidebarNavIds, navSections);
+  for (const bookmark of bookmarks) {
+    bookmark.navSectionAssignments = normalizeBookmarkSectionAssignments(
+      bookmark.navSectionAssignments,
+      sidebarNavIds,
+      navSections
+    );
+  }
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -349,7 +434,9 @@ export function normalizeConfig(config) {
       sidebarOrderSource,
       sidebarCategories,
       bookmarks
-    )
+    ),
+    navSections,
+    navSectionOrder
   };
 }
 
@@ -681,8 +768,13 @@ export function assignBookmarkToHomepageCategory(config, bookmark, categoryId) {
 export function removeSidebarCategoryFromConfig(config, categoryId) {
   config.sidebarCategories = (config.sidebarCategories || []).filter((category) => category.id !== categoryId);
   delete config.sidebarCategoryBookmarkOrder?.[categoryId];
+  delete config.navSections?.[categoryId];
+  delete config.navSectionOrder?.[categoryId];
   for (const bookmark of config.bookmarks || []) {
     bookmark.sidebarCategoryIds = (bookmark.sidebarCategoryIds || []).filter((id) => id !== categoryId);
+    if (bookmark.navSectionAssignments && typeof bookmark.navSectionAssignments === "object") {
+      delete bookmark.navSectionAssignments[categoryId];
+    }
   }
 }
 
@@ -694,4 +786,52 @@ export function deleteSidebarCategoryFromConfig(config, categoryId, { deleteBook
     }
   }
   removeSidebarCategoryFromConfig(config, categoryId);
+}
+
+export function getNavSections(config, navId) {
+  return [...(config?.navSections?.[navId] || [])];
+}
+
+export function setNavSections(config, navId, sections) {
+  if (!config.navSections) config.navSections = {};
+  config.navSections[navId] = [...(sections || [])];
+}
+
+export function getNavSectionOrder(config, navId) {
+  const list = Array.isArray(config?.navSectionOrder?.[navId]) ? config.navSectionOrder[navId] : [];
+  const sections = getNavSections(config, navId);
+  const validIds = new Set(sections.map((section) => section.id));
+  const seen = new Set();
+  const order = [];
+  for (const rawId of list) {
+    const id = String(rawId || "").trim();
+    if (!id || (!validIds.has(id) && id !== UNSECTIONED_SECTION_ID) || seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+  }
+  for (const section of sections) {
+    if (seen.has(section.id)) continue;
+    seen.add(section.id);
+    order.push(section.id);
+  }
+  if (!seen.has(UNSECTIONED_SECTION_ID)) order.push(UNSECTIONED_SECTION_ID);
+  return order;
+}
+
+export function setNavSectionOrder(config, navId, order) {
+  if (!config.navSectionOrder) config.navSectionOrder = {};
+  config.navSectionOrder[navId] = [...(order || [])];
+}
+
+export function getBookmarkSectionIdForNav(bookmark, navId) {
+  return String(bookmark?.navSectionAssignments?.[navId] || "").trim();
+}
+
+export function setBookmarkSectionIdForNav(bookmark, navId, sectionId) {
+  if (!bookmark.navSectionAssignments || typeof bookmark.navSectionAssignments !== "object") {
+    bookmark.navSectionAssignments = {};
+  }
+  const normalized = String(sectionId || "").trim();
+  if (normalized) bookmark.navSectionAssignments[navId] = normalized;
+  else delete bookmark.navSectionAssignments[navId];
 }

@@ -303,17 +303,20 @@ body {
   color: var(--metadata-status-error-fg);
 }
 
-.bookmark-placement-homepage__select {
+.bookmark-placement-homepage__select,
+.bookmark-placement-sidebar__select {
   background: var(--bookmark-placement-select-bg);
   color: var(--bookmark-placement-select-fg);
 }
 
-.bookmark-placement-homepage__select:focus {
+.bookmark-placement-homepage__select:focus,
+.bookmark-placement-sidebar__select:focus {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
-.bookmark-placement-homepage__select-wrap .select-chevron {
+.bookmark-placement-homepage__select-wrap .select-chevron,
+.bookmark-placement-sidebar__select-wrap .select-chevron {
   color: var(--bookmark-placement-select-chevron-fg);
 }
 
