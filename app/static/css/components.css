@@ -17,6 +17,10 @@ body {
   --scrollbar-radius: 999px;
   --scrollbar-fab-gap: 0.85rem;
   --fab-offset-right: calc(1.75rem + var(--scrollbar-size) + var(--scrollbar-fab-gap));
+  --fab-size: calc(3.5rem * var(--element-scale, 1));
+  --fab-bottom-offset: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  --fab-content-gap: 0.75rem;
+  --modal-viewport-padding: 1rem;
 }
 
 * {
@@ -1532,19 +1536,27 @@ main {
   position: relative;
 }
 
+main:has(#add-bookmark-fab:not(.hidden)) {
+  scroll-padding-bottom: calc(var(--fab-size) + var(--fab-bottom-offset) + var(--fab-content-gap));
+}
+
 .main-content {
   width: 100%;
   max-width: 1720px;
   margin: 0 auto;
   padding: 1rem;
 }
+
+main:has(#add-bookmark-fab:not(.hidden)) .main-content {
+  padding-bottom: calc(1rem + var(--fab-size) + var(--fab-bottom-offset) + var(--fab-content-gap));
+}
 .fab {
   position: fixed;
   right: calc(var(--fab-offset-right) + env(safe-area-inset-right, 0px));
-  bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  bottom: var(--fab-bottom-offset);
   z-index: 200;
-  width: calc(3.5rem * var(--element-scale, 1));
-  height: calc(3.5rem * var(--element-scale, 1));
+  width: var(--fab-size);
+  height: var(--fab-size);
   min-width: 0;
   padding: 0;
   border-radius: 999px;
@@ -2056,12 +2068,12 @@ main {
   background: var(--overlay-bg);
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: var(--modal-viewport-padding);
 }
 
 .modal {
   width: min(640px, 100%);
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2 * var(--modal-viewport-padding));
   overflow-y: auto;
   overflow-x: hidden;
   border-radius: 4px;
@@ -2071,6 +2083,29 @@ main {
   animation: modalIn 140ms ease-out;
   box-shadow: var(--modal-shadow);
   outline: none;
+}
+
+.modal.modal--nav-assign {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal.modal--nav-assign > h2 {
+  flex: 0 0 auto;
+}
+
+.modal.modal--nav-assign .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal.modal--nav-assign .modal-actions {
+  flex: 0 0 auto;
+  margin-top: 0.85rem;
 }
 .modal.modal--settings {
   width: min(820px, 100%);
@@ -3616,8 +3651,11 @@ textarea {
 }
 
 .nav-assign-categories {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.85rem;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .nav-assign-categories__lead {
@@ -3625,12 +3663,14 @@ textarea {
   color: var(--nav-assign-lead-fg);
   font-size: 0.95rem;
   line-height: 1.4;
+  flex: 0 0 auto;
 }
 
 .nav-assign-categories__options {
   display: grid;
   gap: 0.25rem;
-  max-height: min(50vh, 18rem);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 

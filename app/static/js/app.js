@@ -40,6 +40,7 @@ import {
   toggleBookmarkFavorite,
   prioritizeFavoriteBookmarks,
   isBookmarkInFavorites,
+  isUnsortedBookmark,
   UNSECTIONED_SECTION_ID,
   HOMEPAGE_SECTIONS_CATEGORY_ID,
   getNavSections,
@@ -1084,9 +1085,52 @@ function getAssignableNavCategoryOptions() {
   return options;
 }
 
+function bookmarkHasAssignNavTarget(bookmark, navTargetId) {
+  if (navTargetId === NAV_ALL) return Boolean(getBookmarkHomepageCategoryId(state.config, bookmark));
+  if (navTargetId === NAV_FAVORITES) return isBookmarkInFavorites(bookmark);
+  if (navTargetId === NAV_UNSORTED) return isUnsortedBookmark(bookmark, state.config);
+  return (bookmark.sidebarCategoryIds || []).includes(navTargetId);
+}
+
+function getAssignNavTargetSectionId(bookmark, navTargetId) {
+  if (navTargetId === NAV_ALL) {
+    return getBookmarkHomepageCategoryId(state.config, bookmark) || "";
+  }
+  if (isCategoryNavId(state.config, navTargetId)) {
+    return getBookmarkSectionIdForNav(bookmark, navTargetId) || UNSECTIONED_SECTION_ID;
+  }
+  return "";
+}
+
+function resolveAssignModalPrefill(bookmarkIds) {
+  const bookmarks = bookmarkIds
+    .map((id) => findBookmarkById(state.config, id))
+    .filter(Boolean);
+  const selectedCategoryIds = new Set();
+  const sectionAssignments = {};
+  if (!bookmarks.length) {
+    return { selectedCategoryIds, sectionAssignments };
+  }
+  for (const option of getAssignableNavCategoryOptions()) {
+    const allHaveTarget = bookmarks.every((bookmark) => bookmarkHasAssignNavTarget(bookmark, option.id));
+    if (!allHaveTarget) continue;
+    selectedCategoryIds.add(option.id);
+    if (option.id === NAV_FAVORITES || option.id === NAV_UNSORTED) continue;
+    const supportsSections = option.id === NAV_ALL || isCategoryNavId(state.config, option.id);
+    if (!supportsSections) continue;
+    const sectionIds = bookmarks.map((bookmark) => getAssignNavTargetSectionId(bookmark, option.id));
+    const uniqueIds = new Set(sectionIds);
+    if (uniqueIds.size === 1) {
+      sectionAssignments[option.id] = [...uniqueIds][0];
+    }
+  }
+  return { selectedCategoryIds, sectionAssignments };
+}
+
 async function openAssignSelectedBookmarksModal() {
   if (!navSelectionMode || navSelectedBookmarkIds.size === 0) return;
   const bookmarkIds = [...navSelectedBookmarkIds];
+  const prefill = resolveAssignModalPrefill(bookmarkIds);
   const body = document.createElement("div");
   body.className = "nav-assign-categories";
   const options = getAssignableNavCategoryOptions();
@@ -1094,21 +1138,26 @@ async function openAssignSelectedBookmarksModal() {
     .map((option) => {
       const supportsSections = option.id === NAV_ALL || isCategoryNavId(state.config, option.id);
       const includeUnsectioned = option.id !== NAV_ALL;
+      const selectedSectionId = prefill.sectionAssignments[option.id] || "";
+      const checked = prefill.selectedCategoryIds.has(option.id);
       const selectOptions = supportsSections
         ? getSectionOptionsForNav(option.id, { includeUnsectioned })
-          .map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`)
+          .map((entry) => {
+            const selected = entry.id === selectedSectionId ? "selected" : "";
+            return `<option value="${escapeHtml(entry.id)}" ${selected}>${escapeHtml(entry.name)}</option>`;
+          })
           .join("")
         : "";
       return `
         <div class="nav-assign-row" data-nav-assign-row="${escapeHtml(option.id)}">
           <label class="theme-checkbox nav-assign-categories__option" data-nav-assign-option="${escapeHtml(option.id)}">
-            <input type="checkbox" class="theme-checkbox__input" name="navAssignCategory" value="${escapeHtml(option.id)}" />
+            <input type="checkbox" class="theme-checkbox__input" name="navAssignCategory" value="${escapeHtml(option.id)}" ${checked ? "checked" : ""} />
             <span class="theme-checkbox__box" aria-hidden="true"></span>
             <span class="nav-assign-categories__option-icon" aria-hidden="true">${mdiIcon(option.icon)}</span>
             <span class="theme-checkbox__label">${escapeHtml(option.label)}</span>
           </label>
           ${supportsSections ? `
-            <div class="nav-assign-row__section hidden" data-nav-assign-section-row="${escapeHtml(option.id)}">
+            <div class="nav-assign-row__section${checked ? "" : " hidden"}" data-nav-assign-section-row="${escapeHtml(option.id)}">
               <div class="select-wrap">
                 <select data-nav-assign-section-select="${escapeHtml(option.id)}">
                   <option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>
@@ -1151,6 +1200,12 @@ async function openAssignSelectedBookmarksModal() {
     });
   });
   syncAssignSectionRows();
+  body.querySelectorAll("[data-nav-assign-section-select]").forEach((select) => {
+    const value = String(select.value || "").trim();
+    if (value && value !== CREATE_SECTION_OPTION_VALUE) {
+      select.dataset.lastValue = value;
+    }
+  });
 
   await showModal({
     title: t("ui.assignSelectedBookmarks"),
@@ -1191,10 +1246,8 @@ async function openAssignSelectedBookmarksModal() {
         }
       }
       await persistConfig();
-      pruneNavSelectionToVisible();
-      applyNavSelectionStateToDom();
-      updateNavSelectionBar();
-      refreshNavBookmarkList();
+      resetNavSelection();
+      render();
     }
   });
 }
