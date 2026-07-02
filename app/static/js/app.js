@@ -3145,8 +3145,12 @@ function openNavSectionModal(navId, section = null) {
   });
 }
 
-function openNavSectionMenu(trigger, { navId, sectionId }) {
+function openNavSectionMenu(trigger, { navId, sectionId }, { atPoint = null } = {}) {
   if (!(trigger instanceof HTMLElement)) return;
+  if (!atPoint && activeSidebarCategoryMenu?.trigger === trigger) {
+    closeSidebarCategoryMenu();
+    return;
+  }
   closeSidebarCategoryMenu();
   const overlay = getSidebarCategoryMenuOverlay();
   const panel = overlay.querySelector("[data-sidebar-category-menu-panel]");
@@ -3177,11 +3181,19 @@ function openNavSectionMenu(trigger, { navId, sectionId }) {
   });
   overlay.classList.remove("hidden");
   overlay.classList.add("is-open");
-  trigger.setAttribute("aria-expanded", "true");
-  activeSidebarCategoryMenu = { trigger, row: trigger.closest(".nav-section"), categoryId: sectionId };
+  const openedAtPoint = Boolean(atPoint);
+  const sectionRow = trigger.closest(".nav-section");
+  if (!openedAtPoint) {
+    trigger.setAttribute("aria-expanded", "true");
+  }
+  activeSidebarCategoryMenu = { trigger, row: sectionRow, categoryId: sectionId, openedAtPoint };
   requestAnimationFrame(() => {
     if (activeSidebarCategoryMenu?.trigger !== trigger) return;
-    positionSidebarCategoryMenuPanel(panel, trigger);
+    if (openedAtPoint && atPoint) {
+      positionFloatingMenuAtPoint(panel, atPoint.x, atPoint.y);
+    } else {
+      positionSidebarCategoryMenuPanel(panel, trigger);
+    }
   });
 }
 
@@ -4035,6 +4047,13 @@ function renderSidebarCategorySectionCard({ navId, sectionId, section, bookmarks
     event.preventDefault();
     event.stopPropagation();
     openNavSectionMenu(event.currentTarget, { navId, sectionId });
+  });
+  card.querySelector(".category-header")?.addEventListener("contextmenu", (event) => {
+    const menuTrigger = card.querySelector("[data-nav-section-menu-trigger]");
+    if (!(menuTrigger instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openNavSectionMenu(menuTrigger, { navId, sectionId }, { atPoint: { x: event.clientX, y: event.clientY } });
   });
   return card;
 }
