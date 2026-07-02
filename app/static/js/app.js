@@ -865,7 +865,6 @@ function pruneNavSelectionToVisible() {
       ? [...navSelectedBookmarkIds][navSelectedBookmarkIds.size - 1]
       : null;
   }
-  syncNavSelectionModeFromSelection();
 }
 
 function clearNavSelectionPreview() {
@@ -945,6 +944,7 @@ function applyNavSelectionStateToDom() {
 function updateNavSelectionBar() {
   const panel = elements.navView?.querySelector(".nav-view-panel");
   panel?.classList.toggle("is-selection-mode", navSelectionMode);
+  elements.navView?.querySelector("[data-nav-selection-toggle]")?.classList.toggle("is-active", navSelectionMode);
   const bar = elements.navView?.querySelector("[data-nav-selection-bar]");
   if (!bar) return;
   const count = navSelectedBookmarkIds.size;
@@ -1315,7 +1315,7 @@ function handleNavBookmarkTouchEnd() {
 function isNavSelectionInteractionTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    "[data-edit-bookmark], [data-delete-bookmark], [data-move-bookmark-left], [data-move-bookmark-right], [data-bookmark-menu-trigger], [data-toggle-bookmark-favorite], .bookmark-menu__item, .bookmark-reorder"
+    "[data-edit-bookmark], [data-delete-bookmark], [data-move-bookmark-left], [data-move-bookmark-right], [data-bookmark-menu-trigger], [data-toggle-bookmark-favorite], [data-bookmark-select], [data-bookmark-select-wrap], .bookmark-menu__item, .bookmark-reorder"
   ));
 }
 
@@ -1398,9 +1398,30 @@ function ensureNavSelectionEvents() {
   });
 }
 
+function handleNavBookmarkSelectCheckboxChange(event) {
+  if (!navSelectionMode) return;
+  const checkbox = event.target;
+  if (!(checkbox instanceof HTMLInputElement) || !checkbox.matches("[data-bookmark-select]")) return;
+  const item = checkbox.closest(".bookmark-item[data-bookmark-id]");
+  if (!(item instanceof HTMLElement)) return;
+  const bookmarkId = item.dataset.bookmarkId;
+  if (!bookmarkId) return;
+  event.stopPropagation();
+  if (checkbox.checked) navSelectedBookmarkIds.add(bookmarkId);
+  else navSelectedBookmarkIds.delete(bookmarkId);
+  navSelectionAnchorId = bookmarkId;
+  clearNavSelectionPreview();
+  if (!syncNavSelectionModeFromSelection()) {
+    applyNavSelectionStateToDom();
+  }
+}
+
 function bindNavSelectionCollectionEvents(collection) {
   if (!(collection instanceof HTMLElement)) return;
-  collection.addEventListener("click", handleNavBookmarkSelectionClick);
+  if (collection.dataset.navSelectionEventsBound === "true") return;
+  collection.dataset.navSelectionEventsBound = "true";
+  collection.addEventListener("click", handleNavBookmarkSelectionClick, true);
+  collection.addEventListener("change", handleNavBookmarkSelectCheckboxChange);
   collection.addEventListener("mouseover", handleNavBookmarkSelectionHover);
 }
 
@@ -3716,7 +3737,9 @@ function renderUnsortedFolderFilter() {
     });
     updateUnsortedFolderFilterToggleState();
     pruneNavSelectionToVisible();
-    refreshNavBookmarkList();
+    if (!syncNavSelectionModeFromSelection()) {
+      refreshNavBookmarkList();
+    }
   });
   wrap.querySelectorAll(".theme-checkbox__input").forEach((input) => {
     input.addEventListener("change", () => {
@@ -3727,7 +3750,9 @@ function renderUnsortedFolderFilter() {
       unsortedFolderFilterDropdownOpen = true;
       updateUnsortedFolderFilterToggleState();
       pruneNavSelectionToVisible();
-      refreshNavBookmarkList();
+      if (!syncNavSelectionModeFromSelection()) {
+        refreshNavBookmarkList();
+      }
     });
   });
 
@@ -3799,6 +3824,11 @@ function renderViewModeToggle(viewMode, { showCategorySync = false, showMixedMod
     void setNavViewModeForActive(VIEW_MIXED);
   });
   return wrap;
+}
+
+function mountNavViewPanel() {
+  if (!elements.navView) return;
+  elements.navView.replaceChildren(renderNavView());
 }
 
 function renderNavView() {
@@ -4140,7 +4170,7 @@ function render() {
   elements.navView?.classList.remove("hidden");
   elements.categories.classList.add("hidden");
   pruneNavSelectionToVisible();
-  elements.navView?.append(renderNavView());
+  mountNavViewPanel();
   syncCategoryMetadataReloadBookmarkLoading();
   restoreUnsortedFolderFilterScroll(savedFilterScroll);
 }
