@@ -49,8 +49,7 @@ import {
   getBookmarkSectionIdForNav,
   setBookmarkSectionIdForNav,
   createSectionForCategory,
-  findSectionIdByNameForCategory,
-  HOMEPAGE_SECTIONS_CATEGORY_ID
+  findSectionIdByNameForCategory
 } from "./bookmarks.js";
 import {
   NAV_ALL,
