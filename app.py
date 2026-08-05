@@ -138,6 +138,9 @@ def _legacy_service_image(service: dict) -> str:
 
 
 UNSORTED_CATEGORY_ID = "unsorted"
+QUICK_ACCESS_CATEGORY_ID = "quick_access"
+CATEGORY_ROLE_QUICK_ACCESS = "quick_access"
+FAVORITES_CATEGORY_ID = "favorites"
 UNSECTIONED_SECTION_ID = "__unsectioned__"
 
 
@@ -196,7 +199,98 @@ def _normalize_bookmark(raw: dict, *, category_id: str | None = None) -> dict:
     return bookmark
 
 
+def _is_quick_access_category(entry: dict) -> bool:
+    category_id = str(entry.get("id") or "").strip()
+    role = str(entry.get("role") or "").strip()
+    return category_id == QUICK_ACCESS_CATEGORY_ID or role == CATEGORY_ROLE_QUICK_ACCESS
+
+
+def _build_quick_access_category(raw: dict | None = None) -> dict:
+    source = raw if isinstance(raw, dict) else {}
+    return {
+        "id": QUICK_ACCESS_CATEGORY_ID,
+        "role": CATEGORY_ROLE_QUICK_ACCESS,
+        "name": str(source.get("name") or "Quick access").strip() or "Quick access",
+        "icon": str(source.get("icon") or "flash").strip() or "flash",
+        "color": str(source.get("color") or "primary").strip() or "primary",
+        "collapsed": False,
+        "type": "service-list",
+        "iframeUrl": "",
+        "slots": 1,
+    }
+
+
+def _ensure_quick_access_category(categories: list[dict]) -> list[dict]:
+    quick_access_entries = [entry for entry in categories if _is_quick_access_category(entry)]
+    others = [entry for entry in categories if not _is_quick_access_category(entry)]
+    if quick_access_entries:
+        return [_build_quick_access_category(quick_access_entries[0]), *others]
+    return [_build_quick_access_category(), *others]
+
+
+def _list_bookmark_list_category_ids(categories: list[dict]) -> set[str]:
+    result: set[str] = set()
+    for entry in categories:
+        category_id = str(entry.get("id") or "").strip()
+        if not category_id or _is_quick_access_category(entry):
+            continue
+        category_type = str(entry.get("type") or "service-list").strip().lower()
+        if category_type == "iframe":
+            continue
+        result.add(category_id)
+    return result
+
+
+def _normalize_bookmark_category_assignments(
+    bookmark: dict,
+    *,
+    list_category_ids: set[str],
+    custom_sidebar_ids: set[str],
+) -> dict:
+    category_ids = [
+        str(cid).strip()
+        for cid in (bookmark.get("categoryIds") if isinstance(bookmark.get("categoryIds"), list) else [])
+        if str(cid).strip() and str(cid).strip() != UNSORTED_CATEGORY_ID
+    ]
+    sidebar_category_ids = [
+        str(cid).strip()
+        for cid in (
+            bookmark.get("sidebarCategoryIds") if isinstance(bookmark.get("sidebarCategoryIds"), list) else []
+        )
+        if str(cid).strip()
+        and str(cid).strip() != UNSORTED_CATEGORY_ID
+        and str(cid).strip() != QUICK_ACCESS_CATEGORY_ID
+    ]
+
+    has_quick_access = QUICK_ACCESS_CATEGORY_ID in category_ids
+    homepage_ids = [cid for cid in category_ids if cid in list_category_ids]
+    other_ids = [
+        cid
+        for cid in category_ids
+        if cid != QUICK_ACCESS_CATEGORY_ID and cid not in list_category_ids
+    ]
+    bookmark["categoryIds"] = [
+        *([QUICK_ACCESS_CATEGORY_ID] if has_quick_access else []),
+        *homepage_ids,
+        *other_ids,
+    ]
+
+    favorite = bool(bookmark.get("favorite")) or FAVORITES_CATEGORY_ID in sidebar_category_ids
+    if favorite and FAVORITES_CATEGORY_ID not in sidebar_category_ids:
+        sidebar_category_ids.append(FAVORITES_CATEGORY_ID)
+    # Nur gültige Sidebar-IDs und Favoriten behalten.
+    bookmark["sidebarCategoryIds"] = [
+        cid
+        for cid in sidebar_category_ids
+        if cid == FAVORITES_CATEGORY_ID or cid in custom_sidebar_ids
+    ]
+    bookmark["favorite"] = FAVORITES_CATEGORY_ID in bookmark["sidebarCategoryIds"]
+    return bookmark
+
+
 def _normalize_category_entry(raw: dict) -> dict:
+    if _is_quick_access_category(raw):
+        return _build_quick_access_category(raw)
     entry = {key: value for key, value in raw.items() if key != "services"}
     entry["type"] = str(entry.get("type") or "service-list").strip().lower()
     if entry["type"] not in {"service-list", "iframe"}:
@@ -204,6 +298,9 @@ def _normalize_category_entry(raw: dict) -> dict:
     entry["iframeUrl"] = str(entry.get("iframeUrl") or "").strip()
     slots = entry.get("slots")
     entry["slots"] = slots if isinstance(slots, int) and slots in (1, 2, 3) else 1
+    role = str(entry.get("role") or "").strip()
+    if role:
+        entry["role"] = role
     return entry
 
 
@@ -459,12 +556,14 @@ def migrate_config(data: object) -> dict:
         and str(entry.get("id") or "").strip()
         and str(entry.get("id") or "").strip() != UNSORTED_CATEGORY_ID
     ]
+    categories = _ensure_quick_access_category(categories)
     sidebar_categories = [
         _normalize_sidebar_category_entry(entry)
         for entry in data.get("sidebarCategories", [])
         if isinstance(entry, dict)
         and str(entry.get("id") or "").strip()
         and str(entry.get("id") or "").strip() != UNSORTED_CATEGORY_ID
+        and str(entry.get("id") or "").strip() != QUICK_ACCESS_CATEGORY_ID
     ]
     existing_bookmarks = [
         _normalize_bookmark(entry)
@@ -489,6 +588,7 @@ def migrate_config(data: object) -> dict:
     if isinstance(raw_sidebar_order, dict):
         sidebar_order_source.update(raw_sidebar_order)
     sidebar_order_source.pop(UNSORTED_CATEGORY_ID, None)
+    sidebar_order_source.pop(QUICK_ACCESS_CATEGORY_ID, None)
 
     sidebar_nav_ids = [
         str(category.get("id") or "").strip()
@@ -497,11 +597,18 @@ def migrate_config(data: object) -> dict:
     ]
     nav_sections = _normalize_nav_sections(data.get("navSections"), sidebar_nav_ids)
     nav_section_order = _normalize_nav_section_order(data.get("navSectionOrder"), sidebar_nav_ids, nav_sections)
+    list_category_ids = _list_bookmark_list_category_ids(categories)
+    custom_sidebar_ids = set(sidebar_nav_ids)
     for bookmark in bookmarks:
         bookmark["navSectionAssignments"] = _normalize_bookmark_section_assignments(
             bookmark.get("navSectionAssignments"),
             sidebar_nav_ids,
             nav_sections,
+        )
+        _normalize_bookmark_category_assignments(
+            bookmark,
+            list_category_ids=list_category_ids,
+            custom_sidebar_ids=custom_sidebar_ids,
         )
 
     return {

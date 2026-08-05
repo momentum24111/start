@@ -110,6 +110,16 @@ body {
   --sidebar-tooltip-bg: #2a3746;
   --sidebar-tooltip-fg: #ecf2fb;
   --sidebar-tooltip-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
+  --app-tooltip-arrow-bg: #2a3746;
+  --quick-access-bar-bg: #212c38;
+  --quick-access-bar-border: rgba(168, 182, 197, 0.16);
+  --quick-access-bar-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --quick-access-icon-bg: #2a3746;
+  --quick-access-item-focus-ring: color-mix(in srgb, var(--primary) 70%, transparent);
+  --quick-access-drop-marker: var(--primary);
+  --unsorted-exclusive-hint-fg: #7f92a8;
+  --unsorted-exclusive-label-fg: #a8b6c5;
+  --unsorted-exclusive-row-bg: color-mix(in srgb, var(--primary) 8%, transparent);
   --bookmark-drag-ghost-bg: #212c38;
   --bookmark-drag-ghost-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
   --bookmark-drag-ghost-count-fg: #6ea6ff;

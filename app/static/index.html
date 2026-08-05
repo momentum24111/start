@@ -57,6 +57,7 @@
           </div>
           <div class="actions">
             <button id="bookmark-search-toggle" class="btn btn--ghost btn--icon topbar-search__toggle" type="button" aria-controls="bookmark-search-panel" aria-expanded="false"></button>
+            <button id="add-bookmark-btn" class="btn btn--ghost btn--icon" type="button" aria-expanded="false" aria-haspopup="menu"></button>
             <button id="undo-btn" class="btn btn--ghost hidden" type="button"></button>
             <button id="edit-btn" class="btn btn--ghost" type="button"></button>
             <button id="settings-btn" class="btn btn--ghost" type="button"></button>
@@ -68,7 +69,13 @@
             <div id="nav-view" class="nav-view hidden"></div>
             <div id="categories" class="category-grid"></div>
           </div>
-          <button id="add-bookmark-fab" class="btn fab" type="button" aria-label=""></button>
+          <div id="quick-access-bar" class="quick-access-bar hidden" hidden data-quick-access-bar>
+            <div class="quick-access-bar__inner">
+              <div class="quick-access-bar__scroller" data-quick-access-scroller>
+                <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     </div>

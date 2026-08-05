@@ -3,10 +3,12 @@
 export const SCHEMA_VERSION = 2;
 export const UNSORTED_CATEGORY_ID = "unsorted";
 export const FAVORITES_CATEGORY_ID = "favorites";
+export const QUICK_ACCESS_CATEGORY_ID = "quick_access";
+export const CATEGORY_ROLE_QUICK_ACCESS = "quick_access";
 export const UNSECTIONED_SECTION_ID = "__unsectioned__";
 export const HOMEPAGE_SECTIONS_CATEGORY_ID = "all";
 
-const RESERVED_SIDEBAR_SLUGS = new Set(["start", "favoriten", "unsortiert", "kategorie"]);
+const RESERVED_SIDEBAR_SLUGS = new Set(["start", "favoriten", "unsortiert", "schnellzugriff", "kategorie"]);
 
 export function slugifySidebarCategoryName(name) {
   return String(name || "")
@@ -176,15 +178,63 @@ function normalizeBookmarkEntry(raw) {
   return bookmark;
 }
 
+export function isQuickAccessCategory(category) {
+  if (!category || typeof category !== "object") return false;
+  const id = String(category.id || "").trim();
+  const role = String(category.role || "").trim();
+  return id === QUICK_ACCESS_CATEGORY_ID || role === CATEGORY_ROLE_QUICK_ACCESS;
+}
+
+function buildQuickAccessCategoryEntry(raw = {}) {
+  return {
+    id: QUICK_ACCESS_CATEGORY_ID,
+    role: CATEGORY_ROLE_QUICK_ACCESS,
+    name: String(raw.name || "Quick access").trim() || "Quick access",
+    icon: String(raw.icon || "flash").trim() || "flash",
+    color: String(raw.color || "primary").trim() || "primary",
+    collapsed: false,
+    type: "service-list",
+    iframeUrl: "",
+    slots: 1
+  };
+}
+
+export function ensureQuickAccessCategory(config) {
+  if (!config || typeof config !== "object") return null;
+  if (!Array.isArray(config.categories)) config.categories = [];
+  const existingIndex = config.categories.findIndex(isQuickAccessCategory);
+  if (existingIndex >= 0) {
+    const normalized = buildQuickAccessCategoryEntry(config.categories[existingIndex]);
+    config.categories[existingIndex] = normalized;
+    return normalized;
+  }
+  const created = buildQuickAccessCategoryEntry();
+  config.categories = [created, ...config.categories];
+  if (!config.categoryBookmarkOrder || typeof config.categoryBookmarkOrder !== "object") {
+    config.categoryBookmarkOrder = {};
+  }
+  if (!Array.isArray(config.categoryBookmarkOrder[QUICK_ACCESS_CATEGORY_ID])) {
+    config.categoryBookmarkOrder[QUICK_ACCESS_CATEGORY_ID] = [];
+  }
+  return created;
+}
+
 function normalizeCategoryEntry(raw) {
   const { services: _services, ...rest } = raw && typeof raw === "object" ? raw : {};
-  return {
+  const id = String(rest.id || "").trim();
+  const role = String(rest.role || "").trim();
+  if (id === QUICK_ACCESS_CATEGORY_ID || role === CATEGORY_ROLE_QUICK_ACCESS) {
+    return buildQuickAccessCategoryEntry(rest);
+  }
+  const entry = {
     ...rest,
-    id: String(rest.id || "").trim(),
+    id,
     type: normalizeCategoryType(rest.type),
     iframeUrl: normalizeIframeUrl(rest.iframeUrl),
     slots: normalizeCategorySlots(rest.slots)
   };
+  if (role) entry.role = role;
+  return entry;
 }
 
 function normalizeSidebarCategoryEntry(raw) {
@@ -390,13 +440,19 @@ function mergeBookmarkLists(existing, legacy) {
 /** Lädt und normalisiert Config; migriert Legacy-Format (services in Kategorien) automatisch. */
 export function normalizeConfig(config) {
   const input = config && typeof config === "object" ? config : { categories: [] };
-  const categories = (Array.isArray(input.categories) ? input.categories : [])
+  let categories = (Array.isArray(input.categories) ? input.categories : [])
     .map(normalizeCategoryEntry)
     .filter((category) => category.id && category.id !== UNSORTED_CATEGORY_ID);
+  // Genau eine Schnellzugriff-Kategorie behalten (stabile Systemrolle).
+  const quickAccessEntries = categories.filter(isQuickAccessCategory);
+  categories = categories.filter((category) => !isQuickAccessCategory(category));
+  if (quickAccessEntries.length) {
+    categories = [buildQuickAccessCategoryEntry(quickAccessEntries[0]), ...categories];
+  }
   const sidebarCategories = finalizeSidebarCategorySlugs(
     (Array.isArray(input.sidebarCategories) ? input.sidebarCategories : [])
       .map(normalizeSidebarCategoryEntry)
-      .filter((category) => category.id && category.id !== UNSORTED_CATEGORY_ID)
+      .filter((category) => category.id && category.id !== UNSORTED_CATEGORY_ID && category.id !== QUICK_ACCESS_CATEGORY_ID)
   );
   const existingBookmarks = Array.isArray(input.bookmarks)
     ? input.bookmarks.map(normalizeBookmarkEntry)
@@ -414,6 +470,7 @@ export function normalizeConfig(config) {
 
   const sidebarOrderSource = { ...(input.sidebarCategoryBookmarkOrder || {}) };
   delete sidebarOrderSource[UNSORTED_CATEGORY_ID];
+  delete sidebarOrderSource[QUICK_ACCESS_CATEGORY_ID];
   const sidebarNavIds = sidebarCategories.map((category) => category.id).filter(Boolean);
   const navSections = normalizeNavSections(input.navSections, sidebarNavIds);
   const navSectionOrder = normalizeNavSectionOrder(input.navSectionOrder, sidebarNavIds, navSections);
@@ -425,20 +482,31 @@ export function normalizeConfig(config) {
     );
   }
 
-  return {
+  const normalized = {
     schemaVersion: SCHEMA_VERSION,
     categories,
     sidebarCategories,
     bookmarks,
-    categoryBookmarkOrder: normalizeCategoryBookmarkOrder(orderSource, categories, bookmarks),
-    sidebarCategoryBookmarkOrder: normalizeSidebarCategoryBookmarkOrder(
-      sidebarOrderSource,
-      sidebarCategories,
-      bookmarks
-    ),
+    categoryBookmarkOrder: {},
+    sidebarCategoryBookmarkOrder: {},
     navSections,
     navSectionOrder
   };
+  ensureQuickAccessCategory(normalized);
+  for (const bookmark of normalized.bookmarks) {
+    normalizeBookmarkCategoryAssignments(normalized, bookmark);
+  }
+  normalized.categoryBookmarkOrder = normalizeCategoryBookmarkOrder(
+    orderSource,
+    normalized.categories,
+    normalized.bookmarks
+  );
+  normalized.sidebarCategoryBookmarkOrder = normalizeSidebarCategoryBookmarkOrder(
+    sidebarOrderSource,
+    normalized.sidebarCategories,
+    normalized.bookmarks
+  );
+  return normalized;
 }
 
 export function getCategoryBookmarkOrder(config, categoryId) {
@@ -454,7 +522,9 @@ export function getBookmarkHomepageCategoryId(config, bookmark) {
 
 export function getBookmarkSidebarPlacementIds(bookmark) {
   if (!bookmark) return [];
-  const ids = (bookmark.sidebarCategoryIds || []).filter((id) => id && id !== UNSORTED_CATEGORY_ID);
+  const ids = (bookmark.sidebarCategoryIds || []).filter(
+    (id) => id && id !== UNSORTED_CATEGORY_ID && id !== QUICK_ACCESS_CATEGORY_ID
+  );
   if (bookmark.favorite && !ids.includes(FAVORITES_CATEGORY_ID)) {
     return [...ids, FAVORITES_CATEGORY_ID];
   }
@@ -465,10 +535,57 @@ export function isBookmarkInFavorites(bookmark) {
   return getBookmarkSidebarPlacementIds(bookmark).includes(FAVORITES_CATEGORY_ID);
 }
 
+export function isBookmarkInQuickAccess(bookmark) {
+  return Boolean(bookmark && (bookmark.categoryIds || []).includes(QUICK_ACCESS_CATEGORY_ID));
+}
+
+export function bookmarkHasNonUnsortedPlacement(bookmark, config) {
+  if (!bookmark) return false;
+  if (getBookmarkHomepageCategoryId(config, bookmark)) return true;
+  if (isBookmarkInQuickAccess(bookmark)) return true;
+  if (isBookmarkInFavorites(bookmark)) return true;
+  const customSidebarIds = new Set(listCustomSidebarCategoryIds(config));
+  return (bookmark.sidebarCategoryIds || []).some((id) => customSidebarIds.has(id));
+}
+
+/**
+ * Zentrale Unsortiert-Regel: entweder ausschließlich Unsortiert (keine andere Zuordnung)
+ * oder mindestens eine andere Kategorie und nicht Unsortiert.
+ * Unsortiert wird nie persistiert; es ist der abgeleitete Zustand ohne Platzierung.
+ */
+export function normalizeBookmarkCategoryAssignments(config, bookmark) {
+  if (!bookmark) return bookmark;
+  bookmark.categoryIds = (bookmark.categoryIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id) => id && id !== UNSORTED_CATEGORY_ID);
+  bookmark.sidebarCategoryIds = (bookmark.sidebarCategoryIds || [])
+    .map((id) => String(id || "").trim())
+    .filter((id) => id && id !== UNSORTED_CATEGORY_ID && id !== QUICK_ACCESS_CATEGORY_ID);
+
+  const hasQuickAccess = bookmark.categoryIds.includes(QUICK_ACCESS_CATEGORY_ID);
+  const listCategoryIds = new Set(listBookmarkListCategories(config).map((category) => category.id));
+  const homepageIds = bookmark.categoryIds.filter((id) => listCategoryIds.has(id));
+  const otherCategoryIds = bookmark.categoryIds.filter(
+    (id) => id !== QUICK_ACCESS_CATEGORY_ID && !listCategoryIds.has(id)
+  );
+  bookmark.categoryIds = [
+    ...(hasQuickAccess ? [QUICK_ACCESS_CATEGORY_ID] : []),
+    ...homepageIds,
+    ...otherCategoryIds
+  ];
+
+  if (bookmark.favorite && !bookmark.sidebarCategoryIds.includes(FAVORITES_CATEGORY_ID)) {
+    bookmark.sidebarCategoryIds.push(FAVORITES_CATEGORY_ID);
+  }
+  bookmark.favorite = bookmark.sidebarCategoryIds.includes(FAVORITES_CATEGORY_ID);
+
+  // Unsortiert ist exklusiv: sobald eine andere Zuordnung existiert, bleibt Unsortiert abgeleitet aus.
+  // Fehlt jede Zuordnung, ist das Lesezeichen Unsortiert — nichts zu speichern.
+  return bookmark;
+}
+
 export function isUnsortedBookmark(bookmark, config) {
-  if (!bookmark) return true;
-  if (getBookmarkHomepageCategoryId(config, bookmark)) return false;
-  return getBookmarkSidebarPlacementIds(bookmark).length === 0;
+  return !bookmarkHasNonUnsortedPlacement(bookmark, config);
 }
 
 export function getBookmarkBrowserFolderPath(bookmark) {
@@ -527,7 +644,7 @@ export function getBookmarksOnHomepage(config) {
   return result;
 }
 
-export function getBookmarksForCategory(config, categoryId) {
+export function getBookmarksForCategory(config, categoryId, { prioritizeFavorites = true } = {}) {
   const bookmarkById = new Map((config.bookmarks || []).map((b) => [b.id, b]));
   const order = getCategoryBookmarkOrder(config, categoryId);
   const result = [];
@@ -542,7 +659,13 @@ export function getBookmarksForCategory(config, categoryId) {
     if (!bookmark.categoryIds.includes(categoryId) || seen.has(bookmark.id)) continue;
     result.push(bookmark);
   }
+  if (categoryId === QUICK_ACCESS_CATEGORY_ID || !prioritizeFavorites) return result;
   return prioritizeFavoriteBookmarks(result);
+}
+
+export function getBookmarksForQuickAccess(config) {
+  ensureQuickAccessCategory(config);
+  return getBookmarksForCategory(config, QUICK_ACCESS_CATEGORY_ID, { prioritizeFavorites: false });
 }
 
 export function findBookmarkById(config, bookmarkId) {
@@ -564,10 +687,12 @@ export function removeBookmarkFromCategoryOrder(config, categoryId, bookmarkId) 
 }
 
 export function removeCategoryFromConfig(config, categoryId) {
+  if (categoryId === QUICK_ACCESS_CATEGORY_ID || categoryId === UNSORTED_CATEGORY_ID) return;
   config.categories = (config.categories || []).filter((c) => c.id !== categoryId);
   delete config.categoryBookmarkOrder?.[categoryId];
   for (const bookmark of config.bookmarks || []) {
     bookmark.categoryIds = bookmark.categoryIds.filter((id) => id !== categoryId);
+    normalizeBookmarkCategoryAssignments(config, bookmark);
   }
 }
 
@@ -582,7 +707,9 @@ export function removeBookmarkFromConfig(config, bookmarkId) {
 }
 
 export function getHomepageCategories(config) {
-  return (config.categories || []).filter((category) => category.id !== UNSORTED_CATEGORY_ID);
+  return (config.categories || []).filter(
+    (category) => category.id !== UNSORTED_CATEGORY_ID && !isQuickAccessCategory(category)
+  );
 }
 
 export function listBookmarkListCategories(config) {
@@ -612,12 +739,15 @@ export function getBookmarkDisplayDomain(bookmark) {
   return formatBookmarkDomain(bookmark?.url);
 }
 
-export function getBookmarkDisplayCategoryLabels(config, bookmark, labelForFavorites) {
+export function getBookmarkDisplayCategoryLabels(config, bookmark, labelForFavorites, labelForQuickAccess) {
   const labels = [];
   const homepageCategoryId = getBookmarkHomepageCategoryId(config, bookmark);
   if (homepageCategoryId) {
     const homepageCategory = listBookmarkListCategories(config).find((entry) => entry.id === homepageCategoryId);
     if (homepageCategory?.name) labels.push(homepageCategory.name);
+  }
+  if (isBookmarkInQuickAccess(bookmark) && labelForQuickAccess) {
+    labels.push(labelForQuickAccess);
   }
   if (isBookmarkInFavorites(bookmark) && labelForFavorites) {
     labels.push(labelForFavorites);
@@ -700,23 +830,90 @@ export function assignBookmarkToCustomSidebarCategory(config, bookmark, category
 
 export function assignBookmarkToNavCategoryTargets(config, bookmark, targetIds) {
   const selected = new Set((targetIds || []).map((id) => String(id || "").trim()).filter(Boolean));
-  if (!selected.size) {
-    clearCustomSidebarCategoriesFromBookmark(config, bookmark);
+  if (!selected.size || selected.has(UNSORTED_CATEGORY_ID)) {
+    assignBookmarkToUnsorted(config, bookmark);
     return;
   }
+
+  if (selected.has(QUICK_ACCESS_CATEGORY_ID)) {
+    assignBookmarkToQuickAccess(config, bookmark);
+  }
+
   const customCategoryIds = listCustomSidebarCategoryIds(config).filter((id) => selected.has(id));
-  if (selected.has(UNSORTED_CATEGORY_ID)) {
-    assignBookmarkToUnsorted(config, bookmark);
-  } else if (customCategoryIds.length) {
+  if (customCategoryIds.length) {
     assignBookmarkToCustomSidebarCategory(config, bookmark, customCategoryIds[customCategoryIds.length - 1]);
   }
+
   if (selected.has(FAVORITES_CATEGORY_ID)) {
     assignBookmarkToFavorites(bookmark);
   }
+
+  normalizeBookmarkCategoryAssignments(config, bookmark);
 }
 
 export function assignBookmarkToUnsorted(config, bookmark) {
+  if (!bookmark) return;
+  const listCategoryIds = new Set(listBookmarkListCategories(config).map((category) => category.id));
+  for (const categoryId of [...(bookmark.categoryIds || [])]) {
+    removeBookmarkFromCategoryOrder(config, categoryId, bookmark.id);
+  }
   clearCustomSidebarCategoriesFromBookmark(config, bookmark);
+  removeBookmarkFromFavorites(bookmark);
+  bookmark.categoryIds = (bookmark.categoryIds || []).filter(
+    (id) => id !== QUICK_ACCESS_CATEGORY_ID && !listCategoryIds.has(id)
+  );
+  // Alle restlichen Listen- und Systemzuordnungen entfernen → Zustand Unsortiert.
+  bookmark.categoryIds = [];
+  bookmark.sidebarCategoryIds = [];
+  bookmark.favorite = false;
+  if (bookmark.navSectionAssignments && typeof bookmark.navSectionAssignments === "object") {
+    bookmark.navSectionAssignments = {};
+  }
+  normalizeBookmarkCategoryAssignments(config, bookmark);
+}
+
+export function assignBookmarkToQuickAccess(config, bookmark) {
+  if (!bookmark) return;
+  ensureQuickAccessCategory(config);
+  if (!bookmark.categoryIds) bookmark.categoryIds = [];
+  if (!bookmark.categoryIds.includes(QUICK_ACCESS_CATEGORY_ID)) {
+    bookmark.categoryIds.push(QUICK_ACCESS_CATEGORY_ID);
+  }
+  ensureBookmarkInCategoryOrder(config, QUICK_ACCESS_CATEGORY_ID, bookmark.id);
+  normalizeBookmarkCategoryAssignments(config, bookmark);
+}
+
+export function removeBookmarkFromQuickAccess(config, bookmark) {
+  if (!bookmark) return;
+  bookmark.categoryIds = (bookmark.categoryIds || []).filter((id) => id !== QUICK_ACCESS_CATEGORY_ID);
+  removeBookmarkFromCategoryOrder(config, QUICK_ACCESS_CATEGORY_ID, bookmark.id);
+  normalizeBookmarkCategoryAssignments(config, bookmark);
+}
+
+export function setBookmarkQuickAccess(config, bookmark, enabled) {
+  if (enabled) assignBookmarkToQuickAccess(config, bookmark);
+  else removeBookmarkFromQuickAccess(config, bookmark);
+}
+
+export function reorderQuickAccessBookmarks(config, orderedBookmarkIds) {
+  ensureQuickAccessCategory(config);
+  const validIds = new Set(
+    getBookmarksForQuickAccess(config).map((bookmark) => bookmark.id).filter(Boolean)
+  );
+  const seen = new Set();
+  const order = [];
+  for (const rawId of orderedBookmarkIds || []) {
+    const id = String(rawId || "").trim();
+    if (!id || !validIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+  }
+  for (const id of validIds) {
+    if (seen.has(id)) continue;
+    order.push(id);
+  }
+  if (!config.categoryBookmarkOrder) config.categoryBookmarkOrder = {};
+  config.categoryBookmarkOrder[QUICK_ACCESS_CATEGORY_ID] = order;
 }
 
 export function assignBookmarkToFavorites(bookmark) {
@@ -760,10 +957,15 @@ export function assignBookmarkToHomepageCategory(config, bookmark, categoryId) {
   const listCategoryIds = new Set(listBookmarkListCategories(config).map((category) => category.id));
   if (!listCategoryIds.has(categoryId)) return;
   if (!bookmark.categoryIds) bookmark.categoryIds = [];
+  // Eine Startseiten-Abschnittszuordnung; Schnellzugriff bleibt erhalten.
+  bookmark.categoryIds = bookmark.categoryIds.filter(
+    (id) => id === QUICK_ACCESS_CATEGORY_ID || !listCategoryIds.has(id)
+  );
   if (!bookmark.categoryIds.includes(categoryId)) {
     bookmark.categoryIds.push(categoryId);
   }
   ensureBookmarkInCategoryOrder(config, categoryId, bookmark.id);
+  normalizeBookmarkCategoryAssignments(config, bookmark);
 }
 
 export function removeSidebarCategoryFromConfig(config, categoryId) {
@@ -890,7 +1092,9 @@ export function createSectionForCategory(config, categoryId, sectionData = {}) {
   if (categoryId === HOMEPAGE_SECTIONS_CATEGORY_ID) {
     const created = buildSectionEntry(sectionData);
     created.name = name;
-    config.categories.push(created);
+    const homepageCategories = getHomepageCategories(config);
+    const quickAccess = (config.categories || []).filter(isQuickAccessCategory);
+    config.categories = [...quickAccess, ...homepageCategories, created];
     config.categoryBookmarkOrder = config.categoryBookmarkOrder || {};
     config.categoryBookmarkOrder[created.id] = [];
     return { sectionId: created.id, created: true, changed: true, section: created };

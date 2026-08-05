@@ -10,6 +10,17 @@
   ],
   "categories": [
     {
+      "id": "quick_access",
+      "role": "quick_access",
+      "name": "Quick access",
+      "icon": "flash",
+      "color": "primary",
+      "collapsed": false,
+      "type": "service-list",
+      "iframeUrl": "",
+      "slots": 1
+    },
+    {
       "id": "infra",
       "name": "Infrastructure",
       "icon": "server",
@@ -34,6 +45,7 @@
     }
   ],
   "categoryBookmarkOrder": {
+    "quick_access": [],
     "infra": ["proxmox"]
   },
   "sidebarCategoryBookmarkOrder": {

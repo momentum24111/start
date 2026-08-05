@@ -12,8 +12,10 @@ import {
   DEFAULT_BOOKMARK_SOURCE,
   FAVORITES_CATEGORY_ID,
   UNSORTED_CATEGORY_ID,
+  QUICK_ACCESS_CATEGORY_ID,
   getBookmarksForCategory,
   getBookmarksForSidebarCategory,
+  getBookmarksForQuickAccess,
   getBookmarkHomepageCategoryId,
   getBookmarkSidebarPlacementIds,
   findBookmarkById,
@@ -30,6 +32,9 @@ import {
   allocateSidebarCategorySlug,
   assignBookmarkToCustomSidebarCategory,
   assignBookmarkToNavCategoryTargets,
+  normalizeBookmarkCategoryAssignments,
+  isBookmarkInQuickAccess,
+  isQuickAccessCategory,
   removeSidebarCategoryFromConfig,
   deleteSidebarCategoryFromConfig,
   getHomepageCategories,
@@ -97,7 +102,7 @@ import {
   positionFloatingMenuAtPoint
 } from "./bookmark-views.js";
 import { initBookmarkSearch, refreshBookmarkSearchTexts } from "./bookmark-search.js";
-import { bindBookmarkDrag, initBookmarkDragDrop, SIDEBAR_ADD_CATEGORY_DROP_ID } from "./bookmark-drag.js";
+import { bindBookmarkDrag, initBookmarkDragDrop, isBookmarkDragSessionActive, SIDEBAR_ADD_CATEGORY_DROP_ID } from "./bookmark-drag.js";
 
 const EDIT_MODE_URL_KEY = "edit";
 let editModeHistoryPushed = false;
@@ -164,6 +169,7 @@ let navLongPressTriggered = false;
 let sidebarOpenBeforeDrag = null;
 let sidebarTooltipEl = null;
 let sidebarTooltipAnchor = null;
+let quickAccessBarVisible = false;
 
 function categoryEffectiveCollapsed(category) {
   if (isHomepageEditMode()) return false;
@@ -177,7 +183,8 @@ const elements = {
   title: document.getElementById("app-title"),
   categories: document.getElementById("categories"),
   navView: document.getElementById("nav-view"),
-  addBookmarkFab: document.getElementById("add-bookmark-fab"),
+  addBookmarkBtn: document.getElementById("add-bookmark-btn"),
+  quickAccessBar: document.getElementById("quick-access-bar"),
   undo: document.getElementById("undo-btn"),
   edit: document.getElementById("edit-btn"),
   settings: document.getElementById("settings-btn"),
@@ -280,6 +287,16 @@ function resolveBookmarkPreviewSrc(raw) {
 function bookmarkStoredImageSrc(bookmark) {
   if (!bookmark) return resolveIconSrcForImgTag("");
   return resolveBookmarkPreviewSrc(bookmark.image);
+}
+
+/** Schnellzugriff: nur lokale Cache-/Default-Icons, keine externen Requests beim Laden. */
+function quickAccessIconSrc(bookmark) {
+  if (!bookmark) return resolveIconSrcForImgTag("");
+  const image = normalizeAppIconPath(String(bookmark.image || "").trim());
+  if (image.startsWith("/static/assets/favicon-cache/") || image.startsWith("/static/assets/icons/")) {
+    return resolveIconSrcForImgTag(image);
+  }
+  return resolveIconSrcForImgTag("");
 }
 
 function normalizeBookmarkImageValue(raw) {
@@ -455,6 +472,16 @@ function isGlobalKeyboardShortcutBlocked() {
   return isBlockingFocusTarget(document.activeElement);
 }
 
+function isNavSelectionEscapeBlocked() {
+  if (isGlobalKeyboardShortcutBlocked()) return true;
+  if (bookmarkSortDropdownOpen) return true;
+  if (unsortedFolderFilterDropdownOpen) return true;
+  if (activeSidebarCategoryMenu) return true;
+  if (document.querySelector("#bookmark-menu-overlay.is-open")) return true;
+  if (document.querySelector(".section-inline-create")) return true;
+  return false;
+}
+
 function triggerBookmarkLaunch(bookmarkId) {
   const tile = document.querySelector(`.bookmark-item[data-bookmark-id="${bookmarkId}"] [data-bookmark-open]`);
   if (!(tile instanceof HTMLAnchorElement)) return;
@@ -520,6 +547,84 @@ async function pickHomepageCategoryForDrop(bookmarksForDrop = null) {
     }
   });
   return confirmed ? selectedCategoryId : null;
+}
+
+async function pickSectionForCategoryDrop(navId, bookmarksForDrop = null) {
+  const category = findSidebarCategoryById(state.config, navId);
+  if (!category) return null;
+
+  const bookmarks = Array.isArray(bookmarksForDrop) ? bookmarksForDrop : [];
+  let prefillSectionId = UNSECTIONED_SECTION_ID;
+  if (bookmarks.length) {
+    const sectionIds = bookmarks.map((bookmark) => getBookmarkSectionIdForNav(bookmark, navId) || UNSECTIONED_SECTION_ID);
+    const uniqueIds = new Set(sectionIds);
+    if (uniqueIds.size === 1) {
+      prefillSectionId = [...uniqueIds][0];
+    }
+  }
+
+  let selectedSectionId = prefillSectionId;
+  const body = document.createElement("div");
+  body.className = "bookmark-drop-section-picker";
+
+  const lead = document.createElement("p");
+  lead.className = "bookmark-drop-section-picker__lead";
+  if (bookmarks.length > 1) {
+    lead.textContent = interpolateLabel(t("ui.dropToCategoryLeadMultiple"), {
+      count: String(bookmarks.length),
+      category: category.name
+    });
+  } else if (bookmarks.length === 1) {
+    const label = bookmarks[0]?.title || bookmarks[0]?.url || "";
+    lead.textContent = interpolateLabel(t("ui.dropToCategoryLead"), { title: label, category: category.name });
+  } else {
+    lead.textContent = interpolateLabel(t("ui.dropToCategoryLeadCategoryOnly"), { category: category.name });
+  }
+
+  const label = document.createElement("label");
+  label.textContent = t("ui.dropToCategorySectionLabel");
+  const selectWrap = document.createElement("div");
+  selectWrap.className = "select-wrap";
+  const select = document.createElement("select");
+  select.className = "bookmark-drop-section-picker__select";
+  rebuildSectionSelect(select, navId, { includeUnsectioned: true, selectedId: prefillSectionId });
+  select.addEventListener("change", () => {
+    if (select.value === CREATE_SECTION_OPTION_VALUE) {
+      mountInlineSectionCreator(select, navId, {
+        includeUnsectioned: true,
+        onSelectionChanged: (value) => {
+          selectedSectionId = value || UNSECTIONED_SECTION_ID;
+        }
+      });
+      return;
+    }
+    select.dataset.lastValue = String(select.value || "").trim();
+    selectedSectionId = select.value || UNSECTIONED_SECTION_ID;
+  });
+  select.dataset.lastValue = prefillSectionId;
+  const chevron = document.createElement("span");
+  chevron.className = "select-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.innerHTML = iconSvg(ICONS.chevron, "inline-icon");
+  selectWrap.append(select, chevron);
+  body.append(lead, label, selectWrap);
+
+  let confirmed = false;
+  await showModal({
+    title: t("ui.dropToCategory"),
+    content: body,
+    saveLabel: t("ui.confirm"),
+    cancelLabel: t("ui.cancel"),
+    modalClass: "modal--drop-section",
+    onSave: async () => {
+      const value = String(select.value || "").trim();
+      if (!value || value === CREATE_SECTION_OPTION_VALUE) return false;
+      selectedSectionId = value;
+      confirmed = true;
+    }
+  });
+  if (!confirmed) return null;
+  return selectedSectionId === UNSECTIONED_SECTION_ID ? "" : selectedSectionId;
 }
 
 function createBookmarkUiDeps() {
@@ -1044,6 +1149,16 @@ function handleNavSelectAllShortcut(event) {
   activateNavSelectionAndSelectAllVisible();
 }
 
+function handleNavSelectionEscapeShortcut(event) {
+  if (event.defaultPrevented) return;
+  if (event.key !== "Escape" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (!navSelectionMode) return;
+  if (shouldShowCategoryGrid(getActiveNavId())) return;
+  if (isNavSelectionEscapeBlocked()) return;
+  event.preventDefault();
+  setNavSelectionMode(false);
+}
+
 function clearAllNavBookmarkSelection() {
   navSelectedBookmarkIds.clear();
   navSelectionAnchorId = null;
@@ -1072,8 +1187,9 @@ function setNavSelectionMode(active, { initialBookmarkId = null } = {}) {
 function getAssignableNavCategoryOptions() {
   const options = [
     { id: NAV_ALL, label: getHomepageName(), icon: "play" },
+    { id: QUICK_ACCESS_CATEGORY_ID, label: t("ui.navQuickAccess"), icon: "flash" },
     { id: NAV_FAVORITES, label: t("ui.navFavorites"), icon: "star" },
-    { id: NAV_UNSORTED, label: t("ui.navUnsorted"), icon: "folder-outline" }
+    { id: NAV_UNSORTED, label: t("ui.navUnsorted"), icon: "folder-outline", exclusiveHint: true }
   ];
   for (const category of getSidebarCategories(state.config)) {
     options.push({
@@ -1087,6 +1203,7 @@ function getAssignableNavCategoryOptions() {
 
 function bookmarkHasAssignNavTarget(bookmark, navTargetId) {
   if (navTargetId === NAV_ALL) return Boolean(getBookmarkHomepageCategoryId(state.config, bookmark));
+  if (navTargetId === QUICK_ACCESS_CATEGORY_ID) return isBookmarkInQuickAccess(bookmark);
   if (navTargetId === NAV_FAVORITES) return isBookmarkInFavorites(bookmark);
   if (navTargetId === NAV_UNSORTED) return isUnsortedBookmark(bookmark, state.config);
   return (bookmark.sidebarCategoryIds || []).includes(navTargetId);
@@ -1147,7 +1264,7 @@ function resolveAssignModalPrefill(bookmarkIds) {
     const allHaveTarget = bookmarks.every((bookmark) => bookmarkHasAssignNavTarget(bookmark, option.id));
     if (!allHaveTarget) continue;
     selectedCategoryIds.add(option.id);
-    if (option.id === NAV_FAVORITES || option.id === NAV_UNSORTED) continue;
+    if (option.id === NAV_FAVORITES || option.id === NAV_UNSORTED || option.id === QUICK_ACCESS_CATEGORY_ID) continue;
     const supportsSections = option.id === NAV_ALL || isCategoryNavId(state.config, option.id);
     if (!supportsSections) continue;
     const sectionIds = bookmarks.map((bookmark) => getAssignNavTargetSectionId(bookmark, option.id));
@@ -1159,6 +1276,82 @@ function resolveAssignModalPrefill(bookmarkIds) {
   return { selectedCategoryIds, sectionAssignments };
 }
 
+function buildAssignNavCategoryRow(option, { checked = false, selectedSectionId = "" } = {}) {
+  const supportsSections = option.id === NAV_ALL || isCategoryNavId(state.config, option.id);
+  const includeUnsectioned = option.id !== NAV_ALL;
+  const selectOptions = supportsSections
+    ? getSectionOptionsForNav(option.id, { includeUnsectioned })
+      .map((entry) => {
+        const selected = entry.id === selectedSectionId ? "selected" : "";
+        return `<option value="${escapeHtml(entry.id)}" ${selected}>${escapeHtml(entry.name)}</option>`;
+      })
+      .join("")
+    : "";
+  const hint = option.exclusiveHint
+    ? `<small class="nav-assign-categories__hint">${escapeHtml(t("ui.unsortedExclusiveHint"))}</small>`
+    : "";
+  return `
+    <div class="nav-assign-row${option.exclusiveHint ? " nav-assign-row--unsorted" : ""}" data-nav-assign-row="${escapeHtml(option.id)}">
+      <label class="theme-checkbox nav-assign-categories__option${option.exclusiveHint ? " bookmark-placement-option--unsorted" : ""}" data-nav-assign-option="${escapeHtml(option.id)}">
+        <input type="checkbox" class="theme-checkbox__input" name="navAssignCategory" value="${escapeHtml(option.id)}" ${checked ? "checked" : ""} />
+        <span class="theme-checkbox__box" aria-hidden="true"></span>
+        <span class="nav-assign-categories__option-icon" aria-hidden="true">${mdiIcon(option.icon)}</span>
+        <span class="theme-checkbox__label">${escapeHtml(option.label)}</span>
+      </label>
+      ${hint}
+      ${supportsSections ? `
+        <div class="nav-assign-row__section${checked ? "" : " hidden"}" data-nav-assign-section-row="${escapeHtml(option.id)}">
+          <div class="select-wrap">
+            <select data-nav-assign-section-select="${escapeHtml(option.id)}">
+              <option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>
+              ${selectOptions}
+              <option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>
+            </select>
+            <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function wireAssignNavCategoryRow(body, row, { syncAssignCategorySelection }) {
+  const input = row.querySelector("input[name='navAssignCategory']");
+  input?.addEventListener("change", () => syncAssignCategorySelection(input));
+  const select = row.querySelector("[data-nav-assign-section-select]");
+  if (!(select instanceof HTMLSelectElement)) return;
+  const navId = String(select.getAttribute("data-nav-assign-section-select") || "").trim();
+  const includeUnsectioned = navId !== NAV_ALL;
+  select.addEventListener("change", () => {
+    if (select.value !== CREATE_SECTION_OPTION_VALUE) {
+      select.dataset.lastValue = String(select.value || "").trim();
+      return;
+    }
+    mountInlineSectionCreator(select, navId, { includeUnsectioned });
+  });
+  const value = String(select.value || "").trim();
+  if (value && value !== CREATE_SECTION_OPTION_VALUE) {
+    select.dataset.lastValue = value;
+  }
+}
+
+function appendAssignNavCategoryRow(body, option, { checked = false, selectedSectionId = "" } = {}, syncHandlers) {
+  const optionsContainer = body.querySelector(".nav-assign-categories__options");
+  if (!(optionsContainer instanceof HTMLElement)) return null;
+  const template = document.createElement("template");
+  template.innerHTML = buildAssignNavCategoryRow(option, { checked, selectedSectionId }).trim();
+  const row = template.content.firstElementChild;
+  if (!(row instanceof HTMLElement)) return null;
+  optionsContainer.append(row);
+  wireAssignNavCategoryRow(body, row, syncHandlers);
+  const input = row.querySelector("input[name='navAssignCategory']");
+  if (checked && input instanceof HTMLInputElement) {
+    input.checked = true;
+    syncHandlers.syncAssignCategorySelection(input);
+  }
+  return row;
+}
+
 async function openAssignSelectedBookmarksModal() {
   if (!navSelectionMode || navSelectedBookmarkIds.size === 0) return;
   const bookmarkIds = [...navSelectedBookmarkIds];
@@ -1167,48 +1360,17 @@ async function openAssignSelectedBookmarksModal() {
   body.className = "nav-assign-categories";
   const options = getAssignableNavCategoryOptions();
   const rows = options
-    .map((option) => {
-      const supportsSections = option.id === NAV_ALL || isCategoryNavId(state.config, option.id);
-      const includeUnsectioned = option.id !== NAV_ALL;
-      const selectedSectionId = prefill.sectionAssignments[option.id] || "";
-      const checked = prefill.selectedCategoryIds.has(option.id);
-      const selectOptions = supportsSections
-        ? getSectionOptionsForNav(option.id, { includeUnsectioned })
-          .map((entry) => {
-            const selected = entry.id === selectedSectionId ? "selected" : "";
-            return `<option value="${escapeHtml(entry.id)}" ${selected}>${escapeHtml(entry.name)}</option>`;
-          })
-          .join("")
-        : "";
-      return `
-        <div class="nav-assign-row" data-nav-assign-row="${escapeHtml(option.id)}">
-          <label class="theme-checkbox nav-assign-categories__option" data-nav-assign-option="${escapeHtml(option.id)}">
-            <input type="checkbox" class="theme-checkbox__input" name="navAssignCategory" value="${escapeHtml(option.id)}" ${checked ? "checked" : ""} />
-            <span class="theme-checkbox__box" aria-hidden="true"></span>
-            <span class="nav-assign-categories__option-icon" aria-hidden="true">${mdiIcon(option.icon)}</span>
-            <span class="theme-checkbox__label">${escapeHtml(option.label)}</span>
-          </label>
-          ${supportsSections ? `
-            <div class="nav-assign-row__section${checked ? "" : " hidden"}" data-nav-assign-section-row="${escapeHtml(option.id)}">
-              <div class="select-wrap">
-                <select data-nav-assign-section-select="${escapeHtml(option.id)}">
-                  <option value="">${escapeHtml(t("ui.sectionSelectPlaceholder"))}</option>
-                  ${selectOptions}
-                  <option value="${CREATE_SECTION_OPTION_VALUE}">${escapeHtml(t("ui.addNewSectionInline"))}</option>
-                </select>
-                <span class="select-chevron" aria-hidden="true">${iconSvg(ICONS.chevron, "inline-icon")}</span>
-              </div>
-            </div>
-          ` : ""}
-        </div>
-      `;
-    })
+    .map((option) => buildAssignNavCategoryRow(option, {
+      checked: prefill.selectedCategoryIds.has(option.id),
+      selectedSectionId: prefill.sectionAssignments[option.id] || ""
+    }))
     .join("");
   body.innerHTML = `
     <p class="nav-assign-categories__lead">${escapeHtml(interpolateLabel(t("ui.assignSelectedBookmarksLead"), { count: String(bookmarkIds.length) }))}</p>
     <div class="nav-assign-categories__options" role="group" aria-label="${escapeHtml(t("ui.assignSelectedBookmarks"))}">
       ${rows}
     </div>
+    <button type="button" class="btn btn--ghost nav-assign-categories__add-category">${escapeHtml(t("ui.assignNewCategory"))}</button>
   `;
   const syncAssignSectionRows = () => {
     body.querySelectorAll("[data-nav-assign-section-row]").forEach((row) => {
@@ -1228,26 +1390,23 @@ async function openAssignSelectedBookmarksModal() {
     });
     syncAssignSectionRows();
   };
-  body.querySelectorAll("input[name='navAssignCategory']").forEach((input) => {
-    input.addEventListener("change", () => syncAssignCategorySelection(input));
-  });
-  body.querySelectorAll("[data-nav-assign-section-select]").forEach((select) => {
-    const navId = String(select.getAttribute("data-nav-assign-section-select") || "").trim();
-    const includeUnsectioned = navId !== NAV_ALL;
-    select.addEventListener("change", () => {
-      if (select.value !== CREATE_SECTION_OPTION_VALUE) {
-        select.dataset.lastValue = String(select.value || "").trim();
-        return;
-      }
-      mountInlineSectionCreator(select, navId, { includeUnsectioned });
-    });
+  const syncHandlers = { syncAssignCategorySelection };
+  body.querySelectorAll(".nav-assign-row").forEach((row) => {
+    wireAssignNavCategoryRow(body, row, syncHandlers);
   });
   syncAssignCategorySelection(null);
-  body.querySelectorAll("[data-nav-assign-section-select]").forEach((select) => {
-    const value = String(select.value || "").trim();
-    if (value && value !== CREATE_SECTION_OPTION_VALUE) {
-      select.dataset.lastValue = value;
-    }
+  body.querySelector(".nav-assign-categories__add-category")?.addEventListener("click", () => {
+    openSidebarCategoryModal({
+      onCreated: (category) => {
+        appendAssignNavCategoryRow(body, {
+          id: category.id,
+          label: category.name,
+          icon: category.icon || FALLBACK_MDI_ICON
+        }, { checked: true }, syncHandlers);
+        const assignModal = document.querySelector(".modal--nav-assign");
+        assignModal?.querySelector("[data-save]")?.focus();
+      }
+    });
   });
 
   await showModal({
@@ -1279,7 +1438,9 @@ async function openAssignSelectedBookmarksModal() {
         assignBookmarkToNavCategoryTargets(state.config, bookmark, selectedCategoryIds);
         if (selectedCategoryIds.includes(NAV_ALL) && homepageSectionId) {
           const listCategoryIds = new Set(listBookmarkListCategories(state.config).map((category) => category.id));
-          const preserved = (bookmark.categoryIds || []).filter((id) => !listCategoryIds.has(id));
+          const preserved = (bookmark.categoryIds || []).filter(
+            (id) => id === QUICK_ACCESS_CATEGORY_ID || !listCategoryIds.has(id)
+          );
           bookmark.categoryIds = [...preserved, homepageSectionId];
           ensureBookmarkInCategoryOrder(state.config, homepageSectionId, bookmark.id);
         }
@@ -1288,6 +1449,7 @@ async function openAssignSelectedBookmarksModal() {
           if (!(bookmark.sidebarCategoryIds || []).includes(navId)) continue;
           setBookmarkSectionIdForNav(bookmark, navId, sectionId === UNSECTIONED_SECTION_ID ? "" : sectionId);
         }
+        normalizeBookmarkCategoryAssignments(state.config, bookmark);
       }
       await persistConfig();
       resetNavSelection();
@@ -1425,6 +1587,7 @@ function ensureNavSelectionEvents() {
   navSelectionEventsBound = true;
   document.addEventListener("keydown", handleNavSelectAllShortcut);
   document.addEventListener("keydown", handleNavDeleteSelectedShortcut);
+  document.addEventListener("keydown", handleNavSelectionEscapeShortcut);
   document.addEventListener("click", handleNavBookmarkModifierClick, true);
   document.addEventListener("keyup", (event) => {
     if (event.key === "Shift") clearNavSelectionPreview();
@@ -1710,6 +1873,34 @@ function getMdiSearchResults(query, limit = 24) {
   return matches;
 }
 
+function positionIconSearchResults(results, anchor) {
+  if (!(results instanceof HTMLElement) || !(anchor instanceof HTMLElement)) return;
+  const gap = 4;
+  const margin = 8;
+  const anchorRect = anchor.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const panelRect = results.getBoundingClientRect();
+
+  let top = anchorRect.bottom + gap;
+  if (top + panelRect.height > viewportHeight - margin) {
+    const aboveTop = anchorRect.top - panelRect.height - gap;
+    if (aboveTop >= margin) top = aboveTop;
+    else top = Math.max(margin, viewportHeight - panelRect.height - margin);
+  }
+  if (top < margin) top = margin;
+
+  let left = anchorRect.left;
+  const width = Math.max(anchorRect.width, 180);
+  if (left + width > viewportWidth - margin) {
+    left = Math.max(margin, viewportWidth - width - margin);
+  }
+
+  results.style.left = `${Math.round(left)}px`;
+  results.style.top = `${Math.round(top)}px`;
+  results.style.width = `${Math.round(width)}px`;
+}
+
 function wireMdiIconSearch(form, { fallbackIcon = FALLBACK_MDI_ICON } = {}) {
   const input = form.querySelector("input[name='icon']");
   const results = form.querySelector("[data-icon-results]");
@@ -1717,32 +1908,73 @@ function wireMdiIconSearch(form, { fallbackIcon = FALLBACK_MDI_ICON } = {}) {
   if (!(input instanceof HTMLInputElement) || !(results instanceof HTMLElement) || !(selectedPreview instanceof HTMLElement)) {
     return;
   }
+  const anchor = results.parentElement;
+  let repositionResults = null;
   const applySelectedIcon = (iconName) => {
     const normalizedName = normalizeMdiIconName(iconName);
     input.value = normalizedName;
     selectedPreview.innerHTML = mdiIcon(normalizedName, "icon-preview icon-preview--theme");
   };
+  const detachIconSearchResults = () => {
+    repositionResults?.();
+    repositionResults = null;
+    results.classList.remove("is-open", "icon-search-results--floating");
+    results.innerHTML = "";
+    results.style.left = "";
+    results.style.top = "";
+    results.style.width = "";
+    if (anchor instanceof HTMLElement && results.parentElement === document.body) {
+      anchor.append(results);
+    }
+  };
+  const attachIconSearchResults = () => {
+    if (!form.isConnected) {
+      detachIconSearchResults();
+      return;
+    }
+    if (results.parentElement !== document.body) {
+      document.body.append(results);
+    }
+    results.classList.add("is-open", "icon-search-results--floating");
+    positionIconSearchResults(results, anchor);
+    if (repositionResults) return;
+    const onReposition = () => {
+      if (!form.isConnected || !results.classList.contains("is-open")) {
+        detachIconSearchResults();
+        return;
+      }
+      positionIconSearchResults(results, anchor);
+    };
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    repositionResults = () => {
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  };
   const renderIconResults = () => {
     const query = String(input.value || "");
     const filtered = getMdiSearchResults(query, 32);
-    results.classList.toggle("is-open", filtered.length > 0);
+    if (!filtered.length) {
+      detachIconSearchResults();
+      return;
+    }
     results.innerHTML = filtered
       .map((entry) => `<button type="button" class="icon-search-item" data-icon-pick="${entry.icon}">${mdiIcon(entry.icon, "icon-preview icon-preview--theme")}<span>${entry.label}</span></button>`)
       .join("");
     results.querySelectorAll("[data-icon-pick]").forEach((buttonEl) => {
       buttonEl.addEventListener("click", () => {
         applySelectedIcon(buttonEl.dataset.iconPick);
-        results.classList.remove("is-open");
-        results.innerHTML = "";
+        detachIconSearchResults();
       });
     });
+    attachIconSearchResults();
   };
   input.addEventListener("focus", renderIconResults);
   input.addEventListener("input", renderIconResults);
   input.addEventListener("blur", () => {
     window.setTimeout(() => {
-      results.classList.remove("is-open");
-      results.innerHTML = "";
+      detachIconSearchResults();
       if (!mdiRegistry.byName.has(String(input.value || "").toLowerCase())) {
         applySelectedIcon(fallbackIcon);
       } else {
@@ -1751,8 +1983,7 @@ function wireMdiIconSearch(form, { fallbackIcon = FALLBACK_MDI_ICON } = {}) {
     }, 120);
   });
   applySelectedIcon(fallbackIcon);
-  results.classList.remove("is-open");
-  results.innerHTML = "";
+  detachIconSearchResults();
 }
 
 async function loadMdiRegistry() {
@@ -1820,8 +2051,12 @@ function isHomepageEditMode() {
   return state.editMode && shouldShowCategoryGrid(getActiveNavId());
 }
 
-function shouldShowAddBookmarkFab() {
+function shouldShowAddBookmarkButton() {
   return isValidNavId(state.config, getActiveNavId());
+}
+
+function shouldShowQuickAccessBar() {
+  return shouldShowCategoryGrid(getActiveNavId()) && getBookmarksForQuickAccess(state.config).length > 0;
 }
 
 function isEditModeInUrl() {
@@ -1986,18 +2221,27 @@ async function bootstrap() {
       render();
     },
     pickHomepageCategory: pickHomepageCategoryForDrop,
+    pickSectionForCategory: pickSectionForCategoryDrop,
     confirmDropToUnsorted,
     getSelectedBookmarkIds: () => [...navSelectedBookmarkIds],
     formatDragCount: (count) => interpolateLabel(t("ui.dragSelectedCount"), { count }),
     formatDropBadgeCount: (count) => String(count),
     onDragSessionStart: () => {
+      hideAppTooltip();
       sidebarOpenBeforeDrag = state.sidebarOpen;
       setSidebarOpen(true);
     },
     onDragSessionEnd: () => {
+      hideAppTooltip();
       if (sidebarOpenBeforeDrag === null) return;
       setSidebarOpen(sidebarOpenBeforeDrag);
       sidebarOpenBeforeDrag = null;
+    },
+    onQuickAccessDragStart: () => {
+      hideAppTooltip();
+    },
+    onQuickAccessDragEnd: () => {
+      hideAppTooltip();
     },
     openAddSidebarCategoryModal: (bookmarkIds) => {
       openSidebarCategoryModal({ bookmarkIdsToAssign: bookmarkIds });
@@ -2034,10 +2278,10 @@ function wireEvents() {
   });
   elements.undo.addEventListener("click", undo);
   elements.settings.addEventListener("click", openSettingsModal);
-  elements.addBookmarkFab?.addEventListener("click", () => {
+  elements.addBookmarkBtn?.addEventListener("click", () => {
     const navId = getActiveNavId();
     if (isCategoryNavId(state.config, navId)) {
-      openAddFabMenu(elements.addBookmarkFab, navId);
+      openAddFabMenu(elements.addBookmarkBtn, navId);
       return;
     }
     openBookmarkModal({ navId });
@@ -2184,33 +2428,65 @@ function ensureSidebarTooltip() {
   if (sidebarTooltipEl instanceof HTMLElement) return sidebarTooltipEl;
   const el = document.createElement("div");
   el.id = "sidebar-tooltip";
-  el.className = "sidebar-tooltip";
+  el.className = "app-tooltip sidebar-tooltip";
   el.hidden = true;
   document.body.append(el);
   sidebarTooltipEl = el;
   return el;
 }
 
-function hideSidebarTooltip() {
+function hideAppTooltip() {
   sidebarTooltipAnchor = null;
   if (!(sidebarTooltipEl instanceof HTMLElement)) return;
   sidebarTooltipEl.hidden = true;
   sidebarTooltipEl.textContent = "";
+  sidebarTooltipEl.classList.remove("app-tooltip--top", "app-tooltip--right");
+  sidebarTooltipEl.style.top = "";
+  sidebarTooltipEl.style.left = "";
 }
 
-function showSidebarTooltip(anchor, label) {
+function hideSidebarTooltip() {
+  hideAppTooltip();
+}
+
+function showAppTooltip(anchor, label, { placement = "right" } = {}) {
   if (!(anchor instanceof HTMLElement) || !label) {
-    hideSidebarTooltip();
+    hideAppTooltip();
+    return;
+  }
+  if (isBookmarkDragSessionActive()) {
+    hideAppTooltip();
     return;
   }
   const tooltip = ensureSidebarTooltip();
-  if (sidebarTooltipAnchor === anchor && tooltip.textContent === label && !tooltip.hidden) return;
+  const placementClass = placement === "top" ? "app-tooltip--top" : "app-tooltip--right";
+  if (
+    sidebarTooltipAnchor === anchor
+    && tooltip.textContent === label
+    && !tooltip.hidden
+    && tooltip.classList.contains(placementClass)
+  ) return;
   sidebarTooltipAnchor = anchor;
   tooltip.textContent = label;
+  tooltip.classList.remove("app-tooltip--top", "app-tooltip--right");
+  tooltip.classList.add(placementClass);
   tooltip.hidden = false;
   const rect = anchor.getBoundingClientRect();
-  tooltip.style.top = `${rect.top + rect.height / 2}px`;
-  tooltip.style.left = `${rect.left + rect.width}px`;
+  if (placement === "top") {
+    tooltip.style.top = `${rect.top}px`;
+    tooltip.style.left = `${rect.left + rect.width / 2}px`;
+  } else {
+    tooltip.style.top = `${rect.top + rect.height / 2}px`;
+    tooltip.style.left = `${rect.left + rect.width}px`;
+  }
+}
+
+function showSidebarTooltip(anchor, label) {
+  showAppTooltip(anchor, label, { placement: "right" });
+}
+
+function canUseHoverTooltips() {
+  return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 }
 
 function bindSidebarTooltipEvents() {
@@ -2254,6 +2530,114 @@ function bindSidebarTooltipEvents() {
   });
   elements.sidebar?.querySelector(".sidebar-nav__scroll, .sidebar-nav")?.addEventListener("scroll", hideSidebarTooltip, { passive: true });
   window.addEventListener("resize", hideSidebarTooltip);
+
+  document.addEventListener("mouseover", (event) => {
+    if (!canUseHoverTooltips()) return;
+    const item = event.target.closest?.("[data-quick-access-item]");
+    if (!(item instanceof HTMLElement)) return;
+    if (isBookmarkDragSessionActive()) {
+      hideAppTooltip();
+      return;
+    }
+    const label = item.getAttribute("aria-label") || "";
+    showAppTooltip(item, label, { placement: "top" });
+  });
+  document.addEventListener("mouseout", (event) => {
+    const item = event.target.closest?.("[data-quick-access-item]");
+    if (!(item instanceof HTMLElement)) return;
+    const related = event.relatedTarget;
+    if (related instanceof Node && item.contains(related)) return;
+    if (sidebarTooltipAnchor === item) hideAppTooltip();
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!canUseHoverTooltips()) return;
+    const item = event.target.closest?.("[data-quick-access-item]");
+    if (!(item instanceof HTMLElement)) return;
+    showAppTooltip(item, item.getAttribute("aria-label") || "", { placement: "top" });
+  });
+  document.addEventListener("focusout", (event) => {
+    const item = event.target.closest?.("[data-quick-access-item]");
+    if (item instanceof HTMLElement && sidebarTooltipAnchor === item) hideAppTooltip();
+  });
+}
+
+function ensureQuickAccessBar() {
+  if (elements.quickAccessBar instanceof HTMLElement) return elements.quickAccessBar;
+  const main = document.querySelector(".app-main main") || document.querySelector("main");
+  if (!(main instanceof HTMLElement)) return null;
+  let bar = document.getElementById("quick-access-bar");
+  if (!(bar instanceof HTMLElement)) {
+    bar = document.createElement("div");
+    bar.id = "quick-access-bar";
+    bar.className = "quick-access-bar hidden";
+    bar.hidden = true;
+    bar.dataset.quickAccessBar = "";
+    bar.innerHTML = `
+      <div class="quick-access-bar__inner">
+        <div class="quick-access-bar__scroller" data-quick-access-scroller>
+          <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
+        </div>
+      </div>
+    `;
+    main.append(bar);
+  }
+  elements.quickAccessBar = bar;
+  return bar;
+}
+
+function renderQuickAccessBar() {
+  const bar = ensureQuickAccessBar();
+  if (!(bar instanceof HTMLElement)) return;
+  const list = bar.querySelector("[data-quick-access-list]");
+  if (!(list instanceof HTMLElement)) return;
+
+  const visible = shouldShowQuickAccessBar();
+  quickAccessBarVisible = visible;
+  bar.hidden = !visible;
+  bar.classList.toggle("hidden", !visible);
+  document.body.classList.toggle("has-quick-access-bar", visible);
+  if (!visible) {
+    list.innerHTML = "";
+    hideAppTooltip();
+    return;
+  }
+
+  const bookmarks = getBookmarksForQuickAccess(state.config);
+  list.setAttribute("aria-label", t("ui.navQuickAccess"));
+  list.innerHTML = bookmarks.map((bookmark) => {
+    const title = String(bookmark.title || bookmark.url || "").trim();
+    const thumbSrc = escapeHtml(quickAccessIconSrc(bookmark));
+    const openMode = bookmark.openMode === "current-tab" ? "current-tab" : "new-tab";
+    const target = openMode === "current-tab" ? "_self" : "_blank";
+    const rel = target === "_blank" ? ' rel="noopener noreferrer"' : "";
+    return `
+      <a
+        class="quick-access-bar__item"
+        href="${escapeHtml(bookmark.url || "#")}"
+        target="${target}"${rel}
+        draggable="true"
+        data-quick-access-item
+        data-quick-access-drag
+        data-bookmark-id="${escapeHtml(bookmark.id)}"
+        data-open-mode="${openMode}"
+        role="listitem"
+        aria-label="${escapeHtml(title)}"
+      >
+        <span class="quick-access-bar__icon" aria-hidden="true">
+          <img src="${thumbSrc}" alt="" draggable="false" />
+        </span>
+      </a>
+    `;
+  }).join("");
+
+  list.querySelectorAll("[data-quick-access-drag]").forEach((item) => {
+    bindBookmarkDrag(item);
+  });
+  const scroller = bar.querySelector("[data-quick-access-scroller]");
+  if (scroller instanceof HTMLElement && scroller.dataset.tooltipScrollBound !== "true") {
+    scroller.dataset.tooltipScrollBound = "true";
+    scroller.addEventListener("scroll", hideAppTooltip, { passive: true });
+  }
 }
 
 function ensureSidebarHeader() {
@@ -2860,10 +3244,10 @@ function createSidebarCategoryForm(category = null) {
   return form;
 }
 
-function openSidebarCategoryModal({ category = null, bookmarkIdsToAssign = [] } = {}) {
+function openSidebarCategoryModal({ category = null, bookmarkIdsToAssign = [], onCreated = null } = {}) {
   const isEdit = Boolean(category);
   const form = createSidebarCategoryForm(category);
-  const assignBookmarkIds = isEdit
+  const assignBookmarkIds = isEdit || onCreated
     ? []
     : bookmarkIdsToAssign.map((id) => String(id || "").trim()).filter(Boolean);
 
@@ -2902,6 +3286,12 @@ function openSidebarCategoryModal({ category = null, bookmarkIdsToAssign = [] } 
       });
       if (!state.config.sidebarCategoryBookmarkOrder) state.config.sidebarCategoryBookmarkOrder = {};
       state.config.sidebarCategoryBookmarkOrder[id] = [];
+      if (onCreated) {
+        await persistConfig();
+        render();
+        onCreated({ id, name: nextName, icon: selectedIcon });
+        return;
+      }
       if (assignBookmarkIds.length) {
         for (const bookmarkId of assignBookmarkIds) {
           const bookmark = findBookmarkById(state.config, bookmarkId);
@@ -3305,7 +3695,7 @@ function ensureSidebarCategoryMenuDismiss() {
       target.closest("#sidebar-category-menu-overlay") ||
       target.closest("[data-sidebar-category-menu-trigger]") ||
       target.closest("[data-nav-section-menu-trigger]") ||
-      target.closest("#add-bookmark-fab")
+      target.closest("#add-bookmark-btn")
     )) return;
     closeSidebarCategoryMenu();
   });
@@ -4176,12 +4566,14 @@ function render() {
   elements.edit.classList.toggle("is-active", isHomepageEditMode());
   elements.edit.classList.toggle("hidden", !showCategoryGrid);
   elements.undo.classList.toggle("hidden", !isHomepageEditMode() || state.undoStack.length === 0);
-  if (elements.addBookmarkFab) {
-    elements.addBookmarkFab.classList.toggle("hidden", !shouldShowAddBookmarkFab());
-    elements.addBookmarkFab.setAttribute("aria-label", t("ui.newBookmark"));
-    elements.addBookmarkFab.title = t("ui.newBookmark");
-    elements.addBookmarkFab.innerHTML = iconSvg(ICONS.plus, "inline-icon");
+  if (elements.addBookmarkBtn) {
+    const addLabel = t("ui.newBookmark");
+    elements.addBookmarkBtn.classList.toggle("hidden", !shouldShowAddBookmarkButton());
+    elements.addBookmarkBtn.setAttribute("aria-label", addLabel);
+    elements.addBookmarkBtn.title = addLabel;
+    elements.addBookmarkBtn.innerHTML = `<span class="btn__icon" aria-hidden="true">${iconSvg(ICONS.plus, "inline-icon")}</span>`;
   }
+  renderQuickAccessBar();
   renderSidebar();
 
   const viewMode = getActiveNavViewMode();
@@ -4233,12 +4625,17 @@ function updateTopbarActionTexts() {
   const undoShortcut = formatShortcutForTooltip(getGlobalShortcut("undo"));
   const editShortcut = formatShortcutForTooltip(getGlobalShortcut("toggleEditMode"));
   const settingsShortcut = formatShortcutForTooltip(getGlobalShortcut("openSettings"));
+  const addLabel = t("ui.newBookmark");
   elements.undo.title = undoShortcut ? `${t("ui.undo")} (${undoShortcut})` : t("ui.undo");
   elements.edit.title = editShortcut ? `${t("ui.edit")} (${editShortcut})` : t("ui.edit");
   elements.settings.title = settingsShortcut ? `${t("ui.settings")} (${settingsShortcut})` : t("ui.settings");
   elements.undo.setAttribute("aria-label", t("ui.undo"));
   elements.edit.setAttribute("aria-label", t("ui.edit"));
   elements.settings.setAttribute("aria-label", t("ui.settings"));
+  if (elements.addBookmarkBtn) {
+    elements.addBookmarkBtn.title = addLabel;
+    elements.addBookmarkBtn.setAttribute("aria-label", addLabel);
+  }
 }
 
 function refreshStaticLocalizedTexts() {
@@ -4439,9 +4836,10 @@ function updateBrowserSyncFieldsVisibility(form, enabled) {
 }
 
 function renderCategory(category) {
-  const categoryIndex = state.config.categories.findIndex((entry) => entry.id === category.id);
+  const homepageCategories = getHomepageCategories(state.config);
+  const categoryIndex = homepageCategories.findIndex((entry) => entry.id === category.id);
   const canMoveLeft = categoryIndex > 0;
-  const canMoveRight = categoryIndex >= 0 && categoryIndex < state.config.categories.length - 1;
+  const canMoveRight = categoryIndex >= 0 && categoryIndex < homepageCategories.length - 1;
   const isCollapsed = categoryEffectiveCollapsed(category);
   const slotSpan = normalizeCategorySlots(category.slots);
   category.slots = slotSpan;
@@ -4822,6 +5220,7 @@ function renderBookmarkPlacementFields({
   homepageCategoryId,
   selectedSidebarIds,
   sidebarSectionAssignments = {},
+  quickAccessSelected = false,
   unsortedSelected = false
 } = {}) {
   const sidebarSelected = new Set(selectedSidebarIds || []);
@@ -4897,17 +5296,26 @@ function renderBookmarkPlacementFields({
       </div>
     </div>
     ${renderBookmarkThemeCheckbox({
+    name: "quickAccessEnabled",
+    checked: quickAccessSelected,
+    label: t("ui.navQuickAccess"),
+    inputAttrs: "data-quick-access-toggle"
+  })}
+    ${renderBookmarkThemeCheckbox({
     name: "sidebarCategoryIds",
     value: FAVORITES_CATEGORY_ID,
     checked: sidebarSelected.has(FAVORITES_CATEGORY_ID),
     label: t("ui.navFavorites")
   })}
-    ${renderBookmarkThemeCheckbox({
+    <div class="bookmark-placement-unsorted" data-unsorted-placement>
+      ${renderBookmarkThemeCheckbox({
     checked: unsortedSelected,
     label: t("ui.navUnsorted"),
     inputAttrs: "data-unsorted-toggle",
     extraClass: "bookmark-placement-option--unsorted"
   })}
+      <small class="bookmark-placement-unsorted__hint">${escapeHtml(t("ui.unsortedExclusiveHint"))}</small>
+    </div>
     ${sidebarOptions}
   `;
 }
@@ -4917,6 +5325,7 @@ function renderBookmarkPlacementTailFields({
   homepageCategoryId,
   selectedSidebarIds,
   sidebarSectionAssignments,
+  quickAccessSelected,
   unsortedSelected,
   existing
 }) {
@@ -4925,6 +5334,7 @@ function renderBookmarkPlacementTailFields({
     homepageCategoryId,
     selectedSidebarIds,
     sidebarSectionAssignments,
+    quickAccessSelected,
     unsortedSelected
   });
   const openMode = existing?.openMode;
@@ -5006,12 +5416,14 @@ function resolveBookmarkModalDefaults(options = {}) {
     homepageEnabled: false,
     homepageCategoryId: "",
     selectedSidebarIds: [],
+    quickAccessSelected: false,
     unsortedSelected: true
   };
 
   if (options.homepageCategoryId) {
     defaults.homepageEnabled = true;
     defaults.homepageCategoryId = options.homepageCategoryId;
+    defaults.unsortedSelected = false;
   } else if (navId === NAV_FAVORITES) {
     defaults.selectedSidebarIds = [FAVORITES_CATEGORY_ID];
     defaults.unsortedSelected = false;
@@ -5052,6 +5464,7 @@ function captureBookmarkFormSnapshot(form, shortcut) {
       .filter(Boolean)
       .sort(),
     sidebarSectionAssignments,
+    quickAccessSelected: Boolean(form.querySelector("[data-quick-access-toggle]")?.checked),
     unsortedSelected: Boolean(form.querySelector("[data-unsorted-toggle]")?.checked)
   });
 }
@@ -5091,8 +5504,11 @@ function openBookmarkModal(arg = {}) {
   const sidebarSectionAssignments = existing?.navSectionAssignments && typeof existing.navSectionAssignments === "object"
     ? { ...existing.navSectionAssignments }
     : {};
+  const quickAccessSelected = existing
+    ? isBookmarkInQuickAccess(existing)
+    : Boolean(navDefaults?.quickAccessSelected);
   const unsortedSelected = existing
-    ? selectedSidebarIds.length === 0
+    ? isUnsortedBookmark(existing, state.config)
     : Boolean(navDefaults?.unsortedSelected);
   const form = document.createElement("form");
   form.className = "bookmark-form";
@@ -5102,6 +5518,7 @@ function openBookmarkModal(arg = {}) {
     homepageCategoryId,
     selectedSidebarIds,
     sidebarSectionAssignments,
+    quickAccessSelected,
     unsortedSelected,
     existing
   });
@@ -5270,9 +5687,15 @@ function openBookmarkModal(arg = {}) {
 
   const homepageToggle = form.querySelector("[data-homepage-toggle]");
   const homepageCategorySelect = form.querySelector("[data-homepage-category]");
+  const quickAccessToggle = form.querySelector("[data-quick-access-toggle]");
   const unsortedToggle = form.querySelector("[data-unsorted-toggle]");
   const placementGroup = form.querySelector("[data-bookmark-placements]");
   const sidebarCategoryInputs = () => form.querySelectorAll('input[name="sidebarCategoryIds"]');
+  const placementOtherInputs = () => [
+    homepageToggle,
+    quickAccessToggle,
+    ...sidebarCategoryInputs()
+  ].filter((input) => input instanceof HTMLInputElement);
 
   const syncHomepageCategorySelect = () => {
     const enabled = Boolean(homepageToggle?.checked);
@@ -5289,7 +5712,7 @@ function openBookmarkModal(arg = {}) {
   const syncUnsortedExclusive = (source) => {
     syncUnsortedExclusiveSelection({
       unsortedInput: unsortedToggle,
-      otherInputs: [...sidebarCategoryInputs()],
+      otherInputs: placementOtherInputs(),
       source
     });
   };
@@ -5315,8 +5738,15 @@ function openBookmarkModal(arg = {}) {
     syncSidebarSectionSelects();
   };
 
-  homepageToggle?.addEventListener("change", syncPlacementState);
+  homepageToggle?.addEventListener("change", () => {
+    syncUnsortedExclusive(homepageToggle);
+    syncPlacementState();
+  });
   homepageCategorySelect?.addEventListener("change", syncPlacementState);
+  quickAccessToggle?.addEventListener("change", () => {
+    syncUnsortedExclusive(quickAccessToggle);
+    syncPlacementState();
+  });
   unsortedToggle?.addEventListener("change", () => {
     syncUnsortedExclusive(unsortedToggle);
     syncPlacementState();
@@ -5387,6 +5817,7 @@ function openBookmarkModal(arg = {}) {
       const homepageCategoryIdValue = String(homepageCategorySelectEl?.value || "").trim();
       const listCategoryIds = new Set(listBookmarkListCategories(state.config).map((category) => category.id));
       const unsortedActive = Boolean(form.querySelector("[data-unsorted-toggle]")?.checked);
+      const quickAccessActive = Boolean(form.querySelector("[data-quick-access-toggle]")?.checked);
       let sidebarCategoryIds = [
         ...new Set(fd.getAll("sidebarCategoryIds").map((id) => String(id || "").trim()).filter(Boolean))
       ];
@@ -5408,13 +5839,18 @@ function openBookmarkModal(arg = {}) {
       homepageCategorySelectEl?.removeAttribute("data-invalid");
 
       let categoryIds = [];
-      if (homepageEnabledValue) {
+      const homepageEnabledEffective = unsortedActive ? false : homepageEnabledValue;
+      const quickAccessEffective = unsortedActive ? false : quickAccessActive;
+      if (homepageEnabledEffective) {
         if (!homepageCategoryIdValue || homepageCategoryIdValue === CREATE_SECTION_OPTION_VALUE || !listCategoryIds.has(homepageCategoryIdValue)) {
           form.querySelector("[data-bookmark-placements]")?.setAttribute("data-invalid", "true");
           homepageCategorySelectEl?.setAttribute("data-invalid", "true");
           return false;
         }
         categoryIds = [homepageCategoryIdValue];
+      }
+      if (quickAccessEffective) {
+        categoryIds = [QUICK_ACCESS_CATEGORY_ID, ...categoryIds.filter((id) => id !== QUICK_ACCESS_CATEGORY_ID)];
       }
 
       const image = normalizeBookmarkImageValue(fd.get("image"));
@@ -5426,27 +5862,37 @@ function openBookmarkModal(arg = {}) {
         entry.image = image;
         entry.openMode = fd.get("openMode");
         entry.shortcut = selectedShortcut;
-        entry.favorite = sidebarCategoryIds.includes(FAVORITES_CATEGORY_ID);
-        entry.sidebarCategoryIds = sidebarCategoryIds;
+        entry.favorite = !unsortedActive && sidebarCategoryIds.includes(FAVORITES_CATEGORY_ID);
+        entry.sidebarCategoryIds = unsortedActive ? [] : sidebarCategoryIds;
         if (!entry.navSectionAssignments || typeof entry.navSectionAssignments !== "object") {
           entry.navSectionAssignments = {};
         }
-        for (const navId of Object.keys(entry.navSectionAssignments)) {
-          if (!sidebarCategoryIds.includes(navId)) delete entry.navSectionAssignments[navId];
+        if (unsortedActive) {
+          entry.navSectionAssignments = {};
+        } else {
+          for (const navId of Object.keys(entry.navSectionAssignments)) {
+            if (!sidebarCategoryIds.includes(navId)) delete entry.navSectionAssignments[navId];
+          }
+          for (const [navId, sectionId] of Object.entries(sidebarSectionAssignments)) {
+            setBookmarkSectionIdForNav(entry, navId, sectionId === UNSECTIONED_SECTION_ID ? "" : sectionId);
+          }
         }
-        for (const [navId, sectionId] of Object.entries(sidebarSectionAssignments)) {
-          setBookmarkSectionIdForNav(entry, navId, sectionId === UNSECTIONED_SECTION_ID ? "" : sectionId);
-        }
-        const preservedNonListCategoryIds = (entry.categoryIds || []).filter((id) => !listCategoryIds.has(id));
-        entry.categoryIds = homepageEnabledValue
-          ? [...preservedNonListCategoryIds, ...categoryIds]
-          : preservedNonListCategoryIds;
+        const preservedNonListCategoryIds = (entry.categoryIds || []).filter(
+          (id) => id !== QUICK_ACCESS_CATEGORY_ID && !listCategoryIds.has(id)
+        );
+        entry.categoryIds = unsortedActive
+          ? []
+          : [
+            ...(quickAccessEffective ? [QUICK_ACCESS_CATEGORY_ID] : []),
+            ...preservedNonListCategoryIds,
+            ...categoryIds.filter((id) => id !== QUICK_ACCESS_CATEGORY_ID)
+          ];
 
-        for (const cid of categoryIds) {
+        for (const cid of entry.categoryIds) {
           ensureBookmarkInCategoryOrder(state.config, cid, bookmarkId);
         }
         for (const cid of previousCategoryIds) {
-          if (!categoryIds.includes(cid)) {
+          if (!entry.categoryIds.includes(cid)) {
             removeBookmarkFromCategoryOrder(state.config, cid, bookmarkId);
           }
         }
@@ -5460,11 +5906,14 @@ function openBookmarkModal(arg = {}) {
           if (sidebarCategoryIds.includes(cid) || cid === FAVORITES_CATEGORY_ID) continue;
           removeBookmarkFromSidebarCategoryOrder(state.config, cid, bookmarkId);
         }
+        normalizeBookmarkCategoryAssignments(state.config, entry);
       };
 
       pushUndo();
       if (isEdit) {
-        const previousCategoryIds = (existing.categoryIds || []).filter((id) => listCategoryIds.has(id));
+        const previousCategoryIds = [
+          ...(existing.categoryIds || []).filter((id) => id === QUICK_ACCESS_CATEGORY_ID || listCategoryIds.has(id))
+        ];
         const previousSidebarIds = getBookmarkSidebarPlacementIds(existing);
         applyPlacementUpdates(existing, existing.id, previousCategoryIds, previousSidebarIds);
       } else {
@@ -5898,12 +6347,15 @@ function animatePositionChanges(selector, keyBuilder) {
 
 async function swapCategoryByStep(categoryId, step) {
   if (!state.editMode) return;
-  const list = state.config.categories;
-  const from = list.findIndex((entry) => entry.id === categoryId);
+  if (categoryId === QUICK_ACCESS_CATEGORY_ID) return;
+  const homepage = getHomepageCategories(state.config);
+  const from = homepage.findIndex((entry) => entry.id === categoryId);
   const to = from + step;
-  if (from < 0 || to < 0 || to >= list.length) return;
+  if (from < 0 || to < 0 || to >= homepage.length) return;
   pushUndo();
-  [list[from], list[to]] = [list[to], list[from]];
+  [homepage[from], homepage[to]] = [homepage[to], homepage[from]];
+  const quickAccess = (state.config.categories || []).filter(isQuickAccessCategory);
+  state.config.categories = [...quickAccess, ...homepage];
   await persistConfig();
   animatePositionChanges(".category[data-category-id]", (element) => `category-${element.dataset.categoryId}`);
 }

@@ -20,6 +20,7 @@ let debounceTimer = null;
 let currentResults = [];
 let selectedIndex = -1;
 let mobileQuery = null;
+let suppressSearchCloseForDrag = false;
 
 function normalizeSearchText(value) {
   return String(value ?? "").trim().toLowerCase();
@@ -202,6 +203,10 @@ function renderResults() {
     const index = Number(entry.getAttribute("data-result-index"));
     bindBookmarkDrag(entry);
 
+    entry.addEventListener("mousedown", () => {
+      suppressSearchCloseForDrag = true;
+    });
+
     entry.addEventListener("click", (event) => {
       if (event.button !== 0) return;
       if (entry.classList.contains("is-dragging")) return;
@@ -296,7 +301,7 @@ function onInputFocus() {
 
 function onInputBlur() {
   window.setTimeout(() => {
-    if (isBookmarkDragActive()) return;
+    if (isBookmarkDragActive() || suppressSearchCloseForDrag) return;
     const active = document.activeElement;
     if (root?.contains(active) || toggleBtn === active || clearBtn === active) return;
     if (document.getElementById("sidebar")?.contains(active)) return;
@@ -387,4 +392,18 @@ export function initBookmarkSearch(options) {
   });
 
   document.addEventListener("pointerdown", onDocumentPointerDown);
+
+  document.addEventListener("dragstart", (event) => {
+    if (event.target.closest("[data-search-result]")) {
+      suppressSearchCloseForDrag = true;
+    }
+  }, true);
+  document.addEventListener("dragend", () => {
+    suppressSearchCloseForDrag = false;
+  }, true);
+  document.addEventListener("mouseup", () => {
+    window.setTimeout(() => {
+      if (!isBookmarkDragActive()) suppressSearchCloseForDrag = false;
+    }, 0);
+  });
 }
