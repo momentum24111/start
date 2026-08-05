@@ -281,6 +281,10 @@ async function commitQuickAccessReorder(bookmarkId, insertIndex) {
 }
 
 function onDocumentDragStart(event) {
+  if (event.target.closest?.("[data-bookmark-menu-trigger], .bookmark-menu, .quick-access-bar__actions")) {
+    event.preventDefault();
+    return;
+  }
   const quickItem = event.target.closest?.("[data-quick-access-drag]");
   if (quickItem instanceof HTMLElement) {
     const bookmarkId = String(quickItem.dataset.bookmarkId || "").trim();
@@ -421,6 +425,9 @@ function clearQuickAccessPointerDrag() {
 
 function onQuickAccessPointerDown(event) {
   if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (event.target.closest?.("[data-bookmark-menu-trigger], .bookmark-menu, .quick-access-bar__actions")) {
+    return;
+  }
   const item = event.target.closest?.("[data-quick-access-drag]");
   if (!(item instanceof HTMLElement)) return;
   // Maus: natives HTML5-Dragging. Touch/Pen: Long-Press → Pointer-Drag.

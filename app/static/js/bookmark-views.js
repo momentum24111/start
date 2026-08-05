@@ -771,6 +771,83 @@ export function createBookmarkElement(options, deps) {
   return item;
 }
 
+/** Kompaktes Schnellzugriff-Icon: dieselbe Icon-Auflösung und dasselbe Kontextmenü wie normale Lesezeichen. */
+export function createQuickAccessElement(bookmark, deps, { editMode = false } = {}) {
+  const title = String(bookmark?.title || bookmark?.url || "").trim();
+  const url = String(bookmark?.url || "").trim();
+  const urlAttr = escapeHtml(url || "#");
+  const target = bookmarkLinkTarget(bookmark);
+  const rel = target === "_blank" ? ' rel="noopener noreferrer"' : "";
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = `
+    <div
+      class="quick-access-bar__item${editMode ? " is-edit-mode" : ""}"
+      draggable="true"
+      data-quick-access-item
+      data-quick-access-drag
+      data-bookmark-id="${escapeHtml(bookmark.id)}"
+      role="listitem"
+    >
+      <a
+        class="quick-access-bar__link"
+        href="${urlAttr}"
+        target="${target}"${rel}
+        data-bookmark-open
+        aria-label="${escapeHtml(title)}"
+      >
+        ${renderThumbnail(bookmark, deps, "quick-access")}
+      </a>
+      ${editMode ? `
+        <div class="quick-access-bar__actions bookmark-item__card-actions">
+          ${renderOverflowMenu(deps)}
+        </div>
+      ` : ""}
+    </div>
+  `.trim();
+  const item = wrapper.firstElementChild;
+  if (!(item instanceof HTMLElement)) return wrapper;
+
+  bindThumbnailFallback(item, deps);
+
+  const openLink = () => {
+    const link = item.querySelector("[data-bookmark-open]");
+    if (link instanceof HTMLAnchorElement) link.click();
+  };
+
+  const menuActions = {
+    onOpen: openLink,
+    onEdit: () => deps.onEdit?.(),
+    onDelete: () => deps.onDelete?.(),
+    onReloadMetadata: () => deps.onReloadMetadata?.(item)
+  };
+
+  const menuRoot = item.querySelector(".bookmark-menu");
+  const menuTrigger = item.querySelector("[data-bookmark-menu-trigger]");
+  menuTrigger?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!(menuRoot instanceof HTMLElement)) return;
+    openBookmarkMenu(menuRoot, menuActions);
+  });
+  menuTrigger?.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+  });
+  menuTrigger?.addEventListener("mousedown", (event) => {
+    event.stopPropagation();
+  });
+
+  item.querySelectorAll("[data-bookmark-open-action]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openLink();
+    });
+  });
+
+  deps.bindBookmarkDrag?.(item);
+  return item;
+}
+
 export function ensureBookmarkMenuDismiss() {
   if (bookmarkMenuDismissBound) return;
   bookmarkMenuDismissBound = true;

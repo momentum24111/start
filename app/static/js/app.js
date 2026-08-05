@@ -96,6 +96,7 @@ import {
   normalizeBookmarkView,
   bookmarksContainerClass,
   createBookmarkElement,
+  createQuickAccessElement,
   ensureBookmarkMenuDismiss,
   escapeHtml,
   openBookmarkUrl,
@@ -287,16 +288,6 @@ function resolveBookmarkPreviewSrc(raw) {
 function bookmarkStoredImageSrc(bookmark) {
   if (!bookmark) return resolveIconSrcForImgTag("");
   return resolveBookmarkPreviewSrc(bookmark.image);
-}
-
-/** Schnellzugriff: nur lokale Cache-/Default-Icons, keine externen Requests beim Laden. */
-function quickAccessIconSrc(bookmark) {
-  if (!bookmark) return resolveIconSrcForImgTag("");
-  const image = normalizeAppIconPath(String(bookmark.image || "").trim());
-  if (image.startsWith("/static/assets/favicon-cache/") || image.startsWith("/static/assets/icons/")) {
-    return resolveIconSrcForImgTag(image);
-  }
-  return resolveIconSrcForImgTag("");
 }
 
 function normalizeBookmarkImageValue(raw) {
@@ -2539,7 +2530,13 @@ function bindSidebarTooltipEvents() {
       hideAppTooltip();
       return;
     }
-    const label = item.getAttribute("aria-label") || "";
+    if (event.target.closest?.("[data-bookmark-menu-trigger], .quick-access-bar__actions")) {
+      hideAppTooltip();
+      return;
+    }
+    const label = item.querySelector("[data-bookmark-open]")?.getAttribute("aria-label")
+      || item.getAttribute("aria-label")
+      || "";
     showAppTooltip(item, label, { placement: "top" });
   });
   document.addEventListener("mouseout", (event) => {
@@ -2553,7 +2550,14 @@ function bindSidebarTooltipEvents() {
     if (!canUseHoverTooltips()) return;
     const item = event.target.closest?.("[data-quick-access-item]");
     if (!(item instanceof HTMLElement)) return;
-    showAppTooltip(item, item.getAttribute("aria-label") || "", { placement: "top" });
+    if (event.target.closest?.("[data-bookmark-menu-trigger]")) {
+      hideAppTooltip();
+      return;
+    }
+    const label = item.querySelector("[data-bookmark-open]")?.getAttribute("aria-label")
+      || item.getAttribute("aria-label")
+      || "";
+    showAppTooltip(item, label, { placement: "top" });
   });
   document.addEventListener("focusout", (event) => {
     const item = event.target.closest?.("[data-quick-access-item]");
@@ -2595,6 +2599,7 @@ function renderQuickAccessBar() {
   quickAccessBarVisible = visible;
   bar.hidden = !visible;
   bar.classList.toggle("hidden", !visible);
+  bar.classList.toggle("is-edit-mode", isHomepageEditMode());
   document.body.classList.toggle("has-quick-access-bar", visible);
   if (!visible) {
     list.innerHTML = "";
@@ -2603,36 +2608,23 @@ function renderQuickAccessBar() {
   }
 
   const bookmarks = getBookmarksForQuickAccess(state.config);
+  const editMode = isHomepageEditMode();
   list.setAttribute("aria-label", t("ui.navQuickAccess"));
-  list.innerHTML = bookmarks.map((bookmark) => {
-    const title = String(bookmark.title || bookmark.url || "").trim();
-    const thumbSrc = escapeHtml(quickAccessIconSrc(bookmark));
-    const openMode = bookmark.openMode === "current-tab" ? "current-tab" : "new-tab";
-    const target = openMode === "current-tab" ? "_self" : "_blank";
-    const rel = target === "_blank" ? ' rel="noopener noreferrer"' : "";
-    return `
-      <a
-        class="quick-access-bar__item"
-        href="${escapeHtml(bookmark.url || "#")}"
-        target="${target}"${rel}
-        draggable="true"
-        data-quick-access-item
-        data-quick-access-drag
-        data-bookmark-id="${escapeHtml(bookmark.id)}"
-        data-open-mode="${openMode}"
-        role="listitem"
-        aria-label="${escapeHtml(title)}"
-      >
-        <span class="quick-access-bar__icon" aria-hidden="true">
-          <img src="${thumbSrc}" alt="" draggable="false" />
-        </span>
-      </a>
-    `;
-  }).join("");
+  list.replaceChildren();
+  for (const bookmark of bookmarks) {
+    const item = createQuickAccessElement(bookmark, {
+      ...createBookmarkUiDeps(),
+      onEdit: () => openBookmarkModal({ bookmark }),
+      onDelete: () => {
+        void handleDeleteBookmark(bookmark);
+      },
+      onReloadMetadata: (element) => {
+        void applyBookmarkMetadata(bookmark.id, { item: element });
+      }
+    }, { editMode });
+    list.append(item);
+  }
 
-  list.querySelectorAll("[data-quick-access-drag]").forEach((item) => {
-    bindBookmarkDrag(item);
-  });
   const scroller = bar.querySelector("[data-quick-access-scroller]");
   if (scroller instanceof HTMLElement && scroller.dataset.tooltipScrollBound !== "true") {
     scroller.dataset.tooltipScrollBound = "true";

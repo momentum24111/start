@@ -116,6 +116,11 @@ body {
   --quick-access-icon-bg: #e6edf4;
   --quick-access-item-focus-ring: color-mix(in srgb, var(--primary) 55%, transparent);
   --quick-access-drop-marker: var(--primary);
+  --quick-access-menu-btn-bg: #ffffff;
+  --quick-access-menu-btn-fg: #182332;
+  --quick-access-menu-btn-hover-bg: #e6edf4;
+  --quick-access-menu-btn-hover-fg: #182332;
+  --quick-access-menu-btn-shadow: 0 2px 8px rgba(15, 35, 60, 0.14);
   --unsorted-exclusive-hint-fg: #6e879f;
   --unsorted-exclusive-label-fg: #3d5168;
   --unsorted-exclusive-row-bg: color-mix(in srgb, var(--primary) 6%, transparent);
