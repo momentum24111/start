@@ -95,6 +95,8 @@
     "searchClear": "Suche löschen",
     "searchResults": "Suchergebnisse",
     "searchNoResults": "Keine Lesezeichen gefunden",
+    "navigateToLocation": "Zum Speicherort navigieren",
+    "bookmarkActions": "Aktionen für dieses Lesezeichen",
     "dropToHomepage": "Auf Startseite platzieren",
     "dropToHomepageLabel": "Startseiten-Abschnitt",
     "dropToCategory": "In Kategorie platzieren",

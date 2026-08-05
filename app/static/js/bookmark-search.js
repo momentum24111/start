@@ -21,6 +21,7 @@ let currentResults = [];
 let selectedIndex = -1;
 let mobileQuery = null;
 let suppressSearchCloseForDrag = false;
+let suppressSearchCloseForMenu = false;
 
 function normalizeSearchText(value) {
   return String(value ?? "").trim().toLowerCase();
@@ -96,10 +97,89 @@ function renderResultThumb(bookmark) {
   `;
 }
 
+function getLocationsForBookmark(bookmark) {
+  return deps.getLocations?.(bookmark) || [];
+}
+
+function renderLocationLabels(locations) {
+  if (!locations.length) return "";
+  const text = locations.map((entry) => entry.label).filter(Boolean).join(" · ");
+  if (!text) return "";
+  return `<span class="bookmark-search-result__locations">${escapeHtml(text)}</span>`;
+}
+
+function renderLocationMenu(locations) {
+  const items = locations
+    .map((location) => `
+      <button
+        type="button"
+        class="bookmark-menu__item"
+        data-navigate-location="${escapeHtml(location.key)}"
+        role="menuitem"
+      >${escapeHtml(location.label)}</button>
+    `)
+    .join("");
+  return `
+    <div class="bookmark-menu bookmark-menu--locations">
+      <button
+        type="button"
+        class="btn btn--ghost btn--icon btn--bookmark-menu-trigger bookmark-search-result__location-btn"
+        data-bookmark-menu-trigger
+        data-search-location
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-label="${escapeHtml(deps.t("ui.navigateToLocation"))}"
+        title="${escapeHtml(deps.t("ui.navigateToLocation"))}"
+      >
+        <span class="btn__icon" aria-hidden="true">${deps.mdiIcon("map-marker", "inline-icon")}</span>
+      </button>
+      <div class="bookmark-menu__panel bookmark-menu__panel--source hidden" data-bookmark-menu-panel role="menu" aria-hidden="true">
+        ${items}
+      </div>
+    </div>
+  `;
+}
+
+function renderLocationButton() {
+  return `
+    <button
+      type="button"
+      class="btn btn--ghost btn--icon bookmark-search-result__location-btn"
+      data-search-location
+      aria-label="${escapeHtml(deps.t("ui.navigateToLocation"))}"
+      title="${escapeHtml(deps.t("ui.navigateToLocation"))}"
+    >
+      <span class="btn__icon" aria-hidden="true">${deps.mdiIcon("map-marker", "inline-icon")}</span>
+    </button>
+  `;
+}
+
+function renderResultActions(bookmark, locations) {
+  const overflowDeps = {
+    button: deps.button,
+    iconSvg: deps.iconSvg,
+    mdiIcon: deps.mdiIcon,
+    icons: deps.icons
+  };
+  const overflow = deps.renderOverflowMenu?.(overflowDeps) || "";
+  const locationControl = locations.length > 1
+    ? renderLocationMenu(locations)
+    : locations.length === 1
+      ? renderLocationButton()
+      : "";
+  return `
+    <div class="bookmark-search-result__actions">
+      ${locationControl}
+      ${overflow}
+    </div>
+  `;
+}
+
 function renderResultItem(bookmark, index) {
   const title = escapeHtml(bookmark.title || bookmark.url || "");
   const description = escapeHtml(bookmark.description || "");
   const domain = escapeHtml(getBookmarkDisplayDomain(bookmark));
+  const locations = getLocationsForBookmark(bookmark);
   const selected = index === selectedIndex ? " is-active" : "";
   return `
     <div
@@ -117,8 +197,10 @@ function renderResultItem(bookmark, index) {
       <span class="bookmark-search-result__main">
         <span class="bookmark-search-result__title">${title}</span>
         ${description ? `<span class="bookmark-search-result__description">${description}</span>` : ""}
+        ${renderLocationLabels(locations)}
         ${domain ? `<span class="bookmark-search-result__domain">${domain}</span>` : ""}
       </span>
+      ${renderResultActions(bookmark, locations)}
     </div>
   `;
 }
@@ -129,6 +211,10 @@ function isMobileLayout() {
 
 function isBookmarkDragActive() {
   return isBookmarkDragSessionActive();
+}
+
+function isBookmarkMenuOpen() {
+  return Boolean(deps.isBookmarkMenuOpen?.() || document.querySelector("#bookmark-menu-overlay.is-open"));
 }
 
 function setMobileOpen(open) {
@@ -147,7 +233,12 @@ function syncClearButton() {
   clearBtn?.setAttribute("tabindex", hasText ? "0" : "-1");
 }
 
+export function closeBookmarkSearch({ clearInput = true, keepMobileOpen = false } = {}) {
+  closeSearch({ clearInput, keepMobileOpen });
+}
+
 function closeSearch({ clearInput = true, keepMobileOpen = false } = {}) {
+  deps.closeBookmarkMenu?.();
   if (clearInput && input) input.value = "";
   currentResults = [];
   resetSelection();
@@ -170,6 +261,72 @@ function openBookmarkAt(index, { newTab = false } = {}) {
 function scrollActiveResultIntoView() {
   const active = resultsEl?.querySelector(".bookmark-search-result.is-active");
   active?.scrollIntoView({ block: "nearest" });
+}
+
+function stopActionEvent(event) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function bindResultMenus(entry, bookmark, locations) {
+  const locationByKey = new Map(locations.map((location) => [location.key, location]));
+
+  const overflowRoot = entry.querySelector(".bookmark-menu--search, .bookmark-menu:not(.bookmark-menu--locations)");
+  const overflowTrigger = overflowRoot?.querySelector("[data-bookmark-menu-trigger]");
+  overflowTrigger?.addEventListener("pointerdown", stopActionEvent);
+  overflowTrigger?.addEventListener("mousedown", stopActionEvent);
+  overflowTrigger?.addEventListener("click", (event) => {
+    stopActionEvent(event);
+    suppressSearchCloseForMenu = true;
+    if (!(overflowRoot instanceof HTMLElement)) return;
+    deps.openBookmarkMenu?.(overflowRoot, {
+      onOpen: () => {
+        deps.openBookmark?.(bookmark, { newTab: false });
+        closeSearch({ clearInput: true });
+        input?.blur();
+      },
+      onEdit: () => {
+        suppressSearchCloseForMenu = true;
+        deps.onEditBookmark?.(bookmark);
+      },
+      onDelete: () => {
+        suppressSearchCloseForMenu = true;
+        deps.onDeleteBookmark?.(bookmark);
+      },
+      onReloadMetadata: () => {
+        suppressSearchCloseForMenu = true;
+        deps.onReloadBookmarkMetadata?.(bookmark);
+      }
+    });
+  });
+
+  const locationBtn = entry.querySelector("[data-search-location]");
+  locationBtn?.addEventListener("pointerdown", stopActionEvent);
+  locationBtn?.addEventListener("mousedown", stopActionEvent);
+  locationBtn?.addEventListener("click", (event) => {
+    stopActionEvent(event);
+    if (!locations.length) return;
+    if (locations.length === 1) {
+      void navigateFromSearch(bookmark, locations[0]);
+      return;
+    }
+    const locationRoot = entry.querySelector(".bookmark-menu--locations");
+    if (!(locationRoot instanceof HTMLElement)) return;
+    suppressSearchCloseForMenu = true;
+    deps.openBookmarkMenu?.(locationRoot, {
+      onNavigateLocation: (locationKey) => {
+        const location = locationByKey.get(locationKey);
+        if (!location) return;
+        void navigateFromSearch(bookmark, location);
+      }
+    });
+  });
+}
+
+async function navigateFromSearch(bookmark, location) {
+  closeSearch({ clearInput: true });
+  input?.blur();
+  await deps.navigateToLocation?.(bookmark, location);
 }
 
 function renderResults() {
@@ -201,20 +358,33 @@ function renderResults() {
 
   resultsEl.querySelectorAll("[data-search-result]").forEach((entry) => {
     const index = Number(entry.getAttribute("data-result-index"));
+    const bookmark = currentResults[index];
+    if (!bookmark) return;
+    const locations = getLocationsForBookmark(bookmark);
     bindBookmarkDrag(entry);
+    bindResultMenus(entry, bookmark, locations);
 
-    entry.addEventListener("mousedown", () => {
+    entry.addEventListener("mousedown", (event) => {
+      if (event.target.closest("[data-search-location], [data-bookmark-menu-trigger], .bookmark-menu, .bookmark-search-result__actions")) {
+        return;
+      }
       suppressSearchCloseForDrag = true;
     });
 
     entry.addEventListener("click", (event) => {
       if (event.button !== 0) return;
+      if (event.target.closest("[data-search-location], [data-bookmark-menu-trigger], .bookmark-menu, .bookmark-search-result__actions")) {
+        return;
+      }
       if (entry.classList.contains("is-dragging")) return;
       event.preventDefault();
       openBookmarkAt(index, { newTab: false });
     });
     entry.addEventListener("auxclick", (event) => {
       if (event.button !== 1) return;
+      if (event.target.closest("[data-search-location], [data-bookmark-menu-trigger], .bookmark-menu, .bookmark-search-result__actions")) {
+        return;
+      }
       event.preventDefault();
       openBookmarkAt(index, { newTab: true });
     });
@@ -255,6 +425,10 @@ function moveSelection(delta) {
 function onInputKeydown(event) {
   if (event.key === "Escape") {
     event.preventDefault();
+    if (isBookmarkMenuOpen()) {
+      deps.closeBookmarkMenu?.();
+      return;
+    }
     closeSearch({ clearInput: true });
     input?.blur();
     return;
@@ -290,6 +464,11 @@ function onDocumentPointerDown(event) {
   if (root?.contains(target)) return;
   if (toggleBtn?.contains(target)) return;
   if (document.getElementById("sidebar")?.contains(target)) return;
+  if (document.getElementById("bookmark-menu-overlay")?.contains(target)) {
+    suppressSearchCloseForMenu = true;
+    return;
+  }
+  if (isBookmarkMenuOpen()) return;
   closeSearch({ clearInput: false, keepMobileOpen: false });
 }
 
@@ -301,10 +480,15 @@ function onInputFocus() {
 
 function onInputBlur() {
   window.setTimeout(() => {
-    if (isBookmarkDragActive() || suppressSearchCloseForDrag) return;
+    if (isBookmarkDragActive() || suppressSearchCloseForDrag || suppressSearchCloseForMenu) {
+      suppressSearchCloseForMenu = false;
+      return;
+    }
+    if (isBookmarkMenuOpen()) return;
     const active = document.activeElement;
     if (root?.contains(active) || toggleBtn === active || clearBtn === active) return;
     if (document.getElementById("sidebar")?.contains(active)) return;
+    if (document.getElementById("bookmark-menu-overlay")?.contains(active)) return;
     closeSearch({ clearInput: false, keepMobileOpen: false });
   }, 0);
 }
@@ -396,6 +580,9 @@ export function initBookmarkSearch(options) {
   document.addEventListener("dragstart", (event) => {
     if (event.target.closest("[data-search-result]")) {
       suppressSearchCloseForDrag = true;
+    }
+    if (event.target.closest("[data-search-location], [data-bookmark-menu-trigger], .bookmark-search-result__actions")) {
+      event.preventDefault();
     }
   }, true);
   document.addEventListener("dragend", () => {

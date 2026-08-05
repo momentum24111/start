@@ -514,10 +514,21 @@ export function getCategoryBookmarkOrder(config, categoryId) {
   return Array.isArray(order) ? [...order] : [];
 }
 
-export function getBookmarkHomepageCategoryId(config, bookmark) {
-  if (!bookmark) return "";
+export function getBookmarkHomepageCategoryIds(config, bookmark) {
+  if (!bookmark) return [];
   const listCategoryIds = new Set(listBookmarkListCategories(config).map((category) => category.id));
-  return (bookmark.categoryIds || []).find((id) => listCategoryIds.has(id)) || "";
+  const seen = new Set();
+  const ids = [];
+  for (const id of bookmark.categoryIds || []) {
+    if (!listCategoryIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+export function getBookmarkHomepageCategoryId(config, bookmark) {
+  return getBookmarkHomepageCategoryIds(config, bookmark)[0] || "";
 }
 
 export function getBookmarkSidebarPlacementIds(bookmark) {
@@ -740,24 +751,78 @@ export function getBookmarkDisplayDomain(bookmark) {
 }
 
 export function getBookmarkDisplayCategoryLabels(config, bookmark, labelForFavorites, labelForQuickAccess) {
-  const labels = [];
-  const homepageCategoryId = getBookmarkHomepageCategoryId(config, bookmark);
-  if (homepageCategoryId) {
-    const homepageCategory = listBookmarkListCategories(config).find((entry) => entry.id === homepageCategoryId);
-    if (homepageCategory?.name) labels.push(homepageCategory.name);
+  return listBookmarkLocationEntries(config, bookmark, {
+    favoritesLabel: labelForFavorites,
+    quickAccessLabel: labelForQuickAccess,
+    unsortedLabel: ""
+  })
+    .map((entry) => entry.label)
+    .filter(Boolean);
+}
+
+/**
+ * Navigierbare Orte eines Lesezeichens (stabile Keys/IDs, lokalisierte Labels).
+ * Reihenfolge: Startseiten-Abschnitte, Schnellzugriff, Favoriten, Sidebar-Kategorien, Unsortiert.
+ */
+export function listBookmarkLocationEntries(config, bookmark, {
+  favoritesLabel = "",
+  unsortedLabel = "",
+  quickAccessLabel = ""
+} = {}) {
+  if (!bookmark) return [];
+  const entries = [];
+
+  for (const categoryId of getBookmarkHomepageCategoryIds(config, bookmark)) {
+    const category = listBookmarkListCategories(config).find((entry) => entry.id === categoryId);
+    if (!category?.name) continue;
+    entries.push({
+      key: `homepage:${category.id}`,
+      type: "homepage",
+      id: category.id,
+      label: category.name
+    });
   }
-  if (isBookmarkInQuickAccess(bookmark) && labelForQuickAccess) {
-    labels.push(labelForQuickAccess);
+
+  if (isBookmarkInQuickAccess(bookmark) && quickAccessLabel) {
+    entries.push({
+      key: "quick_access",
+      type: "quick_access",
+      id: QUICK_ACCESS_CATEGORY_ID,
+      label: quickAccessLabel
+    });
   }
-  if (isBookmarkInFavorites(bookmark) && labelForFavorites) {
-    labels.push(labelForFavorites);
+
+  if (isBookmarkInFavorites(bookmark) && favoritesLabel) {
+    entries.push({
+      key: "favorites",
+      type: "favorites",
+      id: FAVORITES_CATEGORY_ID,
+      label: favoritesLabel
+    });
   }
-  for (const categoryId of bookmark?.sidebarCategoryIds || []) {
+
+  for (const categoryId of bookmark.sidebarCategoryIds || []) {
     if (categoryId === FAVORITES_CATEGORY_ID || categoryId === UNSORTED_CATEGORY_ID) continue;
     const sidebarCategory = findSidebarCategoryById(config, categoryId);
-    if (sidebarCategory?.name) labels.push(sidebarCategory.name);
+    if (!sidebarCategory?.name) continue;
+    entries.push({
+      key: `sidebar:${sidebarCategory.id}`,
+      type: "sidebar",
+      id: sidebarCategory.id,
+      label: sidebarCategory.name
+    });
   }
-  return labels;
+
+  if (isUnsortedBookmark(bookmark, config) && unsortedLabel) {
+    entries.push({
+      key: "unsorted",
+      type: "unsorted",
+      id: UNSORTED_CATEGORY_ID,
+      label: unsortedLabel
+    });
+  }
+
+  return entries;
 }
 
 export function findSidebarCategoryBySlug(config, slug) {

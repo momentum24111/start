@@ -255,7 +255,7 @@ body[data-element-size="large"] .topbar-search {
   z-index: 210;
   max-height: min(60vh, 28rem);
   overflow: auto;
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--search-results-bg);
   box-shadow: var(--search-results-shadow);
   padding: 0.35rem;
@@ -274,7 +274,7 @@ body[data-element-size="large"] .topbar-search {
 
 .bookmark-search-result {
   display: grid;
-  grid-template-columns: var(--size-search-thumb) minmax(0, 1fr);
+  grid-template-columns: var(--size-search-thumb) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--size-search-gap);
   width: 100%;
@@ -294,7 +294,7 @@ body[data-element-size="large"] .topbar-search {
 }
 
 .bookmark-search-result.is-dragging {
-  opacity: 0.45;
+  opacity: 0.55;
   cursor: grabbing;
 }
 
@@ -308,59 +308,126 @@ body[data-element-size="large"] .topbar-search {
   height: var(--size-search-thumb);
   min-width: var(--size-search-thumb);
   min-height: var(--size-search-thumb);
-  max-width: var(--size-search-thumb);
-  max-height: var(--size-search-thumb);
-  aspect-ratio: 1 / 1;
-  align-self: center;
-  flex: 0 0 auto;
 }
 
 .topbar-search .bookmark-search-result__thumb .bookmark-thumb__img {
-  object-fit: cover;
-  object-position: center;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .topbar-search .bookmark-search-result__thumb .bookmark-thumb__placeholder-icon {
-  width: calc(36px * var(--element-scale));
-  height: calc(36px * var(--element-scale));
+  width: calc(1.35rem * var(--element-scale));
+  height: calc(1.35rem * var(--element-scale));
 }
 
 .bookmark-search-result__main {
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--size-search-main-gap);
-  align-self: center;
-  padding-block: calc(0.1rem * var(--element-scale));
+  min-width: 0;
 }
 
 .bookmark-search-result__title {
-  font-size: var(--size-service-font, 1rem);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.25;
   color: var(--search-result-title-fg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .bookmark-search-result__description {
   color: var(--search-result-description-fg);
-  font-size: calc(0.86rem * var(--element-scale));
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.bookmark-search-result__locations {
+  color: var(--search-result-locations-fg);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .bookmark-search-result__domain {
   color: var(--search-result-domain-fg);
-  font-size: calc(0.78rem * var(--element-scale));
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.8rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.bookmark-search-result__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.bookmark-search-result__actions .bookmark-menu {
+  position: relative;
+}
+
+.bookmark-search-result__location-btn,
+.bookmark-search-result__actions .btn--bookmark-menu-trigger {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 4px;
+}
+
+.bookmark-item,
+.quick-access-bar__item {
+  scroll-margin-top: calc(4.5rem + env(safe-area-inset-top, 0px));
+  scroll-margin-bottom: calc(var(--quick-access-bar-space, 4.5rem) + 0.75rem);
+}
+
+.bookmark-item.is-location-highlight,
+.quick-access-bar__item.is-location-highlight {
+  position: relative;
+  z-index: 2;
+  animation: location-highlight-pulse 1.6s ease-in-out 3;
+  outline: 2px solid var(--location-highlight-outline);
+  outline-offset: 2px;
+  box-shadow: var(--location-highlight-shadow);
+  border-radius: 4px;
+}
+
+.quick-access-bar__item.is-location-highlight {
+  animation-name: location-highlight-pulse-compact;
+}
+
+@keyframes location-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: var(--location-highlight-shadow);
+    outline-color: var(--location-highlight-outline);
+  }
+  50% {
+    box-shadow: var(--location-highlight-shadow-strong);
+    outline-color: var(--location-highlight-outline-strong);
+  }
+}
+
+@keyframes location-highlight-pulse-compact {
+  0%,
+  100% {
+    box-shadow: var(--location-highlight-shadow);
+    outline-color: var(--location-highlight-outline);
+  }
+  50% {
+    box-shadow: var(--location-highlight-shadow-strong);
+    outline-color: var(--location-highlight-outline-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bookmark-item.is-location-highlight,
+  .quick-access-bar__item.is-location-highlight {
+    animation: none;
+  }
 }
 
 #nav-toggle-btn.is-active,

@@ -204,27 +204,37 @@ function renderActionButtons(options, deps, { compact = false, editOnly = false 
   `;
 }
 
-function renderOverflowMenu(deps, { nav = false } = {}) {
-  const menuItems = nav
-    ? `
+function renderOverflowMenu(deps, { nav = false, search = false } = {}) {
+  let menuItems;
+  if (search) {
+    menuItems = `
+        <button type="button" class="bookmark-menu__item" data-bookmark-open-action role="menuitem">${escapeHtml(t("ui.open"))}</button>
         <button type="button" class="bookmark-menu__item" data-edit-bookmark role="menuitem">${escapeHtml(t("ui.edit"))}</button>
         <button type="button" class="bookmark-menu__item" data-reload-bookmark-metadata role="menuitem">${escapeHtml(t("ui.reloadBookmarkMetadata"))}</button>
         <button type="button" class="bookmark-menu__item bookmark-menu__item--danger" data-delete-bookmark role="menuitem">${escapeHtml(t("ui.delete"))}</button>
-      `
-    : `
+      `;
+  } else if (nav) {
+    menuItems = `
+        <button type="button" class="bookmark-menu__item" data-edit-bookmark role="menuitem">${escapeHtml(t("ui.edit"))}</button>
+        <button type="button" class="bookmark-menu__item" data-reload-bookmark-metadata role="menuitem">${escapeHtml(t("ui.reloadBookmarkMetadata"))}</button>
+        <button type="button" class="bookmark-menu__item bookmark-menu__item--danger" data-delete-bookmark role="menuitem">${escapeHtml(t("ui.delete"))}</button>
+      `;
+  } else {
+    menuItems = `
         <button type="button" class="bookmark-menu__item" data-bookmark-open-action role="menuitem">${escapeHtml(t("ui.open"))}</button>
         <button type="button" class="bookmark-menu__item" data-edit-bookmark role="menuitem">${escapeHtml(t("ui.edit"))}</button>
         <button type="button" class="bookmark-menu__item bookmark-menu__item--danger" data-delete-bookmark role="menuitem">${escapeHtml(t("ui.delete"))}</button>
       `;
+  }
   return `
-    <div class="bookmark-menu${nav ? " bookmark-menu--nav" : ""}">
+    <div class="bookmark-menu${nav ? " bookmark-menu--nav" : ""}${search ? " bookmark-menu--search" : ""}">
       <button
         type="button"
         class="btn btn--ghost btn--icon btn--bookmark-menu-trigger"
         data-bookmark-menu-trigger
         aria-haspopup="menu"
         aria-expanded="false"
-        aria-label="${escapeHtml(t("ui.actions"))}"
+        aria-label="${escapeHtml(search ? t("ui.bookmarkActions") : t("ui.actions"))}"
       >
         <span class="btn__icon">${deps.iconSvg(deps.icons.dotsVertical, "inline-icon")}</span>
       </button>
@@ -234,6 +244,8 @@ function renderOverflowMenu(deps, { nav = false } = {}) {
     </div>
   `;
 }
+
+export { renderOverflowMenu };
 
 export function openBookmarkUrl(bookmark, { newTab = false } = {}) {
   const url = String(bookmark?.url || "").trim();
@@ -615,6 +627,15 @@ function bindOverlayMenuActions(panel, actions) {
     closeBookmarkMenu();
     actions.onDelete?.();
   });
+  panel.querySelectorAll("[data-navigate-location]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const locationKey = String(button.getAttribute("data-navigate-location") || "").trim();
+      closeBookmarkMenu();
+      actions.onNavigateLocation?.(locationKey);
+    });
+  });
 }
 
 function onBookmarkMenuViewportChange() {
@@ -671,6 +692,8 @@ function openBookmarkMenu(menuRoot, actions, { atPoint = null } = {}) {
     }
   });
 }
+
+export { openBookmarkMenu };
 
 function bindThumbnailFallback(item, deps) {
   const image = item.querySelector("[data-bookmark-thumb]");

@@ -95,6 +95,8 @@
     "searchClear": "Clear search",
     "searchResults": "Search results",
     "searchNoResults": "No bookmarks found",
+    "navigateToLocation": "Go to bookmark location",
+    "bookmarkActions": "Actions for this bookmark",
     "dropToHomepage": "Place on homepage",
     "dropToHomepageLabel": "Homepage section",
     "dropToCategory": "Place in category",

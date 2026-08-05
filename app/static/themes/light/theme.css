@@ -103,6 +103,11 @@ body {
   --search-result-title-fg: #182332;
   --search-result-description-fg: #516379;
   --search-result-domain-fg: #6e879f;
+  --search-result-locations-fg: #3d5168;
+  --location-highlight-outline: color-mix(in srgb, var(--primary) 55%, transparent);
+  --location-highlight-outline-strong: var(--primary);
+  --location-highlight-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+  --location-highlight-shadow-strong: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent);
   --sidebar-backdrop-bg: rgba(15, 35, 60, 0.32);
   --sidebar-drop-target-bg: #e6edf4;
   --sidebar-drop-target-border: color-mix(in srgb, var(--primary) 45%, transparent);

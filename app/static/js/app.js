@@ -18,6 +18,7 @@ import {
   getBookmarksForQuickAccess,
   getBookmarkHomepageCategoryId,
   getBookmarkSidebarPlacementIds,
+  listBookmarkLocationEntries,
   findBookmarkById,
   findSidebarCategoryById,
   normalizeBookmarkImageSource,
@@ -100,7 +101,10 @@ import {
   ensureBookmarkMenuDismiss,
   escapeHtml,
   openBookmarkUrl,
-  positionFloatingMenuAtPoint
+  openBookmarkMenu,
+  renderOverflowMenu,
+  positionFloatingMenuAtPoint,
+  closeBookmarkMenu
 } from "./bookmark-views.js";
 import { initBookmarkSearch, refreshBookmarkSearchTexts } from "./bookmark-search.js";
 import { bindBookmarkDrag, initBookmarkDragDrop, isBookmarkDragSessionActive, SIDEBAR_ADD_CATEGORY_DROP_ID } from "./bookmark-drag.js";
@@ -481,6 +485,150 @@ function triggerBookmarkLaunch(bookmarkId) {
 
 function openBookmarkFromSearch(bookmark, { newTab = false } = {}) {
   openBookmarkUrl(bookmark, { newTab });
+}
+
+let locationHighlightTimer = null;
+
+function clearLocationHighlight() {
+  if (locationHighlightTimer) {
+    window.clearTimeout(locationHighlightTimer);
+    locationHighlightTimer = null;
+  }
+  document.querySelectorAll(".is-location-highlight").forEach((element) => {
+    element.classList.remove("is-location-highlight");
+  });
+}
+
+function highlightLocationTarget(element) {
+  if (!(element instanceof HTMLElement)) return;
+  clearLocationHighlight();
+  // Reflow erzwingt einen sauberen Restart der CSS-Animation bei erneutem Sprung.
+  void element.offsetWidth;
+  element.classList.add("is-location-highlight");
+  locationHighlightTimer = window.setTimeout(() => {
+    element.classList.remove("is-location-highlight");
+    locationHighlightTimer = null;
+  }, 5000);
+}
+
+function waitForNextPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function getBookmarkLocationsForUi(bookmark) {
+  return listBookmarkLocationEntries(state.config, bookmark, {
+    favoritesLabel: t("ui.navFavorites"),
+    unsortedLabel: t("ui.navUnsorted"),
+    quickAccessLabel: t("ui.navQuickAccess")
+  });
+}
+
+async function expandHomepageCategoryForNavigation(categoryId) {
+  const category = findCategoryById(state.config, categoryId);
+  if (!category || isQuickAccessCategory(category)) return false;
+  const wasCollapsed = categoryEffectiveCollapsed(category);
+  let changed = false;
+  if (category.collapsed) {
+    category.collapsed = false;
+    changed = true;
+  }
+  if (Object.hasOwn(state.sessionCategoryCollapsed, categoryId)) {
+    delete state.sessionCategoryCollapsed[categoryId];
+  }
+  if (changed) await persistConfig();
+  return wasCollapsed || changed;
+}
+
+async function expandNavSectionForNavigation(navId, bookmark) {
+  const sectionId = getBookmarkSectionIdForNav(bookmark, navId);
+  if (!sectionId || sectionId === UNSECTIONED_SECTION_ID) return false;
+  const section = getNavSections(state.config, navId).find((entry) => entry.id === sectionId);
+  if (!section || !section.collapsed) return false;
+  section.collapsed = false;
+  await persistConfig();
+  return true;
+}
+
+function findBookmarkTargetElement(bookmarkId, location) {
+  if (location?.type === "quick_access") {
+    return document.querySelector(`.quick-access-bar__item[data-bookmark-id="${CSS.escape(bookmarkId)}"]`);
+  }
+  if (location?.type === "homepage" && location.id) {
+    return document.querySelector(
+      `.category[data-category-id="${CSS.escape(location.id)}"] .bookmark-item[data-bookmark-id="${CSS.escape(bookmarkId)}"]`
+    );
+  }
+  return document.querySelector(`.bookmark-item[data-bookmark-id="${CSS.escape(bookmarkId)}"]`);
+}
+
+function scrollLocationTargetIntoView(element, location) {
+  if (!(element instanceof HTMLElement)) return;
+  if (location?.type === "quick_access") {
+    element.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    return;
+  }
+  element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+}
+
+function focusLocationTarget(element) {
+  if (!(element instanceof HTMLElement)) return;
+  const focusTarget = element.matches("a, button, [tabindex]")
+    ? element
+    : element.querySelector("a[data-bookmark-open], button, [tabindex]:not([tabindex='-1'])");
+  if (focusTarget instanceof HTMLElement) {
+    try {
+      focusTarget.focus({ preventScroll: true });
+    } catch {
+      focusTarget.focus();
+    }
+  }
+}
+
+async function navigateToBookmarkLocation(bookmark, location) {
+  if (!bookmark?.id || !location) return;
+  closeBookmarkMenu();
+
+  if (location.type === "homepage") {
+    await expandHomepageCategoryForNavigation(location.id);
+    if (getActiveNavId() !== NAV_ALL) await selectNav(NAV_ALL);
+    else render();
+  } else if (location.type === "quick_access") {
+    if (getActiveNavId() !== NAV_ALL) await selectNav(NAV_ALL);
+    else render();
+  } else if (location.type === "favorites") {
+    if (getActiveNavId() !== NAV_FAVORITES) await selectNav(NAV_FAVORITES);
+    else render();
+  } else if (location.type === "unsorted") {
+    if (getActiveNavId() !== NAV_UNSORTED) await selectNav(NAV_UNSORTED);
+    else render();
+  } else if (location.type === "sidebar") {
+    await expandNavSectionForNavigation(location.id, bookmark);
+    if (getActiveNavId() !== location.id) await selectNav(location.id);
+    else render();
+  } else {
+    return;
+  }
+
+  await waitForNextPaint();
+  // Nach Render erneut öffnen, falls DOM neu aufgebaut wurde.
+  if (location.type === "homepage") {
+    const card = document.querySelector(`.category[data-category-id="${CSS.escape(location.id)}"]`);
+    if (card?.classList.contains("is-collapsed")) {
+      await expandHomepageCategoryForNavigation(location.id);
+      render();
+      await waitForNextPaint();
+    }
+  }
+
+  const target = findBookmarkTargetElement(bookmark.id, location);
+  if (!(target instanceof HTMLElement)) return;
+  scrollLocationTargetIntoView(target, location);
+  highlightLocationTarget(target);
+  focusLocationTarget(target);
 }
 
 async function confirmDropToUnsorted(bookmarkOrBookmarks) {
@@ -2245,8 +2393,25 @@ async function bootstrap() {
     iconSvg,
     clearIcon: ICONS.close,
     searchIcon: ICONS.search,
+    icons: ICONS,
+    button,
     t,
-    openBookmark: openBookmarkFromSearch
+    openBookmark: openBookmarkFromSearch,
+    getLocations: getBookmarkLocationsForUi,
+    navigateToLocation: async (bookmark, location) => {
+      await navigateToBookmarkLocation(bookmark, location);
+    },
+    renderOverflowMenu: (depsForMenu) => renderOverflowMenu(depsForMenu, { search: true }),
+    openBookmarkMenu,
+    closeBookmarkMenu,
+    onEditBookmark: (bookmark) => openBookmarkModal({ bookmark }),
+    onDeleteBookmark: (bookmark) => {
+      void handleDeleteBookmark(bookmark);
+    },
+    onReloadBookmarkMetadata: (bookmark) => {
+      void applyBookmarkMetadata(bookmark.id);
+    },
+    isBookmarkMenuOpen: () => Boolean(document.querySelector("#bookmark-menu-overlay.is-open"))
   });
   initSidebarResponsiveBehavior();
   bindSidebarTooltipEvents();
