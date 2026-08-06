@@ -9,6 +9,7 @@ body {
   --bg: #f4f7fb;
   --surface: #ffffff;
   --surface-2: #f0f4f8;
+  --icon-preview-box-bg: var(--surface-2);
   --surface-hover: #e6edf4;
   --service-hover-bg: #e6edf4;
   --service-active-bg: #d5e4ff;

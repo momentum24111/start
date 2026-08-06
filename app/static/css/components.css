@@ -2944,15 +2944,17 @@ textarea {
 
 .icon-preview-box {
   width: 38px;
-  height: auto;
+  height: 38px;
+  min-width: 38px;
   min-height: 38px;
-  align-self: stretch;
+  align-self: center;
   flex: 0 0 38px;
   border-radius: 4px;
-  background: var(--surface-2);
+  background: var(--icon-preview-box-bg);
   display: grid;
   place-items: center;
   position: relative;
+  overflow: hidden;
 }
 
 .icon-preview-box .spinner {
@@ -2960,8 +2962,12 @@ textarea {
 }
 
 .icon-preview-box .icon-preview {
-  width: 22px;
-  height: 22px;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
   border-radius: 4px;
 }
 
