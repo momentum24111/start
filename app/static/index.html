@@ -30,29 +30,38 @@
       <div class="app-main">
         <header class="topbar">
           <div class="topbar-leading">
-            <h1 id="app-title">__START_PKG_INITIAL_APP_TITLE__</h1>
+            <!-- Nav-Toggle wird auf Mobile hierher verschoben -->
           </div>
-          <div id="bookmark-search-root" class="topbar-search">
-            <div id="bookmark-search-panel" class="topbar-search__panel">
-              <div class="topbar-search__field">
-                <input
-                  id="bookmark-search-input"
-                  class="topbar-search__input"
-                  type="text"
-                  enterkeyhint="search"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <button
-                  id="bookmark-search-clear"
-                  class="btn btn--ghost btn--icon topbar-search__clear hidden"
-                  type="button"
-                  tabindex="-1"
-                  aria-hidden="true"
-                ></button>
-                <span id="bookmark-search-icon" class="topbar-search__icon" aria-hidden="true"></span>
+          <div class="topbar-main">
+            <div id="quick-access-bar" class="quick-access-bar hidden" hidden data-quick-access-bar>
+              <div class="quick-access-bar__inner">
+                <div class="quick-access-bar__scroller" data-quick-access-scroller>
+                  <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
+                </div>
               </div>
-              <div id="bookmark-search-results" class="bookmark-search-results hidden" role="listbox"></div>
+            </div>
+            <div id="bookmark-search-root" class="topbar-search">
+              <div id="bookmark-search-panel" class="topbar-search__panel">
+                <div class="topbar-search__field">
+                  <input
+                    id="bookmark-search-input"
+                    class="topbar-search__input"
+                    type="text"
+                    enterkeyhint="search"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button
+                    id="bookmark-search-clear"
+                    class="btn btn--ghost btn--icon topbar-search__clear hidden"
+                    type="button"
+                    tabindex="-1"
+                    aria-hidden="true"
+                  ></button>
+                  <span id="bookmark-search-icon" class="topbar-search__icon" aria-hidden="true"></span>
+                </div>
+                <div id="bookmark-search-results" class="bookmark-search-results hidden" role="listbox"></div>
+              </div>
             </div>
           </div>
           <div class="actions">
@@ -68,13 +77,6 @@
           <div class="main-content">
             <div id="nav-view" class="nav-view hidden"></div>
             <div id="categories" class="category-grid"></div>
-          </div>
-          <div id="quick-access-bar" class="quick-access-bar hidden" hidden data-quick-access-bar>
-            <div class="quick-access-bar__inner">
-              <div class="quick-access-bar__scroller" data-quick-access-scroller>
-                <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
-              </div>
-            </div>
           </div>
         </main>
       </div>

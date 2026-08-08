@@ -1399,11 +1399,10 @@ def runtime_error_handler(_, exc: RuntimeError) -> JSONResponse:
 
 
 def _build_index_html() -> str:
-    """Liefert index.html mit aktuellem App-Titel (kein sichtbarer Platzhalter beim ersten Paint)."""
+    """Liefert index.html mit festem Starttitel (kein sichtbarer Platzhalter beim ersten Paint)."""
     ensure_bootstrap()
-    settings = load_json(SETTINGS_FILE, context="index_html")
-    raw_title = str(settings.get("appTitle") or "").strip() or "Start"
-    escaped = html.escape(raw_title, quote=False)
+    # appTitle aus settings.json wird nicht mehr verwendet; alte Dateien bleiben lesbar.
+    escaped = html.escape("Start", quote=False)
     template = INDEX_HTML_PATH.read_text(encoding="utf-8")
     if INDEX_HTML_MARKER not in template:
         raise RuntimeError(f"Missing inject marker {INDEX_HTML_MARKER!r} in index.html")

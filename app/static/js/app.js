@@ -136,7 +136,6 @@ const state = {
     sidebarCategoryBookmarkOrder: {}
   },
   settings: {
-    appTitle: "Start",
     theme: "dark",
     language: "en",
     categoryAccentStrength: 15,
@@ -185,7 +184,6 @@ function categoryEffectiveCollapsed(category) {
 }
 
 const elements = {
-  title: document.getElementById("app-title"),
   categories: document.getElementById("categories"),
   navView: document.getElementById("nav-view"),
   addBookmarkBtn: document.getElementById("add-bookmark-btn"),
@@ -2731,9 +2729,16 @@ function bindSidebarTooltipEvents() {
 }
 
 function ensureQuickAccessBar() {
-  if (elements.quickAccessBar instanceof HTMLElement) return elements.quickAccessBar;
-  const main = document.querySelector(".app-main main") || document.querySelector("main");
-  if (!(main instanceof HTMLElement)) return null;
+  const topbarMain = document.querySelector(".topbar-main") || document.querySelector(".topbar");
+  if (elements.quickAccessBar instanceof HTMLElement) {
+    if (topbarMain instanceof HTMLElement && elements.quickAccessBar.parentElement !== topbarMain) {
+      const searchRoot = topbarMain.querySelector("#bookmark-search-root");
+      if (searchRoot) topbarMain.insertBefore(elements.quickAccessBar, searchRoot);
+      else topbarMain.prepend(elements.quickAccessBar);
+    }
+    return elements.quickAccessBar;
+  }
+  if (!(topbarMain instanceof HTMLElement)) return null;
   let bar = document.getElementById("quick-access-bar");
   if (!(bar instanceof HTMLElement)) {
     bar = document.createElement("div");
@@ -2748,7 +2753,11 @@ function ensureQuickAccessBar() {
         </div>
       </div>
     `;
-    main.append(bar);
+  }
+  if (bar.parentElement !== topbarMain) {
+    const searchRoot = topbarMain.querySelector("#bookmark-search-root");
+    if (searchRoot) topbarMain.insertBefore(bar, searchRoot);
+    else topbarMain.prepend(bar);
   }
   elements.quickAccessBar = bar;
   return bar;
@@ -3071,9 +3080,7 @@ async function setNavSortForActive(partial) {
 }
 
 function getHomepageName() {
-  const raw = state.settings.appTitle;
-  const trimmed = typeof raw === "string" ? raw.trim() : String(raw || "").trim();
-  return trimmed || t("ui.navStart");
+  return t("ui.navStart");
 }
 
 function getNavTitle(navId) {
@@ -4775,7 +4782,6 @@ function updateDocumentLanguage() {
 function updateAppTitleUI() {
   const title = getNavTitle(getActiveNavId());
   if (document.title !== title) document.title = title;
-  if (elements.title.textContent !== title) elements.title.textContent = title;
 }
 
 function updateTopbarActionTexts() {
@@ -4837,7 +4843,6 @@ function refreshSettingsModalTexts(form) {
   if (!form) return;
   const modalTitle = form.closest(".modal")?.querySelector("h2");
   if (modalTitle) modalTitle.textContent = t("ui.settings");
-  form.querySelector("[data-settings-name-label]")?.replaceChildren(t("ui.homepageName"));
   form.querySelector("[data-settings-theme-label]")?.replaceChildren(t("ui.theme"));
   form.querySelector("[data-settings-language-label]")?.replaceChildren(t("ui.language"));
   form.querySelector("[data-settings-accent-label]")?.replaceChildren(t("ui.categoryAccentStrength"));
@@ -6126,10 +6131,6 @@ function openSettingsModal() {
   `).join("");
   form.innerHTML = `
     <div class="form-row">
-      <label data-settings-name-label>${t("ui.homepageName")}</label>
-      <input name="appTitle" value="${state.settings.appTitle ?? ""}" />
-    </div>
-    <div class="form-row">
       <label data-settings-theme-label>${t("ui.theme")}</label>
       <div>
         <div class="theme-options theme-picker">${themeButtons}</div>
@@ -6290,12 +6291,6 @@ function openSettingsModal() {
         .catch(() => {});
     }, delayMs);
   };
-  form.querySelector("input[name='appTitle']")?.addEventListener("input", (event) => {
-    state.settings.appTitle = event.target.value;
-    updateAppTitleUI();
-    renderSidebar();
-    scheduleSettingsPersist();
-  });
   form.querySelector("select[name='language']")?.addEventListener("change", async (event) => {
     state.settings.language = event.target.value;
     await initI18n(state.settings.language);

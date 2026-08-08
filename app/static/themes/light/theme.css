@@ -116,9 +116,9 @@ body {
   --sidebar-tooltip-fg: #17376f;
   --sidebar-tooltip-shadow: 0 8px 20px rgba(15, 35, 60, 0.14);
   --app-tooltip-arrow-bg: #ffffff;
-  --quick-access-bar-bg: #ffffff;
-  --quick-access-bar-border: rgba(81, 99, 121, 0.16);
-  --quick-access-bar-shadow: 0 8px 24px rgba(15, 35, 60, 0.12);
+  --quick-access-bar-bg: transparent;
+  --quick-access-bar-border: transparent;
+  --quick-access-bar-shadow: none;
   --quick-access-icon-bg: #e6edf4;
   --quick-access-item-focus-ring: color-mix(in srgb, var(--primary) 55%, transparent);
   --quick-access-drop-marker: var(--primary);

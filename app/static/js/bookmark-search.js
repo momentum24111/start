@@ -19,7 +19,6 @@ let searchIconEl = null;
 let debounceTimer = null;
 let currentResults = [];
 let selectedIndex = -1;
-let mobileQuery = null;
 let suppressSearchCloseForDrag = false;
 let suppressSearchCloseForMenu = false;
 
@@ -205,8 +204,8 @@ function renderResultItem(bookmark, index) {
   `;
 }
 
-function isMobileLayout() {
-  return Boolean(mobileQuery?.matches);
+function isSearchOpen() {
+  return Boolean(root?.classList.contains("is-search-open"));
 }
 
 function isBookmarkDragActive() {
@@ -217,8 +216,9 @@ function isBookmarkMenuOpen() {
   return Boolean(deps.isBookmarkMenuOpen?.() || document.querySelector("#bookmark-menu-overlay.is-open"));
 }
 
-function setMobileOpen(open) {
-  root?.classList.toggle("is-mobile-open", open);
+function setSearchOpen(open) {
+  root?.classList.toggle("is-search-open", open);
+  document.querySelector(".topbar")?.classList.toggle("is-search-open", open);
   toggleBtn?.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
@@ -233,11 +233,11 @@ function syncClearButton() {
   clearBtn?.setAttribute("tabindex", hasText ? "0" : "-1");
 }
 
-export function closeBookmarkSearch({ clearInput = true, keepMobileOpen = false } = {}) {
-  closeSearch({ clearInput, keepMobileOpen });
+export function closeBookmarkSearch({ clearInput = true, keepSearchOpen = false, keepMobileOpen = false } = {}) {
+  closeSearch({ clearInput, keepSearchOpen: keepSearchOpen || keepMobileOpen });
 }
 
-function closeSearch({ clearInput = true, keepMobileOpen = false } = {}) {
+function closeSearch({ clearInput = true, keepSearchOpen = false } = {}) {
   deps.closeBookmarkMenu?.();
   if (clearInput && input) input.value = "";
   currentResults = [];
@@ -245,8 +245,8 @@ function closeSearch({ clearInput = true, keepMobileOpen = false } = {}) {
   resultsEl?.classList.add("hidden");
   resultsEl?.replaceChildren();
   syncClearButton();
-  if (!keepMobileOpen) {
-    setMobileOpen(false);
+  if (!keepSearchOpen) {
+    setSearchOpen(false);
   }
 }
 
@@ -469,7 +469,7 @@ function onDocumentPointerDown(event) {
     return;
   }
   if (isBookmarkMenuOpen()) return;
-  closeSearch({ clearInput: false, keepMobileOpen: false });
+  closeSearch({ clearInput: false, keepSearchOpen: false });
 }
 
 function onInputFocus() {
@@ -489,7 +489,7 @@ function onInputBlur() {
     if (root?.contains(active) || toggleBtn === active || clearBtn === active) return;
     if (document.getElementById("sidebar")?.contains(active)) return;
     if (document.getElementById("bookmark-menu-overlay")?.contains(active)) return;
-    closeSearch({ clearInput: false, keepMobileOpen: false });
+    closeSearch({ clearInput: false, keepSearchOpen: false });
   }, 0);
 }
 
@@ -534,11 +534,6 @@ export function initBookmarkSearch(options) {
     searchIconEl.innerHTML = deps.iconSvg(deps.searchIcon, "inline-icon");
   }
 
-  mobileQuery = window.matchMedia("(max-width: 900px)");
-  mobileQuery.addEventListener("change", () => {
-    if (!isMobileLayout()) setMobileOpen(false);
-  });
-
   refreshTexts();
   syncClearButton();
 
@@ -546,7 +541,7 @@ export function initBookmarkSearch(options) {
     syncClearButton();
     const query = normalizeSearchText(input.value);
     if (!query) {
-      closeSearch({ clearInput: false, keepMobileOpen: isMobileLayout() });
+      closeSearch({ clearInput: false, keepSearchOpen: isSearchOpen() });
       return;
     }
     scheduleSearch();
@@ -560,16 +555,17 @@ export function initBookmarkSearch(options) {
     event.preventDefault();
   });
   clearBtn?.addEventListener("click", () => {
-    closeSearch({ clearInput: true, keepMobileOpen: isMobileLayout() });
+    closeSearch({ clearInput: true, keepSearchOpen: true });
     input?.focus();
   });
 
   toggleBtn?.addEventListener("click", () => {
-    const open = !root.classList.contains("is-mobile-open");
-    setMobileOpen(open);
+    const open = !isSearchOpen();
     if (open) {
+      setSearchOpen(true);
       input.focus();
       input.select();
+      if (normalizeSearchText(input.value)) renderResults();
     } else {
       closeSearch({ clearInput: true });
     }
