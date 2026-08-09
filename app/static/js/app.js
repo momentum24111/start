@@ -2594,7 +2594,7 @@ function hideAppTooltip() {
   if (!(sidebarTooltipEl instanceof HTMLElement)) return;
   sidebarTooltipEl.hidden = true;
   sidebarTooltipEl.textContent = "";
-  sidebarTooltipEl.classList.remove("app-tooltip--top", "app-tooltip--right");
+  sidebarTooltipEl.classList.remove("app-tooltip--top", "app-tooltip--bottom", "app-tooltip--right");
   sidebarTooltipEl.style.top = "";
   sidebarTooltipEl.style.left = "";
 }
@@ -2613,7 +2613,11 @@ function showAppTooltip(anchor, label, { placement = "right" } = {}) {
     return;
   }
   const tooltip = ensureSidebarTooltip();
-  const placementClass = placement === "top" ? "app-tooltip--top" : "app-tooltip--right";
+  const placementClass = placement === "top"
+    ? "app-tooltip--top"
+    : placement === "bottom"
+      ? "app-tooltip--bottom"
+      : "app-tooltip--right";
   if (
     sidebarTooltipAnchor === anchor
     && tooltip.textContent === label
@@ -2622,12 +2626,15 @@ function showAppTooltip(anchor, label, { placement = "right" } = {}) {
   ) return;
   sidebarTooltipAnchor = anchor;
   tooltip.textContent = label;
-  tooltip.classList.remove("app-tooltip--top", "app-tooltip--right");
+  tooltip.classList.remove("app-tooltip--top", "app-tooltip--bottom", "app-tooltip--right");
   tooltip.classList.add(placementClass);
   tooltip.hidden = false;
   const rect = anchor.getBoundingClientRect();
   if (placement === "top") {
     tooltip.style.top = `${rect.top}px`;
+    tooltip.style.left = `${rect.left + rect.width / 2}px`;
+  } else if (placement === "bottom") {
+    tooltip.style.top = `${rect.bottom}px`;
     tooltip.style.left = `${rect.left + rect.width / 2}px`;
   } else {
     tooltip.style.top = `${rect.top + rect.height / 2}px`;
@@ -2700,7 +2707,7 @@ function bindSidebarTooltipEvents() {
     const label = item.querySelector("[data-bookmark-open]")?.getAttribute("aria-label")
       || item.getAttribute("aria-label")
       || "";
-    showAppTooltip(item, label, { placement: "top" });
+    showAppTooltip(item, label, { placement: "bottom" });
   });
   document.addEventListener("mouseout", (event) => {
     const item = event.target.closest?.("[data-quick-access-item]");
@@ -2720,7 +2727,7 @@ function bindSidebarTooltipEvents() {
     const label = item.querySelector("[data-bookmark-open]")?.getAttribute("aria-label")
       || item.getAttribute("aria-label")
       || "";
-    showAppTooltip(item, label, { placement: "top" });
+    showAppTooltip(item, label, { placement: "bottom" });
   });
   document.addEventListener("focusout", (event) => {
     const item = event.target.closest?.("[data-quick-access-item]");

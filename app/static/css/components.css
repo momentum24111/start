@@ -190,6 +190,8 @@ textarea {
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 body[data-element-size="small"] .topbar-search {
@@ -201,13 +203,24 @@ body[data-element-size="large"] .topbar-search {
 }
 
 .topbar-search.is-search-open {
-  display: block;
+  display: flex;
+}
+
+/* Mit Schnellzugriff: Suche als Overlay, Layout bleibt unverändert */
+.topbar:has(.quick-access-bar:not(.hidden)) .topbar-search.is-search-open {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  flex: none;
+  width: auto;
+  background: var(--bg);
 }
 
 .topbar-search__panel {
   position: relative;
   width: 100%;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .topbar-search__field {
@@ -616,7 +629,7 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
 }
 
 .app-tooltip--right,
-.sidebar-tooltip:not(.app-tooltip--top) {
+.sidebar-tooltip:not(.app-tooltip--top):not(.app-tooltip--bottom) {
   margin-left: 0.45rem;
   transform: translateY(-50%);
 }
@@ -634,6 +647,21 @@ body:not(.sidebar-mobile) .sidebar:not(.is-open) .sidebar-link--draft {
   transform: translateX(-50%);
   border: 6px solid transparent;
   border-top-color: var(--app-tooltip-arrow-bg, var(--sidebar-tooltip-bg));
+}
+
+.app-tooltip--bottom {
+  margin-left: 0;
+  transform: translate(-50%, 0.55rem);
+}
+
+.app-tooltip--bottom::after {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: var(--app-tooltip-arrow-bg, var(--sidebar-tooltip-bg));
 }
 
 .sidebar-list {
@@ -1693,7 +1721,8 @@ body[data-element-size="large"] .quick-access-bar {
 
 .topbar.is-search-open .quick-access-bar,
 .topbar:has(.topbar-search.is-search-open) .quick-access-bar {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .quick-access-bar.hidden {
@@ -1799,13 +1828,17 @@ body[data-element-size="large"] .quick-access-bar {
   flex: 0 0 auto;
   border-radius: 4px;
   overflow: hidden;
-  background: var(--quick-access-icon-bg);
+  background: transparent;
 }
 
 .quick-access-bar__item .bookmark-thumb--quick-access .bookmark-thumb__img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.quick-access-bar__item .bookmark-thumb--quick-access .bookmark-thumb__placeholder {
+  background: transparent;
 }
 
 .quick-access-bar__item .bookmark-thumb--quick-access .bookmark-thumb__placeholder-icon {
@@ -3425,7 +3458,7 @@ textarea {
   }
 
   .topbar:has(.quick-access-bar:not(.hidden)) .topbar-search {
-    grid-area: main;
+    grid-area: qa;
   }
 
   .topbar:has(.quick-access-bar:not(.hidden)) .quick-access-bar {
@@ -3433,16 +3466,19 @@ textarea {
     width: 100%;
   }
 
-  .topbar.is-search-open:has(.quick-access-bar:not(.hidden)) {
-    grid-template-areas: "main actions";
-  }
-
-  .topbar.is-search-open:has(.topbar-leading > *):has(.quick-access-bar:not(.hidden)) {
-    grid-template-areas: "leading main actions";
+  /* Suche überlagert die Schnellzugriffs-Zeile, ohne Grid/Höhe zu ändern */
+  .topbar:has(.quick-access-bar:not(.hidden)) .topbar-search.is-search-open {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    width: auto;
+    background: var(--bg);
   }
 
   .topbar-search.is-search-open {
-    display: block;
+    display: flex;
     width: 100%;
   }
 }

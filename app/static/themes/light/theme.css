@@ -119,7 +119,7 @@ body {
   --quick-access-bar-bg: transparent;
   --quick-access-bar-border: transparent;
   --quick-access-bar-shadow: none;
-  --quick-access-icon-bg: #e6edf4;
+  --quick-access-icon-bg: transparent;
   --quick-access-item-focus-ring: color-mix(in srgb, var(--primary) 55%, transparent);
   --quick-access-drop-marker: var(--primary);
   --quick-access-menu-btn-bg: #ffffff;
