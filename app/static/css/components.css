@@ -1767,6 +1767,7 @@ body[data-element-size="large"] .quick-access-bar {
 }
 
 .quick-access-bar.is-collapsed .quick-access-bar__expandable {
+  max-width: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -1943,7 +1944,8 @@ body[data-element-size="large"] .quick-access-bar {
 .quick-access-bar__collapse .collapse-arrow {
   display: block;
   transform: rotate(0deg);
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center;
   will-change: transform;
 }
 
