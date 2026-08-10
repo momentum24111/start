@@ -192,7 +192,7 @@ function buildQuickAccessCategoryEntry(raw = {}) {
     name: String(raw.name || "Quick access").trim() || "Quick access",
     icon: String(raw.icon || "flash").trim() || "flash",
     color: String(raw.color || "primary").trim() || "primary",
-    collapsed: false,
+    collapsed: Boolean(raw.collapsed),
     type: "service-list",
     iframeUrl: "",
     slots: 1

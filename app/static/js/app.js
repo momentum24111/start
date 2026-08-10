@@ -36,6 +36,7 @@ import {
   normalizeBookmarkCategoryAssignments,
   isBookmarkInQuickAccess,
   isQuickAccessCategory,
+  ensureQuickAccessCategory,
   removeSidebarCategoryFromConfig,
   deleteSidebarCategoryFromConfig,
   getHomepageCategories,
@@ -2743,6 +2744,7 @@ function ensureQuickAccessBar() {
       if (searchRoot) topbarMain.insertBefore(elements.quickAccessBar, searchRoot);
       else topbarMain.prepend(elements.quickAccessBar);
     }
+    ensureQuickAccessBarChrome(elements.quickAccessBar);
     return elements.quickAccessBar;
   }
   if (!(topbarMain instanceof HTMLElement)) return null;
@@ -2753,26 +2755,189 @@ function ensureQuickAccessBar() {
     bar.className = "quick-access-bar hidden";
     bar.hidden = true;
     bar.dataset.quickAccessBar = "";
-    bar.innerHTML = `
-      <div class="quick-access-bar__inner">
-        <div class="quick-access-bar__scroller" data-quick-access-scroller>
-          <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
-        </div>
-      </div>
-    `;
   }
+  ensureQuickAccessBarChrome(bar);
   if (bar.parentElement !== topbarMain) {
     const searchRoot = topbarMain.querySelector("#bookmark-search-root");
     if (searchRoot) topbarMain.insertBefore(bar, searchRoot);
     else topbarMain.prepend(bar);
   }
   elements.quickAccessBar = bar;
+  bindQuickAccessBarEvents(bar);
   return bar;
+}
+
+function ensureQuickAccessBarChrome(bar) {
+  if (!(bar instanceof HTMLElement)) return;
+  let shell = bar.querySelector(".quick-access-bar__shell");
+  if (!(shell instanceof HTMLElement)) {
+    bar.innerHTML = `
+      <div class="quick-access-bar__shell">
+        <div class="quick-access-bar__expandable">
+          <div class="quick-access-bar__expandable-inner">
+            <div class="quick-access-bar__scroller" data-quick-access-scroller>
+              <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
+            </div>
+            <button type="button" class="btn btn--ghost btn--icon btn--compact quick-access-bar__edit hidden" data-quick-access-edit></button>
+          </div>
+        </div>
+        <button type="button" class="btn btn--ghost btn--icon btn--compact quick-access-bar__collapse" data-quick-access-collapse aria-expanded="true"></button>
+      </div>
+    `;
+    return;
+  }
+  if (!bar.querySelector("[data-quick-access-list]")) {
+    const expandableInner = bar.querySelector(".quick-access-bar__expandable-inner") || shell;
+    const scroller = document.createElement("div");
+    scroller.className = "quick-access-bar__scroller";
+    scroller.dataset.quickAccessScroller = "";
+    const list = document.createElement("div");
+    list.className = "quick-access-bar__list";
+    list.dataset.quickAccessList = "";
+    list.setAttribute("role", "list");
+    scroller.append(list);
+    expandableInner.prepend(scroller);
+  }
+  if (!bar.querySelector("[data-quick-access-edit]")) {
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn btn--ghost btn--icon btn--compact quick-access-bar__edit hidden";
+    editBtn.dataset.quickAccessEdit = "";
+    const expandableInner = bar.querySelector(".quick-access-bar__expandable-inner");
+    if (expandableInner instanceof HTMLElement) expandableInner.append(editBtn);
+    else shell.append(editBtn);
+  }
+  if (!bar.querySelector("[data-quick-access-collapse]")) {
+    const collapseBtn = document.createElement("button");
+    collapseBtn.type = "button";
+    collapseBtn.className = "btn btn--ghost btn--icon btn--compact quick-access-bar__collapse";
+    collapseBtn.dataset.quickAccessCollapse = "";
+    collapseBtn.setAttribute("aria-expanded", "true");
+    shell.append(collapseBtn);
+  }
+}
+
+function normalizeQuickAccessColor(color) {
+  const value = String(color || "primary").trim();
+  return COLOR_OPTIONS.includes(value) ? value : "primary";
+}
+
+function applyQuickAccessBarChrome(bar, category) {
+  if (!(bar instanceof HTMLElement)) return;
+  const color = normalizeQuickAccessColor(category?.color);
+  const collapsed = Boolean(category?.collapsed);
+  const editMode = isHomepageEditMode();
+  bar.dataset.color = color;
+  bar.classList.toggle("is-collapsed", collapsed);
+  bar.classList.toggle("is-edit-mode", editMode);
+
+  const editBtn = bar.querySelector("[data-quick-access-edit]");
+  if (editBtn instanceof HTMLElement) {
+    editBtn.classList.toggle("hidden", !editMode);
+    editBtn.setAttribute("aria-label", t("ui.editQuickAccess"));
+    editBtn.title = t("ui.editQuickAccess");
+    editBtn.innerHTML = `<span class="btn__icon">${iconSvg(ICONS.edit, "inline-icon")}</span>`;
+  }
+
+  const collapseBtn = bar.querySelector("[data-quick-access-collapse]");
+  if (collapseBtn instanceof HTMLElement) {
+    collapseBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    collapseBtn.setAttribute("aria-label", collapsed ? t("ui.expandQuickAccess") : t("ui.collapseQuickAccess"));
+    collapseBtn.title = collapsed ? t("ui.expandQuickAccess") : t("ui.collapseQuickAccess");
+    const arrowIcon = collapsed ? ICONS.arrowRight : ICONS.arrowLeft;
+    collapseBtn.innerHTML = `<span class="btn__icon">${iconSvg(arrowIcon, "inline-icon")}</span>`;
+  }
+
+  const expandable = bar.querySelector(".quick-access-bar__expandable");
+  if (expandable instanceof HTMLElement) {
+    expandable.setAttribute("aria-hidden", collapsed ? "true" : "false");
+  }
+}
+
+async function setQuickAccessCollapsed(collapsed, { persist = true } = {}) {
+  const category = ensureQuickAccessCategory(state.config);
+  if (!category) return;
+  category.collapsed = Boolean(collapsed);
+  const bar = elements.quickAccessBar;
+  if (bar instanceof HTMLElement) applyQuickAccessBarChrome(bar, category);
+  if (persist) await persistConfig();
+}
+
+function openQuickAccessModal() {
+  const category = ensureQuickAccessCategory(state.config);
+  if (!category) return;
+  const selectedColor = normalizeQuickAccessColor(category.color);
+  const form = document.createElement("form");
+  form.innerHTML = `
+    <div class="form-row">
+      <label>${t("ui.backgroundColor")}</label>
+      <div>
+        <div class="color-options">
+          ${COLOR_OPTIONS.map((color) => `<button type="button" class="color-dot ${selectedColor === color ? "is-active" : ""}" data-color="${color}" data-color-pick="${color}"></button>`).join("")}
+        </div>
+        <input type="hidden" name="color" value="${selectedColor}" />
+      </div>
+    </div>
+    <div class="form-row">
+      <label>${t("ui.collapsed")}</label>
+      <label class="toggle-switch">
+        <input name="collapsed" type="checkbox" ${category.collapsed ? "checked" : ""} />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
+    </div>
+  `;
+
+  form.querySelectorAll("[data-color-pick]").forEach((colorButton) => {
+    colorButton.addEventListener("click", () => {
+      form.querySelector("input[name='color']").value = colorButton.dataset.color;
+      form.querySelectorAll("[data-color-pick]").forEach((entry) => entry.classList.remove("is-active"));
+      colorButton.classList.add("is-active");
+    });
+  });
+
+  showModal({
+    title: t("ui.editQuickAccess"),
+    content: form,
+    saveLabel: t("ui.save"),
+    cancelLabel: t("ui.cancel"),
+    modalClass: "modal--category",
+    onSave: async () => {
+      const fd = new FormData(form);
+      pushUndo();
+      category.color = normalizeQuickAccessColor(fd.get("color"));
+      category.collapsed = Boolean(form.querySelector("input[name='collapsed']")?.checked);
+      await persistConfig();
+      renderQuickAccessBar();
+    }
+  });
+}
+
+function bindQuickAccessBarEvents(bar) {
+  if (!(bar instanceof HTMLElement) || bar.dataset.quickAccessBound === "true") return;
+  bar.dataset.quickAccessBound = "true";
+  bar.addEventListener("click", (event) => {
+    const editBtn = event.target.closest?.("[data-quick-access-edit]");
+    if (editBtn instanceof HTMLElement && bar.contains(editBtn)) {
+      event.preventDefault();
+      event.stopPropagation();
+      openQuickAccessModal();
+      return;
+    }
+    const collapseBtn = event.target.closest?.("[data-quick-access-collapse]");
+    if (collapseBtn instanceof HTMLElement && bar.contains(collapseBtn)) {
+      event.preventDefault();
+      event.stopPropagation();
+      hideAppTooltip();
+      const category = ensureQuickAccessCategory(state.config);
+      void setQuickAccessCollapsed(!Boolean(category?.collapsed));
+    }
+  });
 }
 
 function renderQuickAccessBar() {
   const bar = ensureQuickAccessBar();
   if (!(bar instanceof HTMLElement)) return;
+  bindQuickAccessBarEvents(bar);
   const list = bar.querySelector("[data-quick-access-list]");
   if (!(list instanceof HTMLElement)) return;
 
@@ -2780,13 +2945,15 @@ function renderQuickAccessBar() {
   quickAccessBarVisible = visible;
   bar.hidden = !visible;
   bar.classList.toggle("hidden", !visible);
-  bar.classList.toggle("is-edit-mode", isHomepageEditMode());
   document.body.classList.toggle("has-quick-access-bar", visible);
   if (!visible) {
     list.innerHTML = "";
     hideAppTooltip();
     return;
   }
+
+  const category = ensureQuickAccessCategory(state.config);
+  applyQuickAccessBarChrome(bar, category);
 
   const bookmarks = getBookmarksForQuickAccess(state.config);
   const editMode = isHomepageEditMode();

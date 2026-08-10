@@ -34,10 +34,16 @@
           </div>
           <div class="topbar-main">
             <div id="quick-access-bar" class="quick-access-bar hidden" hidden data-quick-access-bar>
-              <div class="quick-access-bar__inner">
-                <div class="quick-access-bar__scroller" data-quick-access-scroller>
-                  <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
+              <div class="quick-access-bar__shell">
+                <div class="quick-access-bar__expandable">
+                  <div class="quick-access-bar__expandable-inner">
+                    <div class="quick-access-bar__scroller" data-quick-access-scroller>
+                      <div class="quick-access-bar__list" data-quick-access-list role="list"></div>
+                    </div>
+                    <button type="button" class="btn btn--ghost btn--icon btn--compact quick-access-bar__edit hidden" data-quick-access-edit></button>
+                  </div>
                 </div>
+                <button type="button" class="btn btn--ghost btn--icon btn--compact quick-access-bar__collapse" data-quick-access-collapse aria-expanded="true"></button>
               </div>
             </div>
             <div id="bookmark-search-root" class="topbar-search">

@@ -1700,13 +1700,20 @@ main:has(#add-bookmark-fab:not(.hidden)) .main-content {
   --quick-access-bar-gap: calc(0.45rem * var(--element-scale));
   --quick-access-icon-size: calc(30px * var(--element-scale));
   --quick-access-tap-size: max(var(--quick-access-icon-size), 40px);
+  --quick-access-collapse-size: max(var(--quick-access-tap-size), 36px);
+  --quick-access-surface: color-mix(
+    in srgb,
+    var(--category-accent, var(--cat-primary)) var(--category-accent-strength),
+    var(--category-bg)
+  );
+  --category-accent: var(--cat-primary);
   position: relative;
   display: flex;
   align-items: center;
-  min-width: 0;
+  width: max-content;
   max-width: 100%;
-  width: 100%;
-  flex: 1 1 auto;
+  min-width: 0;
+  flex: 0 1 auto;
   pointer-events: auto;
   box-sizing: border-box;
 }
@@ -1729,23 +1736,54 @@ body[data-element-size="large"] .quick-access-bar {
   display: none;
 }
 
-.quick-access-bar__inner {
+.quick-access-bar__shell {
+  display: flex;
+  align-items: center;
+  gap: 0.05rem;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   margin: 0;
+  padding: 0.12rem;
   border-radius: 4px;
-  background: var(--quick-access-bar-bg);
-  border: 1px solid var(--quick-access-bar-border);
+  background: var(--quick-access-surface);
+  border: 0;
+  outline: 0;
   box-shadow: none;
-  padding: 0.15rem 0.2rem;
   box-sizing: border-box;
+}
+
+.quick-access-bar__expandable {
+  display: grid;
+  grid-template-columns: 1fr;
+  flex: 1 1 auto;
+  min-width: 0;
+  transition: grid-template-columns 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.quick-access-bar.is-collapsed .quick-access-bar__expandable {
+  grid-template-columns: 0fr;
+}
+
+.quick-access-bar__expandable-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.05rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.quick-access-bar.is-collapsed .quick-access-bar__expandable-inner {
+  pointer-events: none;
 }
 
 .quick-access-bar__scroller {
   overflow-x: auto;
   overflow-y: hidden;
+  flex: 1 1 auto;
+  width: auto;
   max-width: 100%;
+  min-width: 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-x: contain;
@@ -1764,8 +1802,7 @@ body[data-element-size="large"] .quick-access-bar {
   gap: var(--quick-access-bar-gap);
   width: max-content;
   min-width: 0;
-  /* Bei Overflow bleibt rechts ein Teil des nächsten Icons erkennbar */
-  padding-inline-end: calc(var(--quick-access-icon-size) * 0.45);
+  padding-inline: 0.1rem;
 }
 
 .quick-access-bar__item {
@@ -1846,6 +1883,28 @@ body[data-element-size="large"] .quick-access-bar {
   height: calc(1.1rem * var(--element-scale, 1));
 }
 
+.quick-access-bar__edit,
+.quick-access-bar__collapse {
+  flex: 0 0 auto;
+  width: var(--quick-access-collapse-size);
+  min-width: var(--quick-access-collapse-size);
+  height: var(--quick-access-collapse-size);
+  min-height: var(--quick-access-collapse-size);
+  padding: 0;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.quick-access-bar__edit:hover,
+.quick-access-bar__collapse:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.quick-access-bar__edit:focus-visible,
+.quick-access-bar__collapse:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--quick-access-item-focus-ring);
+}
+
 .quick-access-bar__actions {
   top: calc(-0.2rem * var(--element-scale, 1));
   right: calc(-0.25rem * var(--element-scale, 1));
@@ -1876,10 +1935,17 @@ body[data-element-size="large"] .quick-access-bar {
   display: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .quick-access-bar__expandable {
+    transition: none;
+  }
+}
+
 @media (max-width: 900px) {
   .quick-access-bar {
     --quick-access-tap-size: max(var(--quick-access-icon-size), 44px);
     --quick-access-icon-size: calc(32px * var(--element-scale));
+    --quick-access-collapse-size: max(var(--quick-access-tap-size), 44px);
   }
 
   .quick-access-bar__actions .btn--bookmark-menu-trigger {
@@ -2035,16 +2101,26 @@ body[data-element-size="large"] .quick-access-bar {
   gap: 0;
 }
 
-.category[data-color="primary"] { --category-accent: var(--cat-primary); }
-.category[data-color="teal"] { --category-accent: var(--cat-teal); }
-.category[data-color="blue"] { --category-accent: var(--cat-blue); }
-.category[data-color="violet"] { --category-accent: var(--cat-violet); }
-.category[data-color="amber"] { --category-accent: var(--cat-amber); }
-.category[data-color="pink"] { --category-accent: var(--cat-pink); }
-.category[data-color="indigo"] { --category-accent: var(--cat-indigo); }
-.category[data-color="emerald"] { --category-accent: var(--cat-emerald); }
-.category[data-color="orange"] { --category-accent: var(--cat-orange); }
-.category[data-color="slate"] { --category-accent: var(--cat-slate); }
+.category[data-color="primary"],
+.quick-access-bar[data-color="primary"] { --category-accent: var(--cat-primary); }
+.category[data-color="teal"],
+.quick-access-bar[data-color="teal"] { --category-accent: var(--cat-teal); }
+.category[data-color="blue"],
+.quick-access-bar[data-color="blue"] { --category-accent: var(--cat-blue); }
+.category[data-color="violet"],
+.quick-access-bar[data-color="violet"] { --category-accent: var(--cat-violet); }
+.category[data-color="amber"],
+.quick-access-bar[data-color="amber"] { --category-accent: var(--cat-amber); }
+.category[data-color="pink"],
+.quick-access-bar[data-color="pink"] { --category-accent: var(--cat-pink); }
+.category[data-color="indigo"],
+.quick-access-bar[data-color="indigo"] { --category-accent: var(--cat-indigo); }
+.category[data-color="emerald"],
+.quick-access-bar[data-color="emerald"] { --category-accent: var(--cat-emerald); }
+.category[data-color="orange"],
+.quick-access-bar[data-color="orange"] { --category-accent: var(--cat-orange); }
+.category[data-color="slate"],
+.quick-access-bar[data-color="slate"] { --category-accent: var(--cat-slate); }
 
 .category-header {
   display: flex;
@@ -3439,42 +3515,6 @@ textarea {
   .topbar:has(.topbar-leading > *) {
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas: "leading main actions";
-  }
-
-  .topbar:has(.quick-access-bar:not(.hidden)) {
-    grid-template-areas:
-      "main actions"
-      "qa qa";
-  }
-
-  .topbar:has(.topbar-leading > *):has(.quick-access-bar:not(.hidden)) {
-    grid-template-areas:
-      "leading main actions"
-      "qa qa qa";
-  }
-
-  .topbar:has(.quick-access-bar:not(.hidden)) .topbar-main {
-    display: contents;
-  }
-
-  .topbar:has(.quick-access-bar:not(.hidden)) .topbar-search {
-    grid-area: qa;
-  }
-
-  .topbar:has(.quick-access-bar:not(.hidden)) .quick-access-bar {
-    grid-area: qa;
-    width: 100%;
-  }
-
-  /* Suche überlagert die Schnellzugriffs-Zeile, ohne Grid/Höhe zu ändern */
-  .topbar:has(.quick-access-bar:not(.hidden)) .topbar-search.is-search-open {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    display: flex;
-    align-items: center;
-    width: auto;
-    background: var(--bg);
   }
 
   .topbar-search.is-search-open {
