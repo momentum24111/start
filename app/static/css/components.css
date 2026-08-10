@@ -1754,23 +1754,29 @@ body[data-element-size="large"] .quick-access-bar {
 }
 
 .quick-access-bar__expandable {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: block;
   flex: 1 1 auto;
   min-width: 0;
-  transition: grid-template-columns 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  max-width: none;
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    max-width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: max-width, opacity;
 }
 
 .quick-access-bar.is-collapsed .quick-access-bar__expandable {
-  grid-template-columns: 0fr;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .quick-access-bar__expandable-inner {
   display: flex;
   align-items: center;
   gap: 0.05rem;
+  width: 100%;
   min-width: 0;
-  overflow: hidden;
 }
 
 .quick-access-bar.is-collapsed .quick-access-bar__expandable-inner {
@@ -1883,8 +1889,7 @@ body[data-element-size="large"] .quick-access-bar {
   height: calc(1.1rem * var(--element-scale, 1));
 }
 
-.quick-access-bar__edit,
-.quick-access-bar__collapse {
+.quick-access-bar__edit {
   flex: 0 0 auto;
   width: var(--quick-access-collapse-size);
   min-width: var(--quick-access-collapse-size);
@@ -1895,14 +1900,56 @@ body[data-element-size="large"] .quick-access-bar {
   color: var(--text);
 }
 
-.quick-access-bar__edit:hover,
-.quick-access-bar__collapse:hover {
+.quick-access-bar__edit:hover {
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
-.quick-access-bar__edit:focus-visible,
-.quick-access-bar__collapse:focus-visible {
+.quick-access-bar__edit:focus-visible {
   box-shadow: inset 0 0 0 2px var(--quick-access-item-focus-ring);
+}
+
+.btn.quick-access-bar__collapse,
+.btn.btn--ghost.quick-access-bar__collapse {
+  flex: 0 0 auto;
+  width: var(--quick-access-collapse-size);
+  min-width: var(--quick-access-collapse-size);
+  height: var(--quick-access-collapse-size);
+  min-height: var(--quick-access-collapse-size);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+}
+
+.btn.quick-access-bar__collapse:hover,
+.btn.quick-access-bar__collapse:active,
+.btn.quick-access-bar__collapse:focus,
+.btn.btn--ghost.quick-access-bar__collapse:hover,
+.btn.btn--ghost.quick-access-bar__collapse:active,
+.btn.btn--ghost.quick-access-bar__collapse:focus {
+  background: transparent;
+  box-shadow: none;
+}
+
+.btn.quick-access-bar__collapse:focus-visible,
+.btn.btn--ghost.quick-access-bar__collapse:focus-visible {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--quick-access-item-focus-ring);
+}
+
+.quick-access-bar__collapse .collapse-arrow {
+  display: block;
+  transform: rotate(0deg);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.quick-access-bar__collapse .collapse-arrow.is-collapsed,
+.quick-access-bar.is-collapsed .quick-access-bar__collapse .collapse-arrow {
+  transform: rotate(180deg);
 }
 
 .quick-access-bar__actions {
@@ -1936,7 +1983,8 @@ body[data-element-size="large"] .quick-access-bar {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .quick-access-bar__expandable {
+  .quick-access-bar__expandable,
+  .quick-access-bar__collapse .collapse-arrow {
     transition: none;
   }
 }

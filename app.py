@@ -213,7 +213,7 @@ def _build_quick_access_category(raw: dict | None = None) -> dict:
         "name": str(source.get("name") or "Quick access").strip() or "Quick access",
         "icon": str(source.get("icon") or "flash").strip() or "flash",
         "color": str(source.get("color") or "primary").strip() or "primary",
-        "collapsed": False,
+        "collapsed": bool(source.get("collapsed")),
         "type": "service-list",
         "iframeUrl": "",
         "slots": 1,

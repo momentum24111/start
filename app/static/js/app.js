@@ -2822,13 +2822,74 @@ function normalizeQuickAccessColor(color) {
   return COLOR_OPTIONS.includes(value) ? value : "primary";
 }
 
-function applyQuickAccessBarChrome(bar, category) {
+function measureQuickAccessExpandableWidth(inner) {
+  if (!(inner instanceof HTMLElement)) return 0;
+  const previousWidth = inner.style.width;
+  inner.style.width = "max-content";
+  const width = Math.max(0, Math.ceil(inner.scrollWidth));
+  inner.style.width = previousWidth;
+  return width;
+}
+
+function syncQuickAccessExpandableWidth(expandable, _inner, collapsed) {
+  if (!(expandable instanceof HTMLElement)) return;
+  if (collapsed) {
+    expandable.style.maxWidth = "0px";
+  } else {
+    expandable.style.maxWidth = "none";
+  }
+}
+
+function animateQuickAccessCollapse(bar, collapsed) {
+  if (!(bar instanceof HTMLElement)) return;
+  const expandable = bar.querySelector(".quick-access-bar__expandable");
+  const inner = bar.querySelector(".quick-access-bar__expandable-inner");
+  const arrow = bar.querySelector(".collapse-arrow");
+  if (!(expandable instanceof HTMLElement) || !(inner instanceof HTMLElement)) return;
+
+  expandable.classList.add("is-animating");
+  bar.classList.toggle("is-collapsed", collapsed);
+  arrow?.classList.toggle("is-collapsed", collapsed);
+  expandable.setAttribute("aria-hidden", collapsed ? "true" : "false");
+
+  if (collapsed) {
+    const fullWidth = measureQuickAccessExpandableWidth(inner);
+    expandable.style.maxWidth = `${fullWidth}px`;
+    expandable.getBoundingClientRect();
+    expandable.style.maxWidth = "0px";
+  } else {
+    expandable.style.maxWidth = "0px";
+    expandable.getBoundingClientRect();
+    const fullWidth = measureQuickAccessExpandableWidth(inner);
+    expandable.style.maxWidth = `${fullWidth}px`;
+  }
+
+  const onTransitionEnd = (event) => {
+    if (event.target !== expandable || event.propertyName !== "max-width") return;
+    expandable.classList.remove("is-animating");
+    if (!collapsed) expandable.style.maxWidth = "none";
+    expandable.removeEventListener("transitionend", onTransitionEnd);
+  };
+  expandable.addEventListener("transitionend", onTransitionEnd);
+}
+
+function ensureQuickAccessCollapseArrow(collapseBtn) {
+  if (!(collapseBtn instanceof HTMLElement)) return null;
+  let arrow = collapseBtn.querySelector(".collapse-arrow");
+  if (!(arrow instanceof SVGElement) && !(arrow instanceof HTMLElement)) {
+    collapseBtn.innerHTML = `<span class="btn__icon">${iconSvg(ICONS.arrowLeft, "inline-icon collapse-arrow")}</span>`;
+    arrow = collapseBtn.querySelector(".collapse-arrow");
+  }
+  return arrow instanceof Element ? arrow : null;
+}
+
+function applyQuickAccessBarChrome(bar, category, { animate = false } = {}) {
   if (!(bar instanceof HTMLElement)) return;
   const color = normalizeQuickAccessColor(category?.color);
   const collapsed = Boolean(category?.collapsed);
   const editMode = isHomepageEditMode();
+  const wasCollapsed = bar.classList.contains("is-collapsed");
   bar.dataset.color = color;
-  bar.classList.toggle("is-collapsed", collapsed);
   bar.classList.toggle("is-edit-mode", editMode);
 
   const editBtn = bar.querySelector("[data-quick-access-edit]");
@@ -2836,31 +2897,53 @@ function applyQuickAccessBarChrome(bar, category) {
     editBtn.classList.toggle("hidden", !editMode);
     editBtn.setAttribute("aria-label", t("ui.editQuickAccess"));
     editBtn.title = t("ui.editQuickAccess");
-    editBtn.innerHTML = `<span class="btn__icon">${iconSvg(ICONS.edit, "inline-icon")}</span>`;
+    if (!editBtn.querySelector(".btn__icon")) {
+      editBtn.innerHTML = `<span class="btn__icon">${iconSvg(ICONS.edit, "inline-icon")}</span>`;
+    }
   }
 
   const collapseBtn = bar.querySelector("[data-quick-access-collapse]");
   if (collapseBtn instanceof HTMLElement) {
+    const arrow = ensureQuickAccessCollapseArrow(collapseBtn);
     collapseBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
     collapseBtn.setAttribute("aria-label", collapsed ? t("ui.expandQuickAccess") : t("ui.collapseQuickAccess"));
     collapseBtn.title = collapsed ? t("ui.expandQuickAccess") : t("ui.collapseQuickAccess");
-    const arrowIcon = collapsed ? ICONS.arrowRight : ICONS.arrowLeft;
-    collapseBtn.innerHTML = `<span class="btn__icon">${iconSvg(arrowIcon, "inline-icon")}</span>`;
-  }
-
-  const expandable = bar.querySelector(".quick-access-bar__expandable");
-  if (expandable instanceof HTMLElement) {
-    expandable.setAttribute("aria-hidden", collapsed ? "true" : "false");
+    if (animate && wasCollapsed !== collapsed) {
+      animateQuickAccessCollapse(bar, collapsed);
+    } else {
+      bar.classList.toggle("is-collapsed", collapsed);
+      arrow?.classList.toggle("is-collapsed", collapsed);
+      const expandable = bar.querySelector(".quick-access-bar__expandable");
+      const inner = bar.querySelector(".quick-access-bar__expandable-inner");
+      if (expandable instanceof HTMLElement) {
+        expandable.classList.remove("is-animating");
+        expandable.setAttribute("aria-hidden", collapsed ? "true" : "false");
+        syncQuickAccessExpandableWidth(expandable, inner, collapsed);
+      }
+    }
+  } else {
+    bar.classList.toggle("is-collapsed", collapsed);
   }
 }
 
-async function setQuickAccessCollapsed(collapsed, { persist = true } = {}) {
+async function setQuickAccessCollapsed(collapsed, { persist = true, animate = true } = {}) {
   const category = ensureQuickAccessCategory(state.config);
   if (!category) return;
-  category.collapsed = Boolean(collapsed);
+  const nextCollapsed = Boolean(collapsed);
+  if (Boolean(category.collapsed) === nextCollapsed) {
+    const bar = elements.quickAccessBar;
+    if (bar instanceof HTMLElement) applyQuickAccessBarChrome(bar, category, { animate: false });
+    return;
+  }
+  category.collapsed = nextCollapsed;
+  syncEditModeCollapsedSnapshot(QUICK_ACCESS_CATEGORY_ID, nextCollapsed);
   const bar = elements.quickAccessBar;
-  if (bar instanceof HTMLElement) applyQuickAccessBarChrome(bar, category);
-  if (persist) await persistConfig();
+  if (bar instanceof HTMLElement) applyQuickAccessBarChrome(bar, category, { animate });
+  if (persist) {
+    await persistConfig();
+    const fresh = ensureQuickAccessCategory(state.config);
+    if (fresh) syncEditModeCollapsedSnapshot(QUICK_ACCESS_CATEGORY_ID, Boolean(fresh.collapsed));
+  }
 }
 
 function openQuickAccessModal() {
@@ -2903,9 +2986,11 @@ function openQuickAccessModal() {
     modalClass: "modal--category",
     onSave: async () => {
       const fd = new FormData(form);
+      const nextCollapsed = Boolean(form.querySelector("input[name='collapsed']")?.checked);
       pushUndo();
       category.color = normalizeQuickAccessColor(fd.get("color"));
-      category.collapsed = Boolean(form.querySelector("input[name='collapsed']")?.checked);
+      category.collapsed = nextCollapsed;
+      syncEditModeCollapsedSnapshot(QUICK_ACCESS_CATEGORY_ID, nextCollapsed);
       await persistConfig();
       renderQuickAccessBar();
     }
@@ -2927,9 +3012,10 @@ function bindQuickAccessBarEvents(bar) {
     if (collapseBtn instanceof HTMLElement && bar.contains(collapseBtn)) {
       event.preventDefault();
       event.stopPropagation();
+      if (bar.querySelector(".quick-access-bar__expandable.is-animating")) return;
       hideAppTooltip();
-      const category = ensureQuickAccessCategory(state.config);
-      void setQuickAccessCollapsed(!Boolean(category?.collapsed));
+      const nextCollapsed = !bar.classList.contains("is-collapsed");
+      void setQuickAccessCollapsed(nextCollapsed);
     }
   });
 }
@@ -2953,7 +3039,8 @@ function renderQuickAccessBar() {
   }
 
   const category = ensureQuickAccessCategory(state.config);
-  applyQuickAccessBarChrome(bar, category);
+  const wasCollapsed = bar.classList.contains("is-collapsed");
+  const nextCollapsed = Boolean(category?.collapsed);
 
   const bookmarks = getBookmarksForQuickAccess(state.config);
   const editMode = isHomepageEditMode();
@@ -2972,6 +3059,10 @@ function renderQuickAccessBar() {
     }, { editMode });
     list.append(item);
   }
+
+  applyQuickAccessBarChrome(bar, category, {
+    animate: bar.isConnected && !bar.hidden && wasCollapsed !== nextCollapsed
+  });
 
   const scroller = bar.querySelector("[data-quick-access-scroller]");
   if (scroller instanceof HTMLElement && scroller.dataset.tooltipScrollBound !== "true") {
