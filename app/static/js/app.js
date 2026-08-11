@@ -2822,40 +2822,30 @@ function normalizeQuickAccessColor(color) {
   return COLOR_OPTIONS.includes(value) ? value : "primary";
 }
 
-function measureQuickAccessExpandableWidth(expandable, inner) {
-  if (!(expandable instanceof HTMLElement) || !(inner instanceof HTMLElement)) return 0;
-  const prev = {
-    maxWidth: expandable.style.maxWidth,
-    overflow: expandable.style.overflow,
-    opacity: expandable.style.opacity,
-    visibility: expandable.style.visibility,
-    pointerEvents: expandable.style.pointerEvents,
-    innerWidth: inner.style.width
-  };
-  // Kurz messbar machen, ohne sichtbaren Layoutsprung.
-  expandable.style.maxWidth = "none";
-  expandable.style.overflow = "visible";
-  expandable.style.opacity = "0";
-  expandable.style.visibility = "hidden";
-  expandable.style.pointerEvents = "none";
-  inner.style.width = "max-content";
-  const width = Math.max(0, Math.ceil(inner.scrollWidth));
-  expandable.style.maxWidth = prev.maxWidth;
-  expandable.style.overflow = prev.overflow;
-  expandable.style.opacity = prev.opacity;
-  expandable.style.visibility = prev.visibility;
-  expandable.style.pointerEvents = prev.pointerEvents;
-  inner.style.width = prev.innerWidth;
-  return width;
+function getQuickAccessExpandableWidth(bar) {
+  if (!(bar instanceof HTMLElement)) return 0;
+  const list = bar.querySelector("[data-quick-access-list]");
+  const edit = bar.querySelector("[data-quick-access-edit]");
+  const inner = bar.querySelector(".quick-access-bar__expandable-inner");
+  if (!(list instanceof HTMLElement)) return 0;
+  let width = list.scrollWidth;
+  if (
+    edit instanceof HTMLElement
+    && !edit.classList.contains("hidden")
+    && getComputedStyle(edit).display !== "none"
+  ) {
+    const styles = inner instanceof HTMLElement ? getComputedStyle(inner) : null;
+    const gap = styles ? Number.parseFloat(styles.columnGap || styles.gap) || 0 : 0;
+    width += edit.getBoundingClientRect().width + gap;
+  }
+  return Math.max(0, Math.ceil(width));
 }
 
 function syncQuickAccessExpandableWidth(expandable, collapsed) {
   if (!(expandable instanceof HTMLElement)) return;
   expandable.classList.remove("is-animating");
-  expandable.style.opacity = "";
-  expandable.style.visibility = "";
-  expandable.style.pointerEvents = "";
-  expandable.style.overflow = "";
+  expandable.classList.toggle("is-collapsed", collapsed);
+  expandable.dataset.collapsed = collapsed ? "true" : "false";
   if (collapsed) {
     expandable.style.maxWidth = "0px";
   } else {
@@ -2863,72 +2853,41 @@ function syncQuickAccessExpandableWidth(expandable, collapsed) {
   }
 }
 
-function animateQuickAccessCollapse(bar, collapsed) {
-  if (!(bar instanceof HTMLElement)) return;
-  const expandable = bar.querySelector(".quick-access-bar__expandable");
-  const inner = bar.querySelector(".quick-access-bar__expandable-inner");
-  const arrow = bar.querySelector(".collapse-arrow");
-  if (!(expandable instanceof HTMLElement) || !(inner instanceof HTMLElement)) return;
+/** Horizontal analog zu animateCategoryCollapse (max-height). */
+function animateQuickAccessCollapse(expandable, arrow, collapsed) {
+  if (!(expandable instanceof HTMLElement) || !arrow) return;
+  const bar = expandable.closest("#quick-access-bar, .quick-access-bar");
 
-  if (expandable._quickAccessCollapseTimer) {
-    window.clearTimeout(expandable._quickAccessCollapseTimer);
-    expandable._quickAccessCollapseTimer = 0;
-  }
-  if (typeof expandable._quickAccessCollapseEnd === "function") {
-    expandable.removeEventListener("transitionend", expandable._quickAccessCollapseEnd);
-    expandable._quickAccessCollapseEnd = null;
-  }
-
-  let finished = false;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    if (expandable._quickAccessCollapseTimer) {
-      window.clearTimeout(expandable._quickAccessCollapseTimer);
-      expandable._quickAccessCollapseTimer = 0;
-    }
-    if (typeof expandable._quickAccessCollapseEnd === "function") {
-      expandable.removeEventListener("transitionend", expandable._quickAccessCollapseEnd);
-      expandable._quickAccessCollapseEnd = null;
-    }
-    expandable.classList.remove("is-animating");
-    expandable.style.opacity = "";
-    expandable.style.visibility = "";
-    expandable.style.pointerEvents = "";
-    expandable.style.overflow = "";
-    if (!collapsed) expandable.style.maxWidth = "none";
-    else expandable.style.maxWidth = "0px";
-  };
-
-  const fullWidth = Math.max(1, measureQuickAccessExpandableWidth(expandable, inner));
   expandable.classList.add("is-animating");
-  expandable.style.overflow = "hidden";
-  expandable.setAttribute("aria-hidden", collapsed ? "true" : "false");
-  arrow?.classList.toggle("is-collapsed", collapsed);
+  expandable.dataset.collapsed = collapsed ? "true" : "false";
+  expandable.classList.toggle("is-collapsed", collapsed);
+  arrow.classList.toggle("is-collapsed", collapsed);
+  if (bar instanceof HTMLElement) bar.classList.toggle("is-collapsed", collapsed);
 
   if (collapsed) {
+    const fullWidth = Math.max(getQuickAccessExpandableWidth(bar), expandable.scrollWidth, 1);
     expandable.style.maxWidth = `${fullWidth}px`;
-    expandable.style.opacity = "1";
-    bar.classList.add("is-collapsed");
+    // Force layout so the browser picks up the start width before animating.
     expandable.getBoundingClientRect();
     expandable.style.maxWidth = "0px";
-    expandable.style.opacity = "0";
   } else {
-    bar.classList.remove("is-collapsed");
     expandable.style.maxWidth = "0px";
-    expandable.style.opacity = "0";
+    // Force layout so opening always starts from collapsed state.
     expandable.getBoundingClientRect();
+    const fullWidth = Math.max(getQuickAccessExpandableWidth(bar), 1);
     expandable.style.maxWidth = `${fullWidth}px`;
-    expandable.style.opacity = "1";
   }
 
   const onTransitionEnd = (event) => {
     if (event.target !== expandable || event.propertyName !== "max-width") return;
-    finish();
+    expandable.classList.remove("is-animating");
+    if (!collapsed) {
+      // Keep expanded bar flexible for later content changes.
+      expandable.style.maxWidth = "none";
+    }
+    expandable.removeEventListener("transitionend", onTransitionEnd);
   };
-  expandable._quickAccessCollapseEnd = onTransitionEnd;
   expandable.addEventListener("transitionend", onTransitionEnd);
-  expandable._quickAccessCollapseTimer = window.setTimeout(finish, 320);
 }
 
 function ensureQuickAccessCollapseArrow(collapseBtn) {
@@ -2962,24 +2921,24 @@ function applyQuickAccessBarChrome(bar, category, { animate = false } = {}) {
 
   const collapseBtn = bar.querySelector("[data-quick-access-collapse]");
   const expandable = bar.querySelector(".quick-access-bar__expandable");
+  const arrow = collapseBtn instanceof HTMLElement ? ensureQuickAccessCollapseArrow(collapseBtn) : null;
+
   if (collapseBtn instanceof HTMLElement) {
-    const arrow = ensureQuickAccessCollapseArrow(collapseBtn);
     collapseBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
     collapseBtn.setAttribute("aria-label", collapsed ? t("ui.expandQuickAccess") : t("ui.collapseQuickAccess"));
     collapseBtn.title = collapsed ? t("ui.expandQuickAccess") : t("ui.collapseQuickAccess");
-    if (animate && wasCollapsed !== collapsed) {
-      animateQuickAccessCollapse(bar, collapsed);
-    } else {
-      bar.classList.toggle("is-collapsed", collapsed);
-      arrow?.classList.toggle("is-collapsed", collapsed);
-      if (expandable instanceof HTMLElement) {
-        expandable.setAttribute("aria-hidden", collapsed ? "true" : "false");
-        syncQuickAccessExpandableWidth(expandable, collapsed);
-      }
-    }
-  } else {
-    bar.classList.toggle("is-collapsed", collapsed);
-    if (expandable instanceof HTMLElement) syncQuickAccessExpandableWidth(expandable, collapsed);
+  }
+
+  if (expandable instanceof HTMLElement && animate && wasCollapsed !== collapsed && arrow) {
+    animateQuickAccessCollapse(expandable, arrow, collapsed);
+    return;
+  }
+
+  bar.classList.toggle("is-collapsed", collapsed);
+  arrow?.classList.toggle("is-collapsed", collapsed);
+  if (expandable instanceof HTMLElement) {
+    expandable.setAttribute("aria-hidden", collapsed ? "true" : "false");
+    syncQuickAccessExpandableWidth(expandable, collapsed);
   }
 }
 
@@ -3000,7 +2959,6 @@ async function setQuickAccessCollapsed(collapsed, { persist = true, animate = tr
     await persistConfig();
     const fresh = ensureQuickAccessCategory(state.config);
     if (fresh) {
-      // Nach Reload der Config den UI-Zustand beibehalten, falls Persistenz abweicht.
       if (Boolean(fresh.collapsed) !== nextCollapsed) fresh.collapsed = nextCollapsed;
       syncEditModeCollapsedSnapshot(QUICK_ACCESS_CATEGORY_ID, Boolean(fresh.collapsed));
     }

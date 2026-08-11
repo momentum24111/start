@@ -1754,21 +1754,16 @@ body[data-element-size="large"] .quick-access-bar {
 }
 
 .quick-access-bar__expandable {
-  display: block;
   flex: 1 1 auto;
   min-width: 0;
   max-width: none;
   overflow: hidden;
-  opacity: 1;
-  transition:
-    max-width 260ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: max-width, opacity;
+  transition: max-width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: max-width;
 }
 
-.quick-access-bar.is-collapsed .quick-access-bar__expandable {
-  max-width: 0;
-  opacity: 0;
+.quick-access-bar.is-collapsed .quick-access-bar__expandable,
+.quick-access-bar__expandable.is-collapsed {
   pointer-events: none;
 }
 
@@ -1776,12 +1771,15 @@ body[data-element-size="large"] .quick-access-bar {
   display: flex;
   align-items: center;
   gap: 0.05rem;
-  width: 100%;
+  width: max-content;
   min-width: 0;
+  opacity: 1;
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.quick-access-bar.is-collapsed .quick-access-bar__expandable-inner {
-  pointer-events: none;
+.quick-access-bar.is-collapsed .quick-access-bar__expandable-inner,
+.quick-access-bar__expandable.is-collapsed .quick-access-bar__expandable-inner {
+  opacity: 0;
 }
 
 .quick-access-bar__scroller {
@@ -1943,14 +1941,14 @@ body[data-element-size="large"] .quick-access-bar {
 
 .quick-access-bar__collapse .collapse-arrow {
   display: block;
+  /* Dauer/Easing identisch zu .collapse-arrow der Kategorien */
   transform: rotate(0deg);
-  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center center;
   will-change: transform;
 }
 
-.quick-access-bar__collapse .collapse-arrow.is-collapsed,
-.quick-access-bar.is-collapsed .quick-access-bar__collapse .collapse-arrow {
+.quick-access-bar__collapse .collapse-arrow.is-collapsed {
   transform: rotate(180deg);
 }
 
@@ -1986,6 +1984,7 @@ body[data-element-size="large"] .quick-access-bar {
 
 @media (prefers-reduced-motion: reduce) {
   .quick-access-bar__expandable,
+  .quick-access-bar__expandable-inner,
   .quick-access-bar__collapse .collapse-arrow {
     transition: none;
   }
